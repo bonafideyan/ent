@@ -172,7 +172,10 @@ func NewType(c *Config, schema *load.Schema) (*Type, error) {
 	typ := &Type{
 		Config: c,
 		ID: &Field{
-			Name:      "id",
+			Name: "id",
+			def: &load.Field{
+				Name: "id",
+			},
 			Type:      idType,
 			StructTag: structTag("id", ""),
 		},
@@ -483,9 +486,15 @@ func (t *Type) AddIndex(idx *load.Index) error {
 		return fmt.Errorf("missing fields or edges")
 	}
 	for _, name := range idx.Fields {
-		f, ok := t.fields[name]
-		if !ok {
-			return fmt.Errorf("unknown index field %q", name)
+		var f *Field
+		if name == t.ID.Name {
+			f = t.ID
+		} else {
+			var ok bool
+			f, ok = t.fields[name]
+			if !ok {
+				return fmt.Errorf("unknown index field %q", name)
+			}
 		}
 		if f.def.Size != nil && *f.def.Size > schema.DefaultStringLen {
 			return fmt.Errorf("field %q exceeds the index size limit (%d)", name, schema.DefaultStringLen)
@@ -726,6 +735,9 @@ func (f Field) UpdateDefaultName() string { return "Update" + f.DefaultName() }
 // DefaultValue returns the default value of the field. Invoked by the template.
 func (f Field) DefaultValue() interface{} { return f.def.DefaultValue }
 
+// DefaultFunc returns a bool stating if the default value is a func. Invoked by the template.
+func (f Field) DefaultFunc() interface{} { return f.def.DefaultKind == reflect.Func }
+
 // BuilderField returns the struct member of the field in the builder.
 func (f Field) BuilderField() string {
 	return builderField(f.Name)
@@ -763,7 +775,9 @@ func (f Field) EnumName(enum string) string {
 }
 
 // Validator returns the validator name.
-func (f Field) Validator() string { return pascal(f.Name) + "Validator" }
+func (f Field) Validator() string {
+	return pascal(f.Name) + "Validator"
+}
 
 // EntSQL returns the EntSQL annotation if exists.
 func (f Field) EntSQL() *entsql.Annotation {
@@ -881,7 +895,8 @@ func (f Field) NullTypeField(rec string) string {
 	return expr
 }
 
-// Column returns the table column. It sets it as a primary key (auto_increment) in case of ID field.
+// Column returns the table column. It sets it as a primary key (auto_increment) in case of ID field, unless stated
+// otherwise.
 func (f Field) Column() *schema.Column {
 	c := &schema.Column{
 		Name:     f.StorageKey(),
@@ -905,6 +920,15 @@ func (f Field) Column() *schema.Column {
 	return c
 }
 
+// incremental returns if the column has an incremental behavior.
+// If no value is defined externally, we use a provided def flag
+func (f Field) incremental(def bool) bool {
+	if ant := f.EntSQL(); ant != nil && ant.Incremental != nil {
+		return *ant.Incremental
+	}
+	return def
+}
+
 // size returns the the field size defined in the schema.
 func (f Field) size() int64 {
 	if ant := f.EntSQL(); ant != nil && ant.Size != 0 {
@@ -922,7 +946,7 @@ func (f Field) PK() *schema.Column {
 		Name:      f.StorageKey(),
 		Type:      f.Type.Type,
 		Key:       schema.PrimaryKey,
-		Increment: true,
+		Increment: f.incremental(true),
 	}
 	// If the PK was defined by the user and it's UUID or string.
 	if f.UserDefined && !f.Type.Numeric() {
@@ -1146,6 +1170,16 @@ func (e Edge) OwnFK() bool {
 	return false
 }
 
+// MutationSet returns the method name for setting the edge id.
+func (e Edge) MutationSet() string {
+	return "Set" + pascal(e.Name) + "ID"
+}
+
+// MutationAdd returns the method name for adding edge ids.
+func (e Edge) MutationAdd() string {
+	return "Add" + pascal(rules.Singularize(e.Name)) + "IDs"
+}
+
 // MutationReset returns the method name for resetting the edge value.
 // The default name is "Reset<EdgeName>". If the the method conflicts
 // with the mutation methods, suffix the method with "Edge".
@@ -1277,17 +1311,8 @@ func entsqlAnnotate(annotation map[string]interface{}) *entsql.Annotation {
 	if annotation == nil || annotation[annotate.Name()] == nil {
 		return nil
 	}
-	switch raw := annotation[annotate.Name()].(type) {
-	case []interface{}:
-		for i := range raw {
-			if buf, err := json.Marshal(raw[i]); err == nil {
-				_ = json.Unmarshal(buf, &annotate)
-			}
-		}
-	default:
-		if buf, err := json.Marshal(annotation[annotate.Name()]); err == nil {
-			_ = json.Unmarshal(buf, &annotate)
-		}
+	if buf, err := json.Marshal(annotation[annotate.Name()]); err == nil {
+		_ = json.Unmarshal(buf, &annotate)
 	}
 	return annotate
 }
@@ -1334,6 +1359,7 @@ var (
 		"predicates",
 		"typ",
 		"unique",
+		"withFKs",
 	)
 )
 

@@ -28,7 +28,7 @@ type UserQuery struct {
 	limit      *int
 	offset     *int
 	order      []OrderFunc
-	unique     []string
+	fields     []string
 	predicates []predicate.User
 	// eager-loading edges.
 	withPets    *PetQuery
@@ -326,7 +326,6 @@ func (uq *UserQuery) Clone() *UserQuery {
 		limit:       uq.limit,
 		offset:      uq.offset,
 		order:       append([]OrderFunc{}, uq.order...),
-		unique:      append([]string{}, uq.unique...),
 		predicates:  append([]predicate.User{}, uq.predicates...),
 		withPets:    uq.withPets.Clone(),
 		withFriends: uq.withFriends.Clone(),
@@ -422,18 +421,16 @@ func (uq *UserQuery) GroupBy(field string, fields ...string) *UserGroupBy {
 //		Scan(ctx, &v)
 //
 func (uq *UserQuery) Select(field string, fields ...string) *UserSelect {
-	selector := &UserSelect{config: uq.config}
-	selector.fields = append([]string{field}, fields...)
-	selector.path = func(ctx context.Context) (prev *sql.Selector, err error) {
-		if err := uq.prepareQuery(ctx); err != nil {
-			return nil, err
-		}
-		return uq.sqlQuery(), nil
-	}
-	return selector
+	uq.fields = append([]string{field}, fields...)
+	return &UserSelect{UserQuery: uq}
 }
 
 func (uq *UserQuery) prepareQuery(ctx context.Context) error {
+	for _, f := range uq.fields {
+		if !user.ValidColumn(f) {
+			return &ValidationError{Name: f, err: fmt.Errorf("ent: invalid field %q for query", f)}
+		}
+	}
 	if uq.path != nil {
 		prev, err := uq.path(ctx)
 		if err != nil {
@@ -455,19 +452,18 @@ func (uq *UserQuery) sqlAll(ctx context.Context) ([]*User, error) {
 			uq.withManage != nil,
 		}
 	)
-	_spec.ScanValues = func() []interface{} {
+	_spec.ScanValues = func(columns []string) ([]interface{}, error) {
 		node := &User{config: uq.config}
 		nodes = append(nodes, node)
-		values := node.scanValues()
-		return values
+		return node.scanValues(columns)
 	}
-	_spec.Assign = func(values ...interface{}) error {
+	_spec.Assign = func(columns []string, values []interface{}) error {
 		if len(nodes) == 0 {
 			return fmt.Errorf("ent: Assign called without calling ScanValues")
 		}
 		node := nodes[len(nodes)-1]
 		node.Edges.loadedTypes = loadedTypes
-		return node.assignValues(values...)
+		return node.assignValues(columns, values)
 	}
 	if err := sqlgraph.QueryNodes(ctx, uq.driver, _spec); err != nil {
 		return nil, err
@@ -690,6 +686,15 @@ func (uq *UserQuery) querySpec() *sqlgraph.QuerySpec {
 		},
 		From:   uq.sql,
 		Unique: true,
+	}
+	if fields := uq.fields; len(fields) > 0 {
+		_spec.Node.Columns = make([]string, 0, len(fields))
+		_spec.Node.Columns = append(_spec.Node.Columns, user.FieldID)
+		for i := range fields {
+			if fields[i] != user.FieldID {
+				_spec.Node.Columns = append(_spec.Node.Columns, fields[i])
+			}
+		}
 	}
 	if ps := uq.predicates; len(ps) > 0 {
 		_spec.Predicate = func(selector *sql.Selector) {
@@ -991,20 +996,17 @@ func (ugb *UserGroupBy) sqlQuery() *sql.Selector {
 
 // UserSelect is the builder for select fields of User entities.
 type UserSelect struct {
-	config
-	fields []string
+	*UserQuery
 	// intermediate query (i.e. traversal path).
-	sql  *sql.Selector
-	path func(context.Context) (*sql.Selector, error)
+	sql *sql.Selector
 }
 
 // Scan applies the selector query and scan the result into the given value.
 func (us *UserSelect) Scan(ctx context.Context, v interface{}) error {
-	query, err := us.path(ctx)
-	if err != nil {
+	if err := us.prepareQuery(ctx); err != nil {
 		return err
 	}
-	us.sql = query
+	us.sql = us.UserQuery.sqlQuery()
 	return us.sqlScan(ctx, v)
 }
 
@@ -1204,11 +1206,6 @@ func (us *UserSelect) BoolX(ctx context.Context) bool {
 }
 
 func (us *UserSelect) sqlScan(ctx context.Context, v interface{}) error {
-	for _, f := range us.fields {
-		if !user.ValidColumn(f) {
-			return &ValidationError{Name: f, err: fmt.Errorf("invalid field %q for selection", f)}
-		}
-	}
 	rows := &sql.Rows{}
 	query, args := us.sqlQuery().Query()
 	if err := us.driver.Query(ctx, query, args, rows); err != nil {

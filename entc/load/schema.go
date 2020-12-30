@@ -47,6 +47,7 @@ type Field struct {
 	Optional      bool                    `json:"optional,omitempty"`
 	Default       bool                    `json:"default,omitempty"`
 	DefaultValue  interface{}             `json:"default_value,omitempty"`
+	DefaultKind   reflect.Kind            `json:"default_kind,omitempty"`
 	UpdateDefault bool                    `json:"update_default,omitempty"`
 	Immutable     bool                    `json:"immutable,omitempty"`
 	Validators    int                     `json:"validators,omitempty"`
@@ -93,7 +94,7 @@ func NewEdge(ed *edge.Descriptor) *Edge {
 		Annotations: make(map[string]interface{}),
 	}
 	for _, at := range ed.Annotations {
-		ne.Annotations[at.Name()] = at
+		ne.addAnnotation(at)
 	}
 	if ref := ed.Ref; ref != nil {
 		ne.Ref = NewEdge(ref)
@@ -104,8 +105,8 @@ func NewEdge(ed *edge.Descriptor) *Edge {
 
 // NewField creates an loaded field from field descriptor.
 func NewField(fd *field.Descriptor) (*Field, error) {
-	if err := fd.Err(); err != nil {
-		return nil, fmt.Errorf("field %q: %v", fd.Name, err)
+	if fd.Err != nil {
+		return nil, fmt.Errorf("field %q: %v", fd.Name, fd.Err)
 	}
 	sf := &Field{
 		Name:          fd.Name,
@@ -125,13 +126,16 @@ func NewField(fd *field.Descriptor) (*Field, error) {
 		Annotations:   make(map[string]interface{}),
 	}
 	for _, at := range fd.Annotations {
-		sf.Annotations[at.Name()] = at
+		sf.addAnnotation(at)
 	}
 	if sf.Info == nil {
 		return nil, fmt.Errorf("missing type info for field %q", sf.Name)
 	}
 	if size := int64(fd.Size); size != 0 {
 		sf.Size = &size
+	}
+	if sf.Default {
+		sf.DefaultKind = reflect.TypeOf(fd.Default).Kind()
 	}
 	// If the default value can be encoded to the generator.
 	// For example, not a function like time.Now.
@@ -314,21 +318,36 @@ func (s *Schema) loadPolicy(schema ent.Interface) error {
 	return nil
 }
 
-// annotations holds a list of annotations.
-type annotations []schema.Annotation
-
 func (s *Schema) addAnnotation(an schema.Annotation) {
-	if _, ok := s.Annotations[an.Name()]; !ok {
+	curr, ok := s.Annotations[an.Name()]
+	if !ok {
 		s.Annotations[an.Name()] = an
 		return
 	}
-	switch ant := s.Annotations[an.Name()].(type) {
-	case annotations:
-		s.Annotations[an.Name()] = append(ant, an)
-	case schema.Annotation:
-		s.Annotations[an.Name()] = annotations{ant, an}
-	default:
-		panic(fmt.Sprintf("unexpected schema type %T", an))
+	if m, ok := curr.(schema.Merger); ok {
+		s.Annotations[an.Name()] = m.Merge(an)
+	}
+}
+
+func (e *Edge) addAnnotation(an schema.Annotation) {
+	curr, ok := e.Annotations[an.Name()]
+	if !ok {
+		e.Annotations[an.Name()] = an
+		return
+	}
+	if m, ok := curr.(schema.Merger); ok {
+		e.Annotations[an.Name()] = m.Merge(an)
+	}
+}
+
+func (f *Field) addAnnotation(an schema.Annotation) {
+	curr, ok := f.Annotations[an.Name()]
+	if !ok {
+		f.Annotations[an.Name()] = an
+		return
+	}
+	if m, ok := curr.(schema.Merger); ok {
+		f.Annotations[an.Name()] = m.Merge(an)
 	}
 }
 

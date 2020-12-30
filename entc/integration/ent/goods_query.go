@@ -25,7 +25,7 @@ type GoodsQuery struct {
 	limit      *int
 	offset     *int
 	order      []OrderFunc
-	unique     []string
+	fields     []string
 	predicates []predicate.Goods
 	// intermediate query (i.e. traversal path).
 	sql  *sql.Selector
@@ -230,7 +230,6 @@ func (gq *GoodsQuery) Clone() *GoodsQuery {
 		limit:      gq.limit,
 		offset:     gq.offset,
 		order:      append([]OrderFunc{}, gq.order...),
-		unique:     append([]string{}, gq.unique...),
 		predicates: append([]predicate.Goods{}, gq.predicates...),
 		// clone intermediate query.
 		sql:  gq.sql.Clone(),
@@ -254,18 +253,16 @@ func (gq *GoodsQuery) GroupBy(field string, fields ...string) *GoodsGroupBy {
 
 // Select one or more fields from the given query.
 func (gq *GoodsQuery) Select(field string, fields ...string) *GoodsSelect {
-	selector := &GoodsSelect{config: gq.config}
-	selector.fields = append([]string{field}, fields...)
-	selector.path = func(ctx context.Context) (prev *sql.Selector, err error) {
-		if err := gq.prepareQuery(ctx); err != nil {
-			return nil, err
-		}
-		return gq.sqlQuery(), nil
-	}
-	return selector
+	gq.fields = append([]string{field}, fields...)
+	return &GoodsSelect{GoodsQuery: gq}
 }
 
 func (gq *GoodsQuery) prepareQuery(ctx context.Context) error {
+	for _, f := range gq.fields {
+		if !goods.ValidColumn(f) {
+			return &ValidationError{Name: f, err: fmt.Errorf("ent: invalid field %q for query", f)}
+		}
+	}
 	if gq.path != nil {
 		prev, err := gq.path(ctx)
 		if err != nil {
@@ -281,18 +278,17 @@ func (gq *GoodsQuery) sqlAll(ctx context.Context) ([]*Goods, error) {
 		nodes = []*Goods{}
 		_spec = gq.querySpec()
 	)
-	_spec.ScanValues = func() []interface{} {
+	_spec.ScanValues = func(columns []string) ([]interface{}, error) {
 		node := &Goods{config: gq.config}
 		nodes = append(nodes, node)
-		values := node.scanValues()
-		return values
+		return node.scanValues(columns)
 	}
-	_spec.Assign = func(values ...interface{}) error {
+	_spec.Assign = func(columns []string, values []interface{}) error {
 		if len(nodes) == 0 {
 			return fmt.Errorf("ent: Assign called without calling ScanValues")
 		}
 		node := nodes[len(nodes)-1]
-		return node.assignValues(values...)
+		return node.assignValues(columns, values)
 	}
 	if err := sqlgraph.QueryNodes(ctx, gq.driver, _spec); err != nil {
 		return nil, err
@@ -328,6 +324,15 @@ func (gq *GoodsQuery) querySpec() *sqlgraph.QuerySpec {
 		},
 		From:   gq.sql,
 		Unique: true,
+	}
+	if fields := gq.fields; len(fields) > 0 {
+		_spec.Node.Columns = make([]string, 0, len(fields))
+		_spec.Node.Columns = append(_spec.Node.Columns, goods.FieldID)
+		for i := range fields {
+			if fields[i] != goods.FieldID {
+				_spec.Node.Columns = append(_spec.Node.Columns, fields[i])
+			}
+		}
 	}
 	if ps := gq.predicates; len(ps) > 0 {
 		_spec.Predicate = func(selector *sql.Selector) {
@@ -629,20 +634,17 @@ func (ggb *GoodsGroupBy) sqlQuery() *sql.Selector {
 
 // GoodsSelect is the builder for select fields of Goods entities.
 type GoodsSelect struct {
-	config
-	fields []string
+	*GoodsQuery
 	// intermediate query (i.e. traversal path).
-	sql  *sql.Selector
-	path func(context.Context) (*sql.Selector, error)
+	sql *sql.Selector
 }
 
 // Scan applies the selector query and scan the result into the given value.
 func (gs *GoodsSelect) Scan(ctx context.Context, v interface{}) error {
-	query, err := gs.path(ctx)
-	if err != nil {
+	if err := gs.prepareQuery(ctx); err != nil {
 		return err
 	}
-	gs.sql = query
+	gs.sql = gs.GoodsQuery.sqlQuery()
 	return gs.sqlScan(ctx, v)
 }
 
@@ -842,11 +844,6 @@ func (gs *GoodsSelect) BoolX(ctx context.Context) bool {
 }
 
 func (gs *GoodsSelect) sqlScan(ctx context.Context, v interface{}) error {
-	for _, f := range gs.fields {
-		if !goods.ValidColumn(f) {
-			return &ValidationError{Name: f, err: fmt.Errorf("invalid field %q for selection", f)}
-		}
-	}
 	rows := &sql.Rows{}
 	query, args := gs.sqlQuery().Query()
 	if err := gs.driver.Query(ctx, query, args, rows); err != nil {

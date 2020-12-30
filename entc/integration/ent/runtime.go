@@ -25,6 +25,7 @@ import (
 func init() {
 	cardMixin := schema.Card{}.Mixin()
 	cardMixinFields0 := cardMixin[0].Fields()
+	_ = cardMixinFields0
 	cardFields := schema.Card{}.Fields()
 	_ = cardFields
 	// cardDescCreateTime is the schema descriptor for create_time field.
@@ -137,6 +138,7 @@ func init() {
 	task.PriorityValidator = taskDescPriority.Validators[0].(func(int) error)
 	userMixin := schema.User{}.Mixin()
 	userMixinFields0 := userMixin[0].Fields()
+	_ = userMixinFields0
 	userFields := schema.User{}.Fields()
 	_ = userFields
 	// userDescOptionalInt is the schema descriptor for optional_int field.
@@ -147,4 +149,8 @@ func init() {
 	userDescLast := userFields[2].Descriptor()
 	// user.DefaultLast holds the default value on creation for the last field.
 	user.DefaultLast = userDescLast.Default.(string)
+	// userDescAddress is the schema descriptor for address field.
+	userDescAddress := userFields[4].Descriptor()
+	// user.DefaultAddress holds the default value on creation for the address field.
+	user.DefaultAddress = userDescAddress.Default.(func() string)
 }

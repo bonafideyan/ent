@@ -50,6 +50,17 @@ type Annotation struct {
 	//	}
 	//
 	Size int64 `json:"size,omitempty"`
+
+	// Incremental defines the autoincremental behavior of a column. For example:
+	//
+	//  incrementalEnabled := true
+	//  entsql.Annotation{
+	//      Incremental: &incrementalEnabled,
+	//  }
+	//
+	// By default, this value is nil defaulting to whatever best fits each scenario.
+	//
+	Incremental *bool `json:"incremental,omitempty"`
 }
 
 // Name describes the annotation name.
@@ -57,4 +68,41 @@ func (Annotation) Name() string {
 	return "EntSQL"
 }
 
-var _ schema.Annotation = (*Annotation)(nil)
+// Merge implements the schema.Merger interface.
+func (a Annotation) Merge(other schema.Annotation) schema.Annotation {
+	var ant Annotation
+	switch other := other.(type) {
+	case Annotation:
+		ant = other
+	case *Annotation:
+		if other != nil {
+			ant = *other
+		}
+	default:
+		return a
+	}
+	if t := ant.Table; t != "" {
+		a.Table = t
+	}
+	if c := ant.Charset; c != "" {
+		a.Charset = c
+	}
+	if c := ant.Collation; c != "" {
+		a.Collation = c
+	}
+	if o := ant.Options; o != "" {
+		a.Options = o
+	}
+	if s := ant.Size; s != 0 {
+		a.Size = s
+	}
+	if s := ant.Incremental; s != nil {
+		a.Incremental = s
+	}
+	return a
+}
+
+var (
+	_ schema.Annotation = (*Annotation)(nil)
+	_ schema.Merger     = (*Annotation)(nil)
+)

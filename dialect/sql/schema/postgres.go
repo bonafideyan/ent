@@ -51,7 +51,7 @@ func (d *Postgres) init(ctx context.Context, tx dialect.Tx) error {
 // tableExist checks if a table exists in the database and current schema.
 func (d *Postgres) tableExist(ctx context.Context, tx dialect.Tx, name string) (bool, error) {
 	query, args := sql.Dialect(dialect.Postgres).
-		Select(sql.Count("*")).From(sql.Table("INFORMATION_SCHEMA.TABLES").Unquote()).
+		Select(sql.Count("*")).From(sql.Table("tables").Schema("information_schema")).
 		Where(sql.And(
 			sql.EQ("table_schema", sql.Raw("CURRENT_SCHEMA()")),
 			sql.EQ("table_name", name),
@@ -62,7 +62,7 @@ func (d *Postgres) tableExist(ctx context.Context, tx dialect.Tx, name string) (
 // tableExist checks if a foreign-key exists in the current schema.
 func (d *Postgres) fkExist(ctx context.Context, tx dialect.Tx, name string) (bool, error) {
 	query, args := sql.Dialect(dialect.Postgres).
-		Select(sql.Count("*")).From(sql.Table("INFORMATION_SCHEMA.TABLE_CONSTRAINTS").Unquote()).
+		Select(sql.Count("*")).From(sql.Table("table_constraints").Schema("information_schema")).
 		Where(sql.And(
 			sql.EQ("table_schema", sql.Raw("CURRENT_SCHEMA()")),
 			sql.EQ("constraint_type", "FOREIGN KEY"),
@@ -87,8 +87,8 @@ func (d *Postgres) setRange(ctx context.Context, tx dialect.Tx, t *Table, value 
 func (d *Postgres) table(ctx context.Context, tx dialect.Tx, name string) (*Table, error) {
 	rows := &sql.Rows{}
 	query, args := sql.Dialect(dialect.Postgres).
-		Select("column_name", "data_type", "is_nullable", "column_default").
-		From(sql.Table("INFORMATION_SCHEMA.COLUMNS").Unquote()).
+		Select("column_name", "data_type", "is_nullable", "column_default", "udt_name").
+		From(sql.Table("columns").Schema("information_schema")).
 		Where(sql.And(
 			sql.EQ("table_schema", sql.Raw("CURRENT_SCHEMA()")),
 			sql.EQ("table_name", name),
@@ -118,7 +118,7 @@ func (d *Postgres) table(ctx context.Context, tx dialect.Tx, name string) (*Tabl
 	}
 	// Populate the index information to the table and its columns.
 	// We do it manually, because PK and uniqueness information does
-	// not exist when querying the INFORMATION_SCHEMA.COLUMNS above.
+	// not exist when querying the information_schema.COLUMNS above.
 	for _, idx := range idxs {
 		switch {
 		case idx.primary:
@@ -216,8 +216,9 @@ func (d *Postgres) scanColumn(c *Column, rows *sql.Rows) error {
 	var (
 		nullable sql.NullString
 		defaults sql.NullString
+		udt      sql.NullString
 	)
-	if err := rows.Scan(&c.Name, &c.typ, &nullable, &defaults); err != nil {
+	if err := rows.Scan(&c.Name, &c.typ, &nullable, &defaults, &udt); err != nil {
 		return fmt.Errorf("scanning column description: %v", err)
 	}
 	if nullable.Valid {
@@ -251,6 +252,12 @@ func (d *Postgres) scanColumn(c *Column, rows *sql.Rows) error {
 		c.Type = field.TypeUUID
 	case "cidr", "inet", "macaddr", "macaddr8":
 		c.Type = field.TypeOther
+	case "USER-DEFINED":
+		c.Type = field.TypeOther
+		if !udt.Valid {
+			return fmt.Errorf("missing user defined type for column %q", c.Name)
+		}
+		c.SchemaType = map[string]string{dialect.Postgres: udt.String}
 	}
 	switch {
 	case !defaults.Valid || c.Type == field.TypeTime || seqfunc(defaults.String):
@@ -388,7 +395,7 @@ func (d *Postgres) dropIndex(ctx context.Context, tx dialect.Tx, idx *Index, tab
 		name = prefix + name
 	}
 	query, args := sql.Dialect(dialect.Postgres).
-		Select(sql.Count("*")).From(sql.Table("INFORMATION_SCHEMA.TABLE_CONSTRAINTS").Unquote()).
+		Select(sql.Count("*")).From(sql.Table("table_constraints").Schema("information_schema")).
 		Where(sql.And(
 			sql.EQ("table_schema", sql.Raw("CURRENT_SCHEMA()")),
 			sql.EQ("constraint_type", "UNIQUE"),

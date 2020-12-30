@@ -78,11 +78,14 @@ func TestBuilder(t *testing.T) {
 				Columns(
 					Column("id").Type("int").Attr("auto_increment"),
 					Column("card_id").Type("int"),
+					Column("doc").Type("longtext").Check(func(b *Builder) {
+						b.WriteString("JSON_VALID(").Ident("doc").WriteByte(')')
+					}),
 				).
 				PrimaryKey("id", "name").
 				ForeignKeys(ForeignKey().Columns("card_id").
 					Reference(Reference().Table("cards").Columns("id")).OnDelete("SET NULL")),
-			wantQuery: "CREATE TABLE IF NOT EXISTS `users`(`id` int auto_increment, `card_id` int, PRIMARY KEY(`id`, `name`), FOREIGN KEY(`card_id`) REFERENCES `cards`(`id`) ON DELETE SET NULL)",
+			wantQuery: "CREATE TABLE IF NOT EXISTS `users`(`id` int auto_increment, `card_id` int, `doc` longtext CHECK (JSON_VALID(`doc`)), PRIMARY KEY(`id`, `name`), FOREIGN KEY(`card_id`) REFERENCES `cards`(`id`) ON DELETE SET NULL)",
 		},
 		{
 			input: Dialect(dialect.Postgres).CreateTable("users").
@@ -293,6 +296,20 @@ func TestBuilder(t *testing.T) {
 			input:     Dialect(dialect.Postgres).Update("users").Set("name", "foo").Where(EQ("name", "bar")),
 			wantQuery: `UPDATE "users" SET "name" = $1 WHERE "name" = $2`,
 			wantArgs:  []interface{}{"foo", "bar"},
+		},
+		{
+			input: func() Querier {
+				p1, p2 := EQ("name", "bar"), Or(EQ("age", 10), EQ("age", 20))
+				return Dialect(dialect.Postgres).
+					Update("users").
+					Set("name", "foo").
+					Where(p1).
+					Where(p2).
+					Where(p1).
+					Where(p2)
+			}(),
+			wantQuery: `UPDATE "users" SET "name" = $1 WHERE (("name" = $2 AND ("age" = $3 OR "age" = $4)) AND "name" = $5) AND ("age" = $6 OR "age" = $7)`,
+			wantArgs:  []interface{}{"foo", "bar", 10, 20, "bar", 10, 20},
 		},
 		{
 			input:     Update("users").Set("name", "foo").SetNull("spouse_id"),
@@ -680,8 +697,8 @@ func TestBuilder(t *testing.T) {
 				return Select(t1.C("id"), As(Count("`*`"), "group_count")).
 					From(t1).
 					LeftJoin(t2).
-					OnP(P(func(builder *Builder) {
-						builder.Ident(t1.C("id")).WriteOp(OpEQ).Ident(t2.C("user_id"))
+					OnP(P(func(b *Builder) {
+						b.Ident(t1.C("id")).WriteOp(OpEQ).Ident(t2.C("user_id"))
 					})).
 					GroupBy(t1.C("id")).Clone()
 			}(),
@@ -1270,6 +1287,19 @@ WHERE
 				})),
 			wantQuery: `SELECT * FROM "test" WHERE nlevel("path") > $1`,
 			wantArgs:  []interface{}{1},
+		},
+		{
+			input: func() Querier {
+				t1, t2 := Table("users").Schema("s1"), Table("pets").Schema("s2")
+				return Select("*").
+					From(t1).Join(t2).
+					OnP(P(func(b *Builder) {
+						b.Ident(t1.C("id")).WriteOp(OpEQ).Ident(t2.C("owner_id"))
+					})).
+					Where(EQ(t2.C("name"), "pedro"))
+			}(),
+			wantQuery: "SELECT * FROM `s1`.`users` JOIN `s2`.`pets` AS `t0` ON `s1`.`users`.`id` = `t0`.`owner_id` WHERE `t0`.`name` = ?",
+			wantArgs:  []interface{}{"pedro"},
 		},
 	}
 	for i, tt := range tests {

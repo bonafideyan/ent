@@ -86,7 +86,7 @@ func ({{ $receiver }} *{{ $builder }}) SaveX(ctx context.Context) *{{ $.Name }} 
 		{{- range $f := $fields }}
 			{{- if or $f.Default }}
 				if _, ok := {{ $mutation }}.{{ $f.MutationGet }}(); !ok {
-					v := {{ $.Package }}.{{ $f.DefaultName }}{{ if or $f.IsTime $f.IsUUID }}(){{ end }}
+					v := {{ $.Package }}.{{ $f.DefaultName }}{{ if $f.DefaultFunc }}(){{ end }}
 					{{ $mutation }}.Set{{ $f.StructField }}(v)
 				}
 			{{- end }}
@@ -142,7 +142,7 @@ type {{ $bulk }} struct {
 {{/* If the storage driver supports bulk creation */}}
 {{ $tmpl := printf "dialect/%s/create_bulk" $.Storage }}
 {{ if hasTemplate $tmpl }}
-    {{ with extend $ "Builder" $bulk "Reciever" $receiver }}
+	{{ with extend $ "Builder" $bulk "Receiver" $receiver }}
 		{{ xtemplate $tmpl . }}
 	{{ end }}
 {{ end }}

@@ -29,7 +29,7 @@ type FileQuery struct {
 	limit      *int
 	offset     *int
 	order      []OrderFunc
-	unique     []string
+	fields     []string
 	predicates []predicate.File
 	// eager-loading edges.
 	withOwner *UserQuery
@@ -305,7 +305,6 @@ func (fq *FileQuery) Clone() *FileQuery {
 		limit:      fq.limit,
 		offset:     fq.offset,
 		order:      append([]OrderFunc{}, fq.order...),
-		unique:     append([]string{}, fq.unique...),
 		predicates: append([]predicate.File{}, fq.predicates...),
 		withOwner:  fq.withOwner.Clone(),
 		withType:   fq.withType.Clone(),
@@ -389,18 +388,16 @@ func (fq *FileQuery) GroupBy(field string, fields ...string) *FileGroupBy {
 //		Scan(ctx, &v)
 //
 func (fq *FileQuery) Select(field string, fields ...string) *FileSelect {
-	selector := &FileSelect{config: fq.config}
-	selector.fields = append([]string{field}, fields...)
-	selector.path = func(ctx context.Context) (prev *sql.Selector, err error) {
-		if err := fq.prepareQuery(ctx); err != nil {
-			return nil, err
-		}
-		return fq.sqlQuery(), nil
-	}
-	return selector
+	fq.fields = append([]string{field}, fields...)
+	return &FileSelect{FileQuery: fq}
 }
 
 func (fq *FileQuery) prepareQuery(ctx context.Context) error {
+	for _, f := range fq.fields {
+		if !file.ValidColumn(f) {
+			return &ValidationError{Name: f, err: fmt.Errorf("ent: invalid field %q for query", f)}
+		}
+	}
 	if fq.path != nil {
 		prev, err := fq.path(ctx)
 		if err != nil {
@@ -428,22 +425,18 @@ func (fq *FileQuery) sqlAll(ctx context.Context) ([]*File, error) {
 	if withFKs {
 		_spec.Node.Columns = append(_spec.Node.Columns, file.ForeignKeys...)
 	}
-	_spec.ScanValues = func() []interface{} {
+	_spec.ScanValues = func(columns []string) ([]interface{}, error) {
 		node := &File{config: fq.config}
 		nodes = append(nodes, node)
-		values := node.scanValues()
-		if withFKs {
-			values = append(values, node.fkValues()...)
-		}
-		return values
+		return node.scanValues(columns)
 	}
-	_spec.Assign = func(values ...interface{}) error {
+	_spec.Assign = func(columns []string, values []interface{}) error {
 		if len(nodes) == 0 {
 			return fmt.Errorf("ent: Assign called without calling ScanValues")
 		}
 		node := nodes[len(nodes)-1]
 		node.Edges.loadedTypes = loadedTypes
-		return node.assignValues(values...)
+		return node.assignValues(columns, values)
 	}
 	if err := sqlgraph.QueryNodes(ctx, fq.driver, _spec); err != nil {
 		return nil, err
@@ -559,6 +552,15 @@ func (fq *FileQuery) querySpec() *sqlgraph.QuerySpec {
 		},
 		From:   fq.sql,
 		Unique: true,
+	}
+	if fields := fq.fields; len(fields) > 0 {
+		_spec.Node.Columns = make([]string, 0, len(fields))
+		_spec.Node.Columns = append(_spec.Node.Columns, file.FieldID)
+		for i := range fields {
+			if fields[i] != file.FieldID {
+				_spec.Node.Columns = append(_spec.Node.Columns, fields[i])
+			}
+		}
 	}
 	if ps := fq.predicates; len(ps) > 0 {
 		_spec.Predicate = func(selector *sql.Selector) {
@@ -860,20 +862,17 @@ func (fgb *FileGroupBy) sqlQuery() *sql.Selector {
 
 // FileSelect is the builder for select fields of File entities.
 type FileSelect struct {
-	config
-	fields []string
+	*FileQuery
 	// intermediate query (i.e. traversal path).
-	sql  *sql.Selector
-	path func(context.Context) (*sql.Selector, error)
+	sql *sql.Selector
 }
 
 // Scan applies the selector query and scan the result into the given value.
 func (fs *FileSelect) Scan(ctx context.Context, v interface{}) error {
-	query, err := fs.path(ctx)
-	if err != nil {
+	if err := fs.prepareQuery(ctx); err != nil {
 		return err
 	}
-	fs.sql = query
+	fs.sql = fs.FileQuery.sqlQuery()
 	return fs.sqlScan(ctx, v)
 }
 
@@ -1073,11 +1072,6 @@ func (fs *FileSelect) BoolX(ctx context.Context) bool {
 }
 
 func (fs *FileSelect) sqlScan(ctx context.Context, v interface{}) error {
-	for _, f := range fs.fields {
-		if !file.ValidColumn(f) {
-			return &ValidationError{Name: f, err: fmt.Errorf("invalid field %q for selection", f)}
-		}
-	}
 	rows := &sql.Rows{}
 	query, args := fs.sqlQuery().Query()
 	if err := fs.driver.Query(ctx, query, args, rows); err != nil {
