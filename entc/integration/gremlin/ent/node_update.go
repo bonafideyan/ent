@@ -8,6 +8,7 @@ package ent
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"entgo.io/ent/dialect/gremlin"
@@ -26,9 +27,9 @@ type NodeUpdate struct {
 	mutation *NodeMutation
 }
 
-// Where adds a new predicate for the NodeUpdate builder.
+// Where appends a list predicates to the NodeUpdate builder.
 func (nu *NodeUpdate) Where(ps ...predicate.Node) *NodeUpdate {
-	nu.mutation.predicates = append(nu.mutation.predicates, ps...)
+	nu.mutation.Where(ps...)
 	return nu
 }
 
@@ -134,6 +135,9 @@ func (nu *NodeUpdate) Save(ctx context.Context) (int, error) {
 			return affected, err
 		})
 		for i := len(nu.hooks) - 1; i >= 0; i-- {
+			if nu.hooks[i] == nil {
+				return 0, fmt.Errorf("ent: uninitialized hook (forgotten import ent/runtime?)")
+			}
 			mut = nu.hooks[i](mut)
 		}
 		if _, err := mut.Mutate(ctx, nu.mutation); err != nil {
@@ -360,6 +364,9 @@ func (nuo *NodeUpdateOne) Save(ctx context.Context) (*Node, error) {
 			return node, err
 		})
 		for i := len(nuo.hooks) - 1; i >= 0; i-- {
+			if nuo.hooks[i] == nil {
+				return nil, fmt.Errorf("ent: uninitialized hook (forgotten import ent/runtime?)")
+			}
 			mut = nuo.hooks[i](mut)
 		}
 		if _, err := mut.Mutate(ctx, nuo.mutation); err != nil {
@@ -395,7 +402,7 @@ func (nuo *NodeUpdateOne) gremlinSave(ctx context.Context) (*Node, error) {
 	res := &gremlin.Response{}
 	id, ok := nuo.mutation.ID()
 	if !ok {
-		return nil, &ValidationError{Name: "ID", err: fmt.Errorf("missing Node.ID for update")}
+		return nil, &ValidationError{Name: "id", err: errors.New(`ent: missing "Node.id" for update`)}
 	}
 	query, bindings := nuo.gremlin(id).Query()
 	if err := nuo.driver.Exec(ctx, query, bindings, res); err != nil {

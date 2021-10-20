@@ -6,13 +6,13 @@ package schema
 
 import (
 	"context"
-	"database/sql/driver"
 	"fmt"
 	"math"
 	"strconv"
 	"strings"
 
 	"entgo.io/ent/dialect"
+	"entgo.io/ent/dialect/entsql"
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/schema/field"
 )
@@ -67,7 +67,10 @@ func (d *MySQL) fkExist(ctx context.Context, tx dialect.Tx, name string) (bool, 
 // table loads the current table description from the database.
 func (d *MySQL) table(ctx context.Context, tx dialect.Tx, name string) (*Table, error) {
 	rows := &sql.Rows{}
-	query, args := sql.Select("column_name", "column_type", "is_nullable", "column_key", "column_default", "extra", "character_set_name", "collation_name").
+	query, args := sql.Select(
+		"column_name", "column_type", "is_nullable", "column_key", "column_default", "extra", "character_set_name", "collation_name",
+		"numeric_precision", "numeric_scale",
+	).
 		From(sql.Table("COLUMNS").Schema("INFORMATION_SCHEMA")).
 		Where(sql.And(
 			d.matchSchema(),
@@ -101,7 +104,7 @@ func (d *MySQL) table(ctx context.Context, tx dialect.Tx, name string) (*Table, 
 	}
 	// Add and link indexes to table columns.
 	for _, idx := range indexes {
-		t.AddIndex(idx.Name, idx.Unique, idx.columns)
+		t.addIndex(idx)
 	}
 	if _, ok := d.mariadb(); ok {
 		if err := d.normalizeJSON(ctx, tx, t); err != nil {
@@ -114,7 +117,7 @@ func (d *MySQL) table(ctx context.Context, tx dialect.Tx, name string) (*Table, 
 // table loads the table indexes from the database.
 func (d *MySQL) indexes(ctx context.Context, tx dialect.Tx, name string) ([]*Index, error) {
 	rows := &sql.Rows{}
-	query, args := sql.Select("index_name", "column_name", "non_unique", "seq_in_index").
+	query, args := sql.Select("index_name", "column_name", "sub_part", "non_unique", "seq_in_index").
 		From(sql.Table("STATISTICS").Schema("INFORMATION_SCHEMA")).
 		Where(sql.And(
 			d.matchSchema(),
@@ -192,6 +195,7 @@ func (d *MySQL) tBuilder(t *Table) *sql.TableBuilder {
 		if opts := t.Annotation.Options; opts != "" {
 			b.Options(opts)
 		}
+		addChecks(b, t.Annotation)
 	}
 	return b
 }
@@ -255,9 +259,12 @@ func (d *MySQL) cType(c *Column) (t string) {
 		t = c.scanTypeOr("double")
 	case field.TypeTime:
 		t = c.scanTypeOr("timestamp")
-		// In MySQL, timestamp columns are `NOT NULL` by default, and assigning NULL
-		// assigns the current_timestamp(). We avoid this if not set otherwise.
-		c.Nullable = c.Attr == ""
+		// In MariaDB or in MySQL < v8.0.2, the TIMESTAMP column has both `DEFAULT CURRENT_TIMESTAMP`
+		// and `ON UPDATE CURRENT_TIMESTAMP` if neither is specified explicitly. this behavior is
+		// suppressed if the column is defined with a `DEFAULT` clause or with the `NULL` attribute.
+		if _, maria := d.mariadb(); maria || compareVersions(d.version, "8.0.2") == -1 && c.Default == nil {
+			c.Nullable = c.Attr == ""
+		}
 	case field.TypeEnum:
 		values := make([]string, len(c.Enums))
 		for i, e := range c.Enums {
@@ -284,6 +291,9 @@ func (d *MySQL) addColumn(c *Column) *sql.ColumnBuilder {
 	}
 	c.nullable(b)
 	c.defaultValue(b)
+	if c.Collation != "" {
+		b.Attr("COLLATE " + c.Collation)
+	}
 	if c.Type == field.TypeJSON {
 		// Manually add a `CHECK` clause for older versions of MariaDB for validating the
 		// JSON documents. This constraint is automatically included from version 10.4.3.
@@ -298,7 +308,20 @@ func (d *MySQL) addColumn(c *Column) *sql.ColumnBuilder {
 
 // addIndex returns the querying for adding an index to MySQL.
 func (d *MySQL) addIndex(i *Index, table string) *sql.IndexBuilder {
-	return i.Builder(table)
+	idx := sql.CreateIndex(i.Name).Table(table)
+	if i.Unique {
+		idx.Unique()
+	}
+	parts := indexParts(i)
+	for _, c := range i.Columns {
+		part, ok := parts[c.Name]
+		if !ok || part == 0 {
+			idx.Column(c.Name)
+		} else {
+			idx.Column(fmt.Sprintf("%s(%d)", idx.Builder.Quote(c.Name), part))
+		}
+	}
+	return idx
 }
 
 // dropIndex drops a MySQL index.
@@ -359,15 +382,20 @@ func (d *MySQL) prepare(ctx context.Context, tx dialect.Tx, change *changes, tab
 // scanColumn scans the column information from MySQL column description.
 func (d *MySQL) scanColumn(c *Column, rows *sql.Rows) error {
 	var (
-		nullable sql.NullString
-		defaults sql.NullString
+		nullable         sql.NullString
+		defaults         sql.NullString
+		numericPrecision sql.NullInt64
+		numericScale     sql.NullInt64
 	)
-	if err := rows.Scan(&c.Name, &c.typ, &nullable, &c.Key, &defaults, &c.Attr, &sql.NullString{}, &sql.NullString{}); err != nil {
+	if err := rows.Scan(&c.Name, &c.typ, &nullable, &c.Key, &defaults, &c.Attr, &sql.NullString{}, &sql.NullString{}, &numericPrecision, &numericScale); err != nil {
 		return fmt.Errorf("scanning column description: %w", err)
 	}
 	c.Unique = c.UniqueKey()
 	if nullable.Valid {
 		c.Nullable = nullable.String == "YES"
+	}
+	if c.typ == "" {
+		return fmt.Errorf("missing type information for column %q", c.Name)
 	}
 	parts, size, unsigned, err := parseColumn(c.typ)
 	if err != nil {
@@ -398,8 +426,15 @@ func (d *MySQL) scanColumn(c *Column, rows *sql.Rows) error {
 		default:
 			c.Type = field.TypeInt8
 		}
-	case "numeric", "decimal", "double":
+	case "double":
 		c.Type = field.TypeFloat64
+	case "numeric", "decimal":
+		c.Type = field.TypeFloat64
+		// If precision is specified then we should take that into account.
+		if numericPrecision.Valid {
+			schemaType := fmt.Sprintf("%s(%d,%d)", parts[0], numericPrecision.Int64, numericScale.Int64)
+			c.SchemaType = map[string]string{dialect.MySQL: schemaType}
+		}
 	case "time", "timestamp", "date", "datetime":
 		c.Type = field.TypeTime
 		// The mapping from schema defaults to database
@@ -426,6 +461,9 @@ func (d *MySQL) scanColumn(c *Column, rows *sql.Rows) error {
 	case "text":
 		c.Size = math.MaxUint16
 		c.Type = field.TypeString
+	case "mediumtext":
+		c.Size = 1<<24 - 1
+		c.Type = field.TypeString
 	case "longtext":
 		c.Size = math.MaxInt32
 		c.Type = field.TypeString
@@ -433,16 +471,22 @@ func (d *MySQL) scanColumn(c *Column, rows *sql.Rows) error {
 		c.Type = field.TypeJSON
 	case "enum":
 		c.Type = field.TypeEnum
-		c.Enums = make([]string, len(parts)-1)
-		for i, e := range parts[1:] {
-			c.Enums[i] = strings.Trim(e, "'")
+		// Parse the enum values according to the MySQL format.
+		// github.com/mysql/mysql-server/blob/8.0/sql/field.cc#Field_enum::sql_type
+		values := strings.TrimSuffix(strings.TrimPrefix(c.typ, "enum("), ")")
+		if values == "" {
+			return fmt.Errorf("mysql: unexpected enum type: %q", c.typ)
+		}
+		parts := strings.Split(values, "','")
+		for i := range parts {
+			c.Enums = append(c.Enums, strings.Trim(parts[i], "'"))
 		}
 	case "char":
+		c.Type = field.TypeOther
 		// UUID field has length of 36 characters (32 alphanumeric characters and 4 hyphens).
-		if size != 36 {
-			return fmt.Errorf("unknown char(%d) type (not a uuid)", size)
+		if size == 36 {
+			c.Type = field.TypeUUID
 		}
-		c.Type = field.TypeUUID
 	case "point", "geometry", "linestring", "polygon":
 		c.Type = field.TypeOther
 	default:
@@ -455,8 +499,8 @@ func (d *MySQL) scanColumn(c *Column, rows *sql.Rows) error {
 }
 
 // scanIndexes scans sql.Rows into an Indexes list. The query for returning the rows,
-// should return the following 4 columns: INDEX_NAME, COLUMN_NAME, NON_UNIQUE, SEQ_IN_INDEX.
-// SEQ_IN_INDEX specifies the position of the column in the index columns.
+// should return the following 5 columns: INDEX_NAME, COLUMN_NAME, SUB_PART, NON_UNIQUE,
+// SEQ_IN_INDEX. SEQ_IN_INDEX specifies the position of the column in the index columns.
 func (d *MySQL) scanIndexes(rows *sql.Rows) (Indexes, error) {
 	var (
 		i     Indexes
@@ -468,8 +512,9 @@ func (d *MySQL) scanIndexes(rows *sql.Rows) (Indexes, error) {
 			column   string
 			nonuniq  bool
 			seqindex int
+			subpart  sql.NullInt64
 		)
-		if err := rows.Scan(&name, &column, &nonuniq, &seqindex); err != nil {
+		if err := rows.Scan(&name, &column, &subpart, &nonuniq, &seqindex); err != nil {
 			return nil, fmt.Errorf("scanning index description: %w", err)
 		}
 		// Ignore primary keys.
@@ -478,11 +523,17 @@ func (d *MySQL) scanIndexes(rows *sql.Rows) (Indexes, error) {
 		}
 		idx, ok := names[name]
 		if !ok {
-			idx = &Index{Name: name, Unique: !nonuniq}
+			idx = &Index{Name: name, Unique: !nonuniq, Annotation: &entsql.IndexAnnotation{}}
 			i = append(i, idx)
 			names[name] = idx
 		}
 		idx.columns = append(idx.columns, column)
+		if subpart.Int64 > 0 {
+			if idx.Annotation.PrefixColumns == nil {
+				idx.Annotation.PrefixColumns = make(map[string]uint)
+			}
+			idx.Annotation.PrefixColumns[column] = uint(subpart.Int64)
+		}
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -558,26 +609,22 @@ func (d *MySQL) alterColumns(table string, add, modify, drop []*Column) sql.Quer
 
 // normalizeJSON normalize MariaDB longtext columns to type JSON.
 func (d *MySQL) normalizeJSON(ctx context.Context, tx dialect.Tx, t *Table) error {
-	var (
-		names   []driver.Value
-		columns = make(map[string]*Column)
-	)
+	columns := make(map[string]*Column)
 	for _, c := range t.Columns {
 		if c.typ == "longtext" {
 			columns[c.Name] = c
-			names = append(names, c.Name)
 		}
 	}
-	if len(names) == 0 {
+	if len(columns) == 0 {
 		return nil
 	}
 	rows := &sql.Rows{}
-	query, args := sql.Select("CONSTRAINT_NAME", "CHECK_CLAUSE").
+	query, args := sql.Select("CONSTRAINT_NAME").
 		From(sql.Table("CHECK_CONSTRAINTS").Schema("INFORMATION_SCHEMA")).
 		Where(sql.And(
 			d.matchSchema("CONSTRAINT_SCHEMA"),
 			sql.EQ("TABLE_NAME", t.Name),
-			sql.InValues("CONSTRAINT_NAME", names...),
+			sql.Like("CHECK_CLAUSE", "json_valid(%)"),
 		)).
 		Query()
 	if err := tx.Query(ctx, query, args, rows); err != nil {
@@ -585,21 +632,23 @@ func (d *MySQL) normalizeJSON(ctx context.Context, tx dialect.Tx, t *Table) erro
 	}
 	// Call Close in cases of failures (Close is idempotent).
 	defer rows.Close()
-	for rows.Next() {
-		var name, check string
-		if err := rows.Scan(&name, &check); err != nil {
-			return fmt.Errorf("mysql: scan table constraints")
-		}
-		c, ok := columns[name]
-		if !ok || !strings.HasPrefix(check, "json_valid") {
-			continue
-		}
-		c.Type = field.TypeJSON
+	names := make([]string, 0, len(columns))
+	if err := sql.ScanSlice(rows, &names); err != nil {
+		return fmt.Errorf("mysql: scan table constraints: %w", err)
 	}
 	if err := rows.Err(); err != nil {
 		return err
 	}
-	return rows.Close()
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	for _, name := range names {
+		c, ok := columns[name]
+		if ok {
+			c.Type = field.TypeJSON
+		}
+	}
+	return nil
 }
 
 // mariadb reports if the migration runs on MariaDB and returns the semver string.
@@ -627,7 +676,9 @@ func parseColumn(typ string) (parts []string, size int64, unsigned bool, err err
 			size, err = strconv.ParseInt(parts[1], 10, 0)
 		}
 	case "varbinary", "varchar", "char", "binary":
-		size, err = strconv.ParseInt(parts[1], 10, 64)
+		if len(parts) > 1 {
+			size, err = strconv.ParseInt(parts[1], 10, 64)
+		}
 	}
 	if err != nil {
 		return parts, size, unsigned, fmt.Errorf("converting %s size to int: %w", parts[0], err)
@@ -679,4 +730,42 @@ func (d *MySQL) defaultSize(c *Column) int64 {
 		size = 191
 	}
 	return size
+}
+
+// needsConversion reports if column "old" needs to be converted
+// (by table altering) to column "new".
+func (d *MySQL) needsConversion(old, new *Column) bool {
+	return d.cType(old) != d.cType(new)
+}
+
+// indexModified used by the migration differ to check if the index was modified.
+func (d *MySQL) indexModified(old, new *Index) bool {
+	oldParts, newParts := indexParts(old), indexParts(new)
+	if len(oldParts) != len(newParts) {
+		return true
+	}
+	for column, oldPart := range oldParts {
+		newPart, ok := newParts[column]
+		if !ok || oldPart != newPart {
+			return true
+		}
+	}
+	return false
+}
+
+// indexParts returns a map holding the sub_part mapping if exist.
+func indexParts(idx *Index) map[string]uint {
+	parts := make(map[string]uint)
+	if idx.Annotation == nil {
+		return parts
+	}
+	// If prefix (without a name) was defined on the
+	// annotation, map it to the single column index.
+	if idx.Annotation.Prefix > 0 && len(idx.Columns) == 1 {
+		parts[idx.Columns[0].Name] = idx.Annotation.Prefix
+	}
+	for column, part := range idx.Annotation.PrefixColumns {
+		parts[column] = part
+	}
+	return parts
 }

@@ -31,7 +31,7 @@ import (
 func TestMySQL(t *testing.T) {
 	for version, port := range map[string]int{"56": 3306, "57": 3307, "8": 3308} {
 		t.Run(version, func(t *testing.T) {
-			root, err := sql.Open("mysql", fmt.Sprintf("root:pass@tcp(localhost:%d)/", port))
+			root, err := sql.Open(dialect.MySQL, fmt.Sprintf("root:pass@tcp(localhost:%d)/", port))
 			require.NoError(t, err)
 			defer root.Close()
 			ctx := context.Background()
@@ -45,12 +45,15 @@ func TestMySQL(t *testing.T) {
 			clientv1 := entv1.NewClient(entv1.Driver(drv))
 			clientv2 := entv2.NewClient(entv2.Driver(drv))
 			V1ToV2(t, drv.Dialect(), clientv1, clientv2)
+			if version == "8" {
+				CheckConstraint(t, clientv2)
+			}
 		})
 	}
 }
 
 func TestPostgres(t *testing.T) {
-	for version, port := range map[string]int{"10": 5430, "11": 5431, "12": 5433, "13": 5434} {
+	for version, port := range map[string]int{"10": 5430, "11": 5431, "12": 5432, "13": 5433, "14": 5434} {
 		t.Run(version, func(t *testing.T) {
 			dsn := fmt.Sprintf("host=localhost port=%d user=postgres password=pass sslmode=disable", port)
 			root, err := sql.Open(dialect.Postgres, dsn)
@@ -73,6 +76,7 @@ func TestPostgres(t *testing.T) {
 			clientv1 := entv1.NewClient(entv1.Driver(drv))
 			clientv2 := entv2.NewClient(entv2.Driver(drv))
 			V1ToV2(t, drv.Dialect(), clientv1, clientv2)
+			CheckConstraint(t, clientv2)
 		})
 	}
 }
@@ -101,6 +105,13 @@ func TestSQLite(t *testing.T) {
 	require.NoError(t, err)
 	EqualFold(t, client)
 	ContainsFold(t, client)
+	CheckConstraint(t, client)
+}
+
+func TestStorageKey(t *testing.T) {
+	require.Equal(t, "user_pet_id", migratev2.PetsTable.ForeignKeys[0].Symbol)
+	require.Equal(t, "user_friend_id1", migratev2.FriendsTable.ForeignKeys[0].Symbol)
+	require.Equal(t, "user_friend_id2", migratev2.FriendsTable.ForeignKeys[1].Symbol)
 }
 
 func V1ToV2(t *testing.T, dialect string, clientv1 *entv1.Client, clientv2 *entv2.Client) {
@@ -139,22 +150,22 @@ func SanityV1(t *testing.T, dbdialect string, client *entv1.Client) {
 	require.EqualValues(t, 1, u.Age)
 	require.Equal(t, "foo", u.Name)
 
-	_, err := client.User.Create().SetAge(2).SetName("foobarbazqux").Save(ctx)
+	err := client.User.Create().SetAge(2).SetName("foobarbazqux").Exec(ctx)
 	require.Error(t, err, "name is limited to 10 chars")
 
 	// Unique index on (name, address).
 	client.User.Create().SetAge(3).SetName("foo").SetNickname("nick_foo_2").SetAddress("tlv").SetState(userv1.StateLoggedIn).SaveX(ctx)
-	_, err = client.User.Create().SetAge(4).SetName("foo").SetAddress("tlv").Save(ctx)
+	err = client.User.Create().SetAge(4).SetName("foo").SetAddress("tlv").Exec(ctx)
 	require.Error(t, err)
 
 	// Blob type limited to 255.
 	u = u.Update().SetBlob([]byte("hello")).SaveX(ctx)
 	require.Equal(t, "hello", string(u.Blob))
-	_, err = u.Update().SetBlob(make([]byte, 256)).Save(ctx)
+	err = u.Update().SetBlob(make([]byte, 256)).Exec(ctx)
 	require.True(t, strings.Contains(t.Name(), "Postgres") || err != nil, "blob should be limited on SQLite and MySQL")
 
 	// Invalid enum value.
-	_, err = client.User.Create().SetAge(1).SetName("bar").SetNickname("nick_bar").SetState("unknown").Save(ctx)
+	err = client.User.Create().SetAge(1).SetName("bar").SetNickname("nick_bar").SetState("unknown").Exec(ctx)
 	require.Error(t, err)
 
 	// Conversions
@@ -206,6 +217,13 @@ func SanityV1(t *testing.T, dbdialect string, client *entv1.Client) {
 
 func SanityV2(t *testing.T, dbdialect string, client *entv2.Client) {
 	ctx := context.Background()
+	if dbdialect != dialect.SQLite {
+		require.True(t, client.User.Query().ExistX(ctx), "table 'users' should contain rows after running the migration")
+		users := client.User.Query().Select(user.FieldCreatedAt).AllX(ctx)
+		for i := range users {
+			require.False(t, users[i].CreatedAt.IsZero(), "default 'CURRENT_TIMESTAMP' should fill previous rows")
+		}
+	}
 	u := client.User.Create().SetAge(1).SetName("bar").SetNickname("nick_bar").SetPhone("100").SetBuffer([]byte("{}")).SetState(user.StateLoggedOut).SaveX(ctx)
 	require.Equal(t, 1, u.Age)
 	require.Equal(t, "bar", u.Name)
@@ -214,16 +232,16 @@ func SanityV2(t *testing.T, dbdialect string, client *entv2.Client) {
 	require.Equal(t, []byte("[]"), u.Buffer)
 	require.Equal(t, user.StateLoggedOut, u.State)
 
-	_, err := u.Update().SetState(user.State("boring")).Save(ctx)
+	err := u.Update().SetState(user.State("boring")).Exec(ctx)
 	require.Error(t, err, "invalid enum value")
 	u = u.Update().SetState(user.StateOnline).SaveX(ctx)
 	require.Equal(t, user.StateOnline, u.State)
 
-	_, err = client.User.Create().SetAge(1).SetName("foobarbazqux").SetNickname("nick_bar").SetPhone("200").Save(ctx)
+	err = client.User.Create().SetAge(1).SetName("foobarbazqux").SetNickname("nick_bar").SetPhone("200").Exec(ctx)
 	require.NoError(t, err, "name is not limited to 10 chars and nickname is not unique")
 
 	// New unique index was added to (age, phone).
-	_, err = client.User.Create().SetAge(1).SetName("foo").SetPhone("200").SetNickname("nick_bar").Save(ctx)
+	err = client.User.Create().SetAge(1).SetName("foo").SetPhone("200").SetNickname("nick_bar").Exec(ctx)
 	require.Error(t, err)
 	require.True(t, entv2.IsConstraintError(err))
 
@@ -279,6 +297,15 @@ func SanityV2(t *testing.T, dbdialect string, client *entv2.Client) {
 			require.Equal(t, strconv.FormatUint(math.MaxUint64, 10), max.Uint64ToString)
 		}
 	}
+}
+
+func CheckConstraint(t *testing.T, client *entv2.Client) {
+	ctx := context.Background()
+	t.Log("testing check constraints")
+	err := client.Media.Create().SetText("boring").Exec(ctx)
+	require.Error(t, err)
+	err = client.Media.Create().SetSourceURI("entgo.io").Exec(ctx)
+	require.Error(t, err)
 }
 
 func EqualFold(t *testing.T, client *entv2.Client) {

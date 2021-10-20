@@ -71,13 +71,13 @@ func (*User) scanValues(columns []string) ([]interface{}, error) {
 	for i := range columns {
 		switch columns[i] {
 		case user.FieldFoods:
-			values[i] = &[]byte{}
+			values[i] = new([]byte)
 		case user.FieldID:
-			values[i] = &sql.NullInt64{}
+			values[i] = new(sql.NullInt64)
 		case user.FieldName:
-			values[i] = &sql.NullString{}
+			values[i] = new(sql.NullString)
 		case user.ForeignKeys[0]: // user_tenant
-			values[i] = &sql.NullInt64{}
+			values[i] = new(sql.NullInt64)
 		default:
 			return nil, fmt.Errorf("unexpected column %q for type User", columns[i])
 		}
@@ -106,7 +106,6 @@ func (u *User) assignValues(columns []string, values []interface{}) error {
 				u.Name = value.String
 			}
 		case user.FieldFoods:
-
 			if value, ok := values[i].(*[]byte); !ok {
 				return fmt.Errorf("unexpected type %T for field foods", values[i])
 			} else if value != nil && len(*value) > 0 {

@@ -120,8 +120,8 @@ func (m CardMutation) Tx() (*Tx, error) {
 	return tx, nil
 }
 
-// ID returns the ID value in the mutation. Note that the ID
-// is only available if it was provided to the builder.
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
 func (m *CardMutation) ID() (id int, exists bool) {
 	if m.id == nil {
 		return
@@ -296,7 +296,7 @@ func (m *CardMutation) ClearOwner() {
 	m.clearedowner = true
 }
 
-// OwnerCleared returns if the "owner" edge to the User entity was cleared.
+// OwnerCleared reports if the "owner" edge to the User entity was cleared.
 func (m *CardMutation) OwnerCleared() bool {
 	return m.clearedowner
 }
@@ -323,6 +323,11 @@ func (m *CardMutation) OwnerIDs() (ids []int) {
 func (m *CardMutation) ResetOwner() {
 	m.owner = nil
 	m.clearedowner = false
+}
+
+// Where appends a list predicates to the CardMutation builder.
+func (m *CardMutation) Where(ps ...predicate.Card) {
+	m.predicates = append(m.predicates, ps...)
 }
 
 // Op returns the operation name.
@@ -667,8 +672,8 @@ func (m UserMutation) Tx() (*Tx, error) {
 	return tx, nil
 }
 
-// ID returns the ID value in the mutation. Note that the ID
-// is only available if it was provided to the builder.
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
 func (m *UserMutation) ID() (id int, exists bool) {
 	if m.id == nil {
 		return
@@ -853,7 +858,7 @@ func (m *UserMutation) ClearCards() {
 	m.clearedcards = true
 }
 
-// CardsCleared returns if the "cards" edge to the Card entity was cleared.
+// CardsCleared reports if the "cards" edge to the Card entity was cleared.
 func (m *UserMutation) CardsCleared() bool {
 	return m.clearedcards
 }
@@ -864,6 +869,7 @@ func (m *UserMutation) RemoveCardIDs(ids ...int) {
 		m.removedcards = make(map[int]struct{})
 	}
 	for i := range ids {
+		delete(m.cards, ids[i])
 		m.removedcards[ids[i]] = struct{}{}
 	}
 }
@@ -906,7 +912,7 @@ func (m *UserMutation) ClearFriends() {
 	m.clearedfriends = true
 }
 
-// FriendsCleared returns if the "friends" edge to the User entity was cleared.
+// FriendsCleared reports if the "friends" edge to the User entity was cleared.
 func (m *UserMutation) FriendsCleared() bool {
 	return m.clearedfriends
 }
@@ -917,6 +923,7 @@ func (m *UserMutation) RemoveFriendIDs(ids ...int) {
 		m.removedfriends = make(map[int]struct{})
 	}
 	for i := range ids {
+		delete(m.friends, ids[i])
 		m.removedfriends[ids[i]] = struct{}{}
 	}
 }
@@ -954,7 +961,7 @@ func (m *UserMutation) ClearBestFriend() {
 	m.clearedbest_friend = true
 }
 
-// BestFriendCleared returns if the "best_friend" edge to the User entity was cleared.
+// BestFriendCleared reports if the "best_friend" edge to the User entity was cleared.
 func (m *UserMutation) BestFriendCleared() bool {
 	return m.clearedbest_friend
 }
@@ -981,6 +988,11 @@ func (m *UserMutation) BestFriendIDs() (ids []int) {
 func (m *UserMutation) ResetBestFriend() {
 	m.best_friend = nil
 	m.clearedbest_friend = false
+}
+
+// Where appends a list predicates to the UserMutation builder.
+func (m *UserMutation) Where(ps ...predicate.User) {
+	m.predicates = append(m.predicates, ps...)
 }
 
 // Op returns the operation name.

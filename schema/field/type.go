@@ -122,6 +122,11 @@ func (t TypeInfo) ValueScanner() bool {
 	return t.RType.implements(valueScannerType)
 }
 
+// ValueScanner indicates if this type implements the driver.Valuer interface.
+func (t TypeInfo) Valuer() bool {
+	return t.RType.implements(valuerType)
+}
+
 // Comparable reports whether values of this type are comparable.
 func (t TypeInfo) Comparable() bool {
 	switch t.Type {
@@ -181,7 +186,8 @@ var (
 // RType holds a serializable reflect.Type information of
 // Go object. Used by the entc package.
 type RType struct {
-	Name    string
+	Name    string // reflect.Type.Name
+	Ident   string // reflect.Type.String
 	Kind    reflect.Kind
 	PkgPath string
 	Methods map[string]struct{ In, Out []*RType }
@@ -189,10 +195,23 @@ type RType struct {
 	rtype reflect.Type
 }
 
-// TypeEqual tests if the RType is equal to given reflect.Type.
+// TypeEqual reports if the underlying type is equal to the RType (after pointer indirections).
 func (r *RType) TypeEqual(t reflect.Type) bool {
-	t = indirect(t)
-	return r.Name == t.Name() && r.Kind == t.Kind() && r.PkgPath == t.PkgPath()
+	tv := indirect(t)
+	return r.Name == tv.Name() && r.Kind == t.Kind() && r.PkgPath == tv.PkgPath()
+}
+
+// RType returns the string value of the indirect reflect.Type.
+func (r *RType) String() string {
+	if r.rtype != nil {
+		return r.rtype.String()
+	}
+	return r.Ident
+}
+
+// IsPtr reports if the reflect-type is a pointer type.
+func (r *RType) IsPtr() bool {
+	return r != nil && r.Kind == reflect.Ptr
 }
 
 func (r *RType) implements(typ reflect.Type) bool {

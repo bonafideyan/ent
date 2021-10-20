@@ -4,7 +4,10 @@ This source code is licensed under the Apache 2.0 license found
 in the LICENSE file in the root directory of this source tree.
 */}}
 
+{{/* gotype: entgo.io/ent/entc/gen.typeScope */}}
+
 {{ define "dialect/gremlin/update" }}
+{{ $pkg := $.Scope.Package }}
 {{ $builder := pascal $.Scope.Builder }}
 {{ $receiver := receiver $builder }}
 {{ $mutation := print $receiver ".mutation" }}
@@ -16,7 +19,7 @@ func ({{ $receiver }} *{{ $builder }}) gremlinSave(ctx context.Context) ({{- if 
 	{{- if $one }}
 		id, ok := {{ $mutation }}.{{ $.ID.MutationGet }}()
 		if !ok {
-			return {{ $zero }}, &ValidationError{Name: "ID", err: fmt.Errorf("missing {{ $.Name }}.ID for update")}
+			return {{ $zero }}, &ValidationError{Name: "{{ $.ID.Name }}", err: errors.New(`{{ $pkg }}: missing "{{ $.Name }}.{{ $.ID.Name }}" for update`)}
 		}
 		query, bindings := {{ $receiver }}.gremlin(id).Query()
 	{{- else }}
@@ -76,7 +79,7 @@ func ({{ $receiver }} *{{ $builder }}) gremlin({{ if $one }}id {{ $.ID.Type }}{{
 				{{- end }}
 				v.Property(dsl.Single, {{ $.Package }}.{{ $f.Constant }}, value)
 			}
-			{{- if and $f.Type.Numeric $f.ConvertedToBasic }}
+			{{- if $f.SupportsMutationAdd }}
 				if value, ok := {{ $mutation }}.Added{{ $f.StructField }}(); ok {
 					{{- if $f.Unique }}
 						addValue := rv.Clone().Union(__.Values({{ $.Package }}.{{ $f.Constant }}), __.Constant(value)).Sum().Next()

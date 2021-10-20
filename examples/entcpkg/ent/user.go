@@ -26,7 +26,7 @@ type User struct {
 	Age int `json:"age"`
 
 	// StaticField defined by templates (titled STATICFIELD).
-	StaticField string `json:"static_field,omitempty"`
+	StaticField string `json:"static_field,omitempty" rql:"static_field"`
 }
 
 // scanValues returns the types for scanning values from sql.Rows.
@@ -35,9 +35,9 @@ func (*User) scanValues(columns []string) ([]interface{}, error) {
 	for i := range columns {
 		switch columns[i] {
 		case user.FieldID, user.FieldAge:
-			values[i] = &sql.NullInt64{}
+			values[i] = new(sql.NullInt64)
 		case user.FieldName:
-			values[i] = &sql.NullString{}
+			values[i] = new(sql.NullString)
 		default:
 			return nil, fmt.Errorf("unexpected column %q for type User", columns[i])
 		}

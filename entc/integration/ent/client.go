@@ -218,6 +218,11 @@ func (c *Client) Use(hooks ...Hook) {
 	c.User.Use(hooks...)
 }
 
+// Dialect returns the driver dialect.
+func (c *Client) Dialect() string {
+	return c.driver.Dialect()
+}
+
 // CardClient is a client for the Card schema.
 type CardClient struct {
 	config
@@ -284,7 +289,9 @@ func (c *CardClient) DeleteOneID(id int) *CardDeleteOne {
 
 // Query returns a query builder for Card.
 func (c *CardClient) Query() *CardQuery {
-	return &CardQuery{config: c.config}
+	return &CardQuery{
+		config: c.config,
+	}
 }
 
 // Get returns a Card entity by its id.
@@ -404,7 +411,9 @@ func (c *CommentClient) DeleteOneID(id int) *CommentDeleteOne {
 
 // Query returns a query builder for Comment.
 func (c *CommentClient) Query() *CommentQuery {
-	return &CommentQuery{config: c.config}
+	return &CommentQuery{
+		config: c.config,
+	}
 }
 
 // Get returns a Comment entity by its id.
@@ -492,7 +501,9 @@ func (c *FieldTypeClient) DeleteOneID(id int) *FieldTypeDeleteOne {
 
 // Query returns a query builder for FieldType.
 func (c *FieldTypeClient) Query() *FieldTypeQuery {
-	return &FieldTypeQuery{config: c.config}
+	return &FieldTypeQuery{
+		config: c.config,
+	}
 }
 
 // Get returns a FieldType entity by its id.
@@ -580,7 +591,9 @@ func (c *FileClient) DeleteOneID(id int) *FileDeleteOne {
 
 // Query returns a query builder for File.
 func (c *FileClient) Query() *FileQuery {
-	return &FileQuery{config: c.config}
+	return &FileQuery{
+		config: c.config,
+	}
 }
 
 // Get returns a File entity by its id.
@@ -716,7 +729,9 @@ func (c *FileTypeClient) DeleteOneID(id int) *FileTypeDeleteOne {
 
 // Query returns a query builder for FileType.
 func (c *FileTypeClient) Query() *FileTypeQuery {
-	return &FileTypeQuery{config: c.config}
+	return &FileTypeQuery{
+		config: c.config,
+	}
 }
 
 // Get returns a FileType entity by its id.
@@ -820,7 +835,9 @@ func (c *GoodsClient) DeleteOneID(id int) *GoodsDeleteOne {
 
 // Query returns a query builder for Goods.
 func (c *GoodsClient) Query() *GoodsQuery {
-	return &GoodsQuery{config: c.config}
+	return &GoodsQuery{
+		config: c.config,
+	}
 }
 
 // Get returns a Goods entity by its id.
@@ -908,7 +925,9 @@ func (c *GroupClient) DeleteOneID(id int) *GroupDeleteOne {
 
 // Query returns a query builder for Group.
 func (c *GroupClient) Query() *GroupQuery {
-	return &GroupQuery{config: c.config}
+	return &GroupQuery{
+		config: c.config,
+	}
 }
 
 // Get returns a Group entity by its id.
@@ -1060,7 +1079,9 @@ func (c *GroupInfoClient) DeleteOneID(id int) *GroupInfoDeleteOne {
 
 // Query returns a query builder for GroupInfo.
 func (c *GroupInfoClient) Query() *GroupInfoQuery {
-	return &GroupInfoQuery{config: c.config}
+	return &GroupInfoQuery{
+		config: c.config,
+	}
 }
 
 // Get returns a GroupInfo entity by its id.
@@ -1138,7 +1159,7 @@ func (c *ItemClient) UpdateOne(i *Item) *ItemUpdateOne {
 }
 
 // UpdateOneID returns an update builder for the given id.
-func (c *ItemClient) UpdateOneID(id int) *ItemUpdateOne {
+func (c *ItemClient) UpdateOneID(id string) *ItemUpdateOne {
 	mutation := newItemMutation(c.config, OpUpdateOne, withItemID(id))
 	return &ItemUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
 }
@@ -1155,7 +1176,7 @@ func (c *ItemClient) DeleteOne(i *Item) *ItemDeleteOne {
 }
 
 // DeleteOneID returns a delete builder for the given id.
-func (c *ItemClient) DeleteOneID(id int) *ItemDeleteOne {
+func (c *ItemClient) DeleteOneID(id string) *ItemDeleteOne {
 	builder := c.Delete().Where(item.ID(id))
 	builder.mutation.id = &id
 	builder.mutation.op = OpDeleteOne
@@ -1164,16 +1185,18 @@ func (c *ItemClient) DeleteOneID(id int) *ItemDeleteOne {
 
 // Query returns a query builder for Item.
 func (c *ItemClient) Query() *ItemQuery {
-	return &ItemQuery{config: c.config}
+	return &ItemQuery{
+		config: c.config,
+	}
 }
 
 // Get returns a Item entity by its id.
-func (c *ItemClient) Get(ctx context.Context, id int) (*Item, error) {
+func (c *ItemClient) Get(ctx context.Context, id string) (*Item, error) {
 	return c.Query().Where(item.ID(id)).Only(ctx)
 }
 
 // GetX is like Get, but panics if an error occurs.
-func (c *ItemClient) GetX(ctx context.Context, id int) *Item {
+func (c *ItemClient) GetX(ctx context.Context, id string) *Item {
 	obj, err := c.Get(ctx, id)
 	if err != nil {
 		panic(err)
@@ -1252,7 +1275,9 @@ func (c *NodeClient) DeleteOneID(id int) *NodeDeleteOne {
 
 // Query returns a query builder for Node.
 func (c *NodeClient) Query() *NodeQuery {
-	return &NodeQuery{config: c.config}
+	return &NodeQuery{
+		config: c.config,
+	}
 }
 
 // Get returns a Node entity by its id.
@@ -1372,7 +1397,9 @@ func (c *PetClient) DeleteOneID(id int) *PetDeleteOne {
 
 // Query returns a query builder for Pet.
 func (c *PetClient) Query() *PetQuery {
-	return &PetQuery{config: c.config}
+	return &PetQuery{
+		config: c.config,
+	}
 }
 
 // Get returns a Pet entity by its id.
@@ -1492,7 +1519,9 @@ func (c *SpecClient) DeleteOneID(id int) *SpecDeleteOne {
 
 // Query returns a query builder for Spec.
 func (c *SpecClient) Query() *SpecQuery {
-	return &SpecQuery{config: c.config}
+	return &SpecQuery{
+		config: c.config,
+	}
 }
 
 // Get returns a Spec entity by its id.
@@ -1596,7 +1625,9 @@ func (c *TaskClient) DeleteOneID(id int) *TaskDeleteOne {
 
 // Query returns a query builder for Task.
 func (c *TaskClient) Query() *TaskQuery {
-	return &TaskQuery{config: c.config}
+	return &TaskQuery{
+		config: c.config,
+	}
 }
 
 // Get returns a Task entity by its id.
@@ -1684,7 +1715,9 @@ func (c *UserClient) DeleteOneID(id int) *UserDeleteOne {
 
 // Query returns a query builder for User.
 func (c *UserClient) Query() *UserQuery {
-	return &UserQuery{config: c.config}
+	return &UserQuery{
+		config: c.config,
+	}
 }
 
 // Get returns a User entity by its id.

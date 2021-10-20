@@ -328,8 +328,8 @@ func (iq *InfoQuery) GroupBy(field string, fields ...string) *InfoGroupBy {
 //		Select(info.FieldContent).
 //		Scan(ctx, &v)
 //
-func (iq *InfoQuery) Select(field string, fields ...string) *InfoSelect {
-	iq.fields = append([]string{field}, fields...)
+func (iq *InfoQuery) Select(fields ...string) *InfoSelect {
+	iq.fields = append(iq.fields, fields...)
 	return &InfoSelect{InfoQuery: iq}
 }
 
@@ -408,6 +408,10 @@ func (iq *InfoQuery) sqlAll(ctx context.Context) ([]*Info, error) {
 
 func (iq *InfoQuery) sqlCount(ctx context.Context) (int, error) {
 	_spec := iq.querySpec()
+	_spec.Node.Columns = iq.fields
+	if len(iq.fields) > 0 {
+		_spec.Unique = iq.unique != nil && *iq.unique
+	}
 	return sqlgraph.CountNodes(ctx, iq.driver, _spec)
 }
 
@@ -460,7 +464,7 @@ func (iq *InfoQuery) querySpec() *sqlgraph.QuerySpec {
 	if ps := iq.order; len(ps) > 0 {
 		_spec.Order = func(selector *sql.Selector) {
 			for i := range ps {
-				ps[i](selector, info.ValidColumn)
+				ps[i](selector)
 			}
 		}
 	}
@@ -470,16 +474,23 @@ func (iq *InfoQuery) querySpec() *sqlgraph.QuerySpec {
 func (iq *InfoQuery) sqlQuery(ctx context.Context) *sql.Selector {
 	builder := sql.Dialect(iq.driver.Dialect())
 	t1 := builder.Table(info.Table)
-	selector := builder.Select(t1.Columns(info.Columns...)...).From(t1)
+	columns := iq.fields
+	if len(columns) == 0 {
+		columns = info.Columns
+	}
+	selector := builder.Select(t1.Columns(columns...)...).From(t1)
 	if iq.sql != nil {
 		selector = iq.sql
-		selector.Select(selector.Columns(info.Columns...)...)
+		selector.Select(selector.Columns(columns...)...)
+	}
+	if iq.unique != nil && *iq.unique {
+		selector.Distinct()
 	}
 	for _, p := range iq.predicates {
 		p(selector)
 	}
 	for _, p := range iq.order {
-		p(selector, info.ValidColumn)
+		p(selector)
 	}
 	if offset := iq.offset; offset != nil {
 		// limit is mandatory for offset clause. We start
@@ -741,13 +752,24 @@ func (igb *InfoGroupBy) sqlScan(ctx context.Context, v interface{}) error {
 }
 
 func (igb *InfoGroupBy) sqlQuery() *sql.Selector {
-	selector := igb.sql
-	columns := make([]string, 0, len(igb.fields)+len(igb.fns))
-	columns = append(columns, igb.fields...)
+	selector := igb.sql.Select()
+	aggregation := make([]string, 0, len(igb.fns))
 	for _, fn := range igb.fns {
-		columns = append(columns, fn(selector, info.ValidColumn))
+		aggregation = append(aggregation, fn(selector))
 	}
-	return selector.Select(columns...).GroupBy(igb.fields...)
+	// If no columns were selected in a custom aggregation function, the default
+	// selection is the fields used for "group-by", and the aggregation functions.
+	if len(selector.SelectedColumns()) == 0 {
+		columns := make([]string, 0, len(igb.fields)+len(igb.fns))
+		for _, f := range igb.fields {
+			columns = append(columns, selector.C(f))
+		}
+		for _, c := range aggregation {
+			columns = append(columns, c)
+		}
+		selector.Select(columns...)
+	}
+	return selector.GroupBy(selector.Columns(igb.fields...)...)
 }
 
 // InfoSelect is the builder for selecting fields of Info entities.
@@ -963,16 +985,10 @@ func (is *InfoSelect) BoolX(ctx context.Context) bool {
 
 func (is *InfoSelect) sqlScan(ctx context.Context, v interface{}) error {
 	rows := &sql.Rows{}
-	query, args := is.sqlQuery().Query()
+	query, args := is.sql.Query()
 	if err := is.driver.Query(ctx, query, args, rows); err != nil {
 		return err
 	}
 	defer rows.Close()
 	return sql.ScanSlice(rows, v)
-}
-
-func (is *InfoSelect) sqlQuery() sql.Querier {
-	selector := is.sql
-	selector.Select(selector.Columns(is.fields...)...)
-	return selector
 }

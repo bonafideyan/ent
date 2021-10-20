@@ -2,21 +2,20 @@
 // This source code is licensed under the Apache 2.0 license found
 // in the LICENSE file in the root directory of this source tree.
 
-// Package load is the interface for loading schema package into a Go program.
+// Package load is the interface for loading an ent/schema package into a Go program.
 package load
 
 import (
 	"bytes"
+	"embed"
 	"fmt"
 	"go/ast"
 	"go/format"
 	"go/parser"
 	"go/token"
 	"go/types"
-	"io/ioutil"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"reflect"
 	"sort"
 	"strings"
@@ -24,55 +23,55 @@ import (
 	"time"
 
 	"entgo.io/ent"
-	"entgo.io/ent/entc/load/internal"
-
 	"golang.org/x/tools/go/packages"
 )
 
-// A SchemaSpec holds an ent.schema package that created by Load.
-type SchemaSpec struct {
-	// Schemas are the schema descriptors.
-	Schemas []*Schema
-	// PkgPath is the package path of the schema.
-	PkgPath string
-}
+type (
+	// A SchemaSpec holds a serializable version of an ent.Schema
+	// and its Go package information.
+	SchemaSpec struct {
+		// Schemas are the schema descriptors.
+		Schemas []*Schema
+		// PkgPath is the package path of the loaded ent.Schema.
+		PkgPath string
+	}
 
-// Config holds the configuration for package building.
-type Config struct {
-	// Path is the path for the schema package.
-	Path string
-	// Names are the schema names to run the code generation on.
-	// Empty means all schema in the directory.
-	Names []string
-}
+	// Config holds the configuration for loading an ent/schema package.
+	Config struct {
+		// Path is the path for the schema package.
+		Path string
+		// Names are the schema names to load. Empty means all schemas in the directory.
+		Names []string
+	}
+)
 
 // Load loads the schemas package and build the Go plugin with this info.
 func (c *Config) Load() (*SchemaSpec, error) {
 	pkgPath, err := c.load()
 	if err != nil {
-		return nil, fmt.Errorf("load schema dir: %w", err)
+		return nil, fmt.Errorf("entc/load: load schema dir: %w", err)
 	}
 	if len(c.Names) == 0 {
-		return nil, fmt.Errorf("no schema found in: %s", c.Path)
+		return nil, fmt.Errorf("entc/load: no schema found in: %s", c.Path)
 	}
-	b := bytes.NewBuffer(nil)
-	err = buildTmpl.ExecuteTemplate(b, "main", struct {
+	var b bytes.Buffer
+	err = buildTmpl.ExecuteTemplate(&b, "main", struct {
 		*Config
 		Package string
 	}{c, pkgPath})
 	if err != nil {
-		return nil, fmt.Errorf("execute template: %w", err)
+		return nil, fmt.Errorf("entc/load: execute template: %w", err)
 	}
 	buf, err := format.Source(b.Bytes())
 	if err != nil {
-		return nil, fmt.Errorf("format template: %w", err)
+		return nil, fmt.Errorf("entc/load: format template: %w", err)
 	}
 	if err := os.MkdirAll(".entc", os.ModePerm); err != nil {
 		return nil, err
 	}
 	target := fmt.Sprintf(".entc/%s.go", filename(pkgPath))
-	if err := ioutil.WriteFile(target, buf, 0644); err != nil {
-		return nil, fmt.Errorf("write file %s: %w", target, err)
+	if err := os.WriteFile(target, buf, 0644); err != nil {
+		return nil, fmt.Errorf("entc/load: write file %s: %w", target, err)
 	}
 	defer os.RemoveAll(".entc")
 	out, err := run(target)
@@ -83,7 +82,7 @@ func (c *Config) Load() (*SchemaSpec, error) {
 	for _, line := range strings.Split(out, "\n") {
 		schema, err := UnmarshalSchema([]byte(line))
 		if err != nil {
-			return nil, fmt.Errorf("unmarshal schema %s: %w", line, err)
+			return nil, fmt.Errorf("entc/load: unmarshal schema %s: %w", line, err)
 		}
 		spec.Schemas = append(spec.Schemas, schema)
 	}
@@ -111,7 +110,7 @@ func (c *Config) load() (string, error) {
 	if pkgs[0].PkgPath != entInterface.PkgPath() {
 		entPkg, pkg = pkgs[1], pkgs[0]
 	}
-	names := make([]string, 0)
+	var names []string
 	iface := entPkg.Types.Scope().Lookup(entInterface.Name()).Type().Underlying().(*types.Interface)
 	for k, v := range pkg.TypesInfo.Defs {
 		typ, ok := v.(*types.TypeName)
@@ -134,35 +133,36 @@ func (c *Config) load() (string, error) {
 	return pkg.PkgPath, nil
 }
 
-//go:generate go run github.com/go-bindata/go-bindata/go-bindata -pkg=internal -o=internal/bindata.go -mode=420 -modtime=1 ./template/... schema.go
-
-var buildTmpl = templates()
+var (
+	//go:embed template/main.tmpl schema.go
+	files     embed.FS
+	buildTmpl = templates()
+)
 
 func templates() *template.Template {
-	tmpl := template.New("templates").Funcs(template.FuncMap{"base": filepath.Base})
-	tmpl = template.Must(tmpl.Parse(string(internal.MustAsset("template/main.tmpl"))))
-	// Turns the schema file and its imports into templates.
 	tmpls, err := schemaTemplates()
 	if err != nil {
 		panic(err)
 	}
+	tmpl := template.Must(template.New("templates").
+		ParseFS(files, "template/main.tmpl"))
 	for _, t := range tmpls {
 		tmpl = template.Must(tmpl.Parse(t))
 	}
 	return tmpl
 }
 
-// schemaTemplates returns the templates needed for loading the schema.go file.
+// schemaTemplates turns the schema.go file and its import block into templates.
 func schemaTemplates() ([]string, error) {
-	const name = "schema.go"
 	var (
 		imports []string
 		code    bytes.Buffer
 		fset    = token.NewFileSet()
+		src, _  = files.ReadFile("schema.go")
 	)
-	f, err := parser.ParseFile(fset, name, string(internal.MustAsset(name)), parser.AllErrors)
+	f, err := parser.ParseFile(fset, "schema.go", src, parser.AllErrors)
 	if err != nil {
-		return nil, fmt.Errorf("parse file: %s: %w", name, err)
+		return nil, fmt.Errorf("parse schema file: %w", err)
 	}
 	for _, decl := range f.Decls {
 		if decl, ok := decl.(*ast.GenDecl); ok && decl.Tok == token.IMPORT {

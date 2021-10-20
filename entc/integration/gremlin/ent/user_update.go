@@ -8,6 +8,7 @@ package ent
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"entgo.io/ent/dialect/gremlin"
@@ -26,9 +27,9 @@ type UserUpdate struct {
 	mutation *UserMutation
 }
 
-// Where adds a new predicate for the UserUpdate builder.
+// Where appends a list predicates to the UserUpdate builder.
 func (uu *UserUpdate) Where(ps ...predicate.User) *UserUpdate {
-	uu.mutation.predicates = append(uu.mutation.predicates, ps...)
+	uu.mutation.Where(ps...)
 	return uu
 }
 
@@ -182,6 +183,20 @@ func (uu *UserUpdate) SetRole(u user.Role) *UserUpdate {
 func (uu *UserUpdate) SetNillableRole(u *user.Role) *UserUpdate {
 	if u != nil {
 		uu.SetRole(*u)
+	}
+	return uu
+}
+
+// SetEmployment sets the "employment" field.
+func (uu *UserUpdate) SetEmployment(u user.Employment) *UserUpdate {
+	uu.mutation.SetEmployment(u)
+	return uu
+}
+
+// SetNillableEmployment sets the "employment" field if the given value is not nil.
+func (uu *UserUpdate) SetNillableEmployment(u *user.Employment) *UserUpdate {
+	if u != nil {
+		uu.SetEmployment(*u)
 	}
 	return uu
 }
@@ -589,6 +604,9 @@ func (uu *UserUpdate) Save(ctx context.Context) (int, error) {
 			return affected, err
 		})
 		for i := len(uu.hooks) - 1; i >= 0; i-- {
+			if uu.hooks[i] == nil {
+				return 0, fmt.Errorf("ent: uninitialized hook (forgotten import ent/runtime?)")
+			}
 			mut = uu.hooks[i](mut)
 		}
 		if _, err := mut.Mutate(ctx, uu.mutation); err != nil {
@@ -624,12 +642,17 @@ func (uu *UserUpdate) ExecX(ctx context.Context) {
 func (uu *UserUpdate) check() error {
 	if v, ok := uu.mutation.OptionalInt(); ok {
 		if err := user.OptionalIntValidator(v); err != nil {
-			return &ValidationError{Name: "optional_int", err: fmt.Errorf("ent: validator failed for field \"optional_int\": %w", err)}
+			return &ValidationError{Name: "optional_int", err: fmt.Errorf(`ent: validator failed for field "User.optional_int": %w`, err)}
 		}
 	}
 	if v, ok := uu.mutation.Role(); ok {
 		if err := user.RoleValidator(v); err != nil {
-			return &ValidationError{Name: "role", err: fmt.Errorf("ent: validator failed for field \"role\": %w", err)}
+			return &ValidationError{Name: "role", err: fmt.Errorf(`ent: validator failed for field "User.role": %w`, err)}
+		}
+	}
+	if v, ok := uu.mutation.Employment(); ok {
+		if err := user.EmploymentValidator(v); err != nil {
+			return &ValidationError{Name: "employment", err: fmt.Errorf(`ent: validator failed for field "User.employment": %w`, err)}
 		}
 	}
 	return nil
@@ -703,6 +726,9 @@ func (uu *UserUpdate) gremlin() *dsl.Traversal {
 	}
 	if value, ok := uu.mutation.Role(); ok {
 		v.Property(dsl.Single, user.FieldRole, value)
+	}
+	if value, ok := uu.mutation.Employment(); ok {
+		v.Property(dsl.Single, user.FieldEmployment, value)
 	}
 	if value, ok := uu.mutation.SSOCert(); ok {
 		v.Property(dsl.Single, user.FieldSSOCert, value)
@@ -1007,6 +1033,20 @@ func (uuo *UserUpdateOne) SetRole(u user.Role) *UserUpdateOne {
 func (uuo *UserUpdateOne) SetNillableRole(u *user.Role) *UserUpdateOne {
 	if u != nil {
 		uuo.SetRole(*u)
+	}
+	return uuo
+}
+
+// SetEmployment sets the "employment" field.
+func (uuo *UserUpdateOne) SetEmployment(u user.Employment) *UserUpdateOne {
+	uuo.mutation.SetEmployment(u)
+	return uuo
+}
+
+// SetNillableEmployment sets the "employment" field if the given value is not nil.
+func (uuo *UserUpdateOne) SetNillableEmployment(u *user.Employment) *UserUpdateOne {
+	if u != nil {
+		uuo.SetEmployment(*u)
 	}
 	return uuo
 }
@@ -1421,6 +1461,9 @@ func (uuo *UserUpdateOne) Save(ctx context.Context) (*User, error) {
 			return node, err
 		})
 		for i := len(uuo.hooks) - 1; i >= 0; i-- {
+			if uuo.hooks[i] == nil {
+				return nil, fmt.Errorf("ent: uninitialized hook (forgotten import ent/runtime?)")
+			}
 			mut = uuo.hooks[i](mut)
 		}
 		if _, err := mut.Mutate(ctx, uuo.mutation); err != nil {
@@ -1456,12 +1499,17 @@ func (uuo *UserUpdateOne) ExecX(ctx context.Context) {
 func (uuo *UserUpdateOne) check() error {
 	if v, ok := uuo.mutation.OptionalInt(); ok {
 		if err := user.OptionalIntValidator(v); err != nil {
-			return &ValidationError{Name: "optional_int", err: fmt.Errorf("ent: validator failed for field \"optional_int\": %w", err)}
+			return &ValidationError{Name: "optional_int", err: fmt.Errorf(`ent: validator failed for field "User.optional_int": %w`, err)}
 		}
 	}
 	if v, ok := uuo.mutation.Role(); ok {
 		if err := user.RoleValidator(v); err != nil {
-			return &ValidationError{Name: "role", err: fmt.Errorf("ent: validator failed for field \"role\": %w", err)}
+			return &ValidationError{Name: "role", err: fmt.Errorf(`ent: validator failed for field "User.role": %w`, err)}
+		}
+	}
+	if v, ok := uuo.mutation.Employment(); ok {
+		if err := user.EmploymentValidator(v); err != nil {
+			return &ValidationError{Name: "employment", err: fmt.Errorf(`ent: validator failed for field "User.employment": %w`, err)}
 		}
 	}
 	return nil
@@ -1471,7 +1519,7 @@ func (uuo *UserUpdateOne) gremlinSave(ctx context.Context) (*User, error) {
 	res := &gremlin.Response{}
 	id, ok := uuo.mutation.ID()
 	if !ok {
-		return nil, &ValidationError{Name: "ID", err: fmt.Errorf("missing User.ID for update")}
+		return nil, &ValidationError{Name: "id", err: errors.New(`ent: missing "User.id" for update`)}
 	}
 	query, bindings := uuo.gremlin(id).Query()
 	if err := uuo.driver.Exec(ctx, query, bindings, res); err != nil {
@@ -1540,6 +1588,9 @@ func (uuo *UserUpdateOne) gremlin(id string) *dsl.Traversal {
 	}
 	if value, ok := uuo.mutation.Role(); ok {
 		v.Property(dsl.Single, user.FieldRole, value)
+	}
+	if value, ok := uuo.mutation.Employment(); ok {
+		v.Property(dsl.Single, user.FieldEmployment, value)
 	}
 	if value, ok := uuo.mutation.SSOCert(); ok {
 		v.Property(dsl.Single, user.FieldSSOCert, value)

@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"math"
 
+	"entgo.io/ent/dialect"
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/entc/integration/ent/file"
@@ -38,6 +39,7 @@ type GroupQuery struct {
 	withUsers   *UserQuery
 	withInfo    *GroupInfoQuery
 	withFKs     bool
+	modifiers   []func(s *sql.Selector)
 	// intermediate query (i.e. traversal path).
 	sql  *sql.Selector
 	path func(context.Context) (*sql.Selector, error)
@@ -437,8 +439,8 @@ func (gq *GroupQuery) GroupBy(field string, fields ...string) *GroupGroupBy {
 //		Select(group.FieldActive).
 //		Scan(ctx, &v)
 //
-func (gq *GroupQuery) Select(field string, fields ...string) *GroupSelect {
-	gq.fields = append([]string{field}, fields...)
+func (gq *GroupQuery) Select(fields ...string) *GroupSelect {
+	gq.fields = append(gq.fields, fields...)
 	return &GroupSelect{GroupQuery: gq}
 }
 
@@ -488,6 +490,9 @@ func (gq *GroupQuery) sqlAll(ctx context.Context) ([]*Group, error) {
 		node := nodes[len(nodes)-1]
 		node.Edges.loadedTypes = loadedTypes
 		return node.assignValues(columns, values)
+	}
+	if len(gq.modifiers) > 0 {
+		_spec.Modifiers = gq.modifiers
 	}
 	if err := sqlgraph.QueryNodes(ctx, gq.driver, _spec); err != nil {
 		return nil, err
@@ -576,7 +581,7 @@ func (gq *GroupQuery) sqlAll(ctx context.Context) ([]*Group, error) {
 				s.Where(sql.InValues(group.UsersPrimaryKey[1], fks...))
 			},
 			ScanValues: func() [2]interface{} {
-				return [2]interface{}{&sql.NullInt64{}, &sql.NullInt64{}}
+				return [2]interface{}{new(sql.NullInt64), new(sql.NullInt64)}
 			},
 			Assign: func(out, in interface{}) error {
 				eout, ok := out.(*sql.NullInt64)
@@ -653,6 +658,13 @@ func (gq *GroupQuery) sqlAll(ctx context.Context) ([]*Group, error) {
 
 func (gq *GroupQuery) sqlCount(ctx context.Context) (int, error) {
 	_spec := gq.querySpec()
+	if len(gq.modifiers) > 0 {
+		_spec.Modifiers = gq.modifiers
+	}
+	_spec.Node.Columns = gq.fields
+	if len(gq.fields) > 0 {
+		_spec.Unique = gq.unique != nil && *gq.unique
+	}
 	return sqlgraph.CountNodes(ctx, gq.driver, _spec)
 }
 
@@ -705,7 +717,7 @@ func (gq *GroupQuery) querySpec() *sqlgraph.QuerySpec {
 	if ps := gq.order; len(ps) > 0 {
 		_spec.Order = func(selector *sql.Selector) {
 			for i := range ps {
-				ps[i](selector, group.ValidColumn)
+				ps[i](selector)
 			}
 		}
 	}
@@ -715,16 +727,26 @@ func (gq *GroupQuery) querySpec() *sqlgraph.QuerySpec {
 func (gq *GroupQuery) sqlQuery(ctx context.Context) *sql.Selector {
 	builder := sql.Dialect(gq.driver.Dialect())
 	t1 := builder.Table(group.Table)
-	selector := builder.Select(t1.Columns(group.Columns...)...).From(t1)
+	columns := gq.fields
+	if len(columns) == 0 {
+		columns = group.Columns
+	}
+	selector := builder.Select(t1.Columns(columns...)...).From(t1)
 	if gq.sql != nil {
 		selector = gq.sql
-		selector.Select(selector.Columns(group.Columns...)...)
+		selector.Select(selector.Columns(columns...)...)
+	}
+	if gq.unique != nil && *gq.unique {
+		selector.Distinct()
+	}
+	for _, m := range gq.modifiers {
+		m(selector)
 	}
 	for _, p := range gq.predicates {
 		p(selector)
 	}
 	for _, p := range gq.order {
-		p(selector, group.ValidColumn)
+		p(selector)
 	}
 	if offset := gq.offset; offset != nil {
 		// limit is mandatory for offset clause. We start
@@ -735,6 +757,38 @@ func (gq *GroupQuery) sqlQuery(ctx context.Context) *sql.Selector {
 		selector.Limit(*limit)
 	}
 	return selector
+}
+
+// ForUpdate locks the selected rows against concurrent updates, and prevent them from being
+// updated, deleted or "selected ... for update" by other sessions, until the transaction is
+// either committed or rolled-back.
+func (gq *GroupQuery) ForUpdate(opts ...sql.LockOption) *GroupQuery {
+	if gq.driver.Dialect() == dialect.Postgres {
+		gq.Unique(false)
+	}
+	gq.modifiers = append(gq.modifiers, func(s *sql.Selector) {
+		s.ForUpdate(opts...)
+	})
+	return gq
+}
+
+// ForShare behaves similarly to ForUpdate, except that it acquires a shared mode lock
+// on any rows that are read. Other sessions can read the rows, but cannot modify them
+// until your transaction commits.
+func (gq *GroupQuery) ForShare(opts ...sql.LockOption) *GroupQuery {
+	if gq.driver.Dialect() == dialect.Postgres {
+		gq.Unique(false)
+	}
+	gq.modifiers = append(gq.modifiers, func(s *sql.Selector) {
+		s.ForShare(opts...)
+	})
+	return gq
+}
+
+// Modify adds a query modifier for attaching custom logic to queries.
+func (gq *GroupQuery) Modify(modifiers ...func(s *sql.Selector)) *GroupSelect {
+	gq.modifiers = append(gq.modifiers, modifiers...)
+	return gq.Select()
 }
 
 // GroupGroupBy is the group-by builder for Group entities.
@@ -986,13 +1040,24 @@ func (ggb *GroupGroupBy) sqlScan(ctx context.Context, v interface{}) error {
 }
 
 func (ggb *GroupGroupBy) sqlQuery() *sql.Selector {
-	selector := ggb.sql
-	columns := make([]string, 0, len(ggb.fields)+len(ggb.fns))
-	columns = append(columns, ggb.fields...)
+	selector := ggb.sql.Select()
+	aggregation := make([]string, 0, len(ggb.fns))
 	for _, fn := range ggb.fns {
-		columns = append(columns, fn(selector, group.ValidColumn))
+		aggregation = append(aggregation, fn(selector))
 	}
-	return selector.Select(columns...).GroupBy(ggb.fields...)
+	// If no columns were selected in a custom aggregation function, the default
+	// selection is the fields used for "group-by", and the aggregation functions.
+	if len(selector.SelectedColumns()) == 0 {
+		columns := make([]string, 0, len(ggb.fields)+len(ggb.fns))
+		for _, f := range ggb.fields {
+			columns = append(columns, selector.C(f))
+		}
+		for _, c := range aggregation {
+			columns = append(columns, c)
+		}
+		selector.Select(columns...)
+	}
+	return selector.GroupBy(selector.Columns(ggb.fields...)...)
 }
 
 // GroupSelect is the builder for selecting fields of Group entities.
@@ -1208,7 +1273,7 @@ func (gs *GroupSelect) BoolX(ctx context.Context) bool {
 
 func (gs *GroupSelect) sqlScan(ctx context.Context, v interface{}) error {
 	rows := &sql.Rows{}
-	query, args := gs.sqlQuery().Query()
+	query, args := gs.sql.Query()
 	if err := gs.driver.Query(ctx, query, args, rows); err != nil {
 		return err
 	}
@@ -1216,8 +1281,8 @@ func (gs *GroupSelect) sqlScan(ctx context.Context, v interface{}) error {
 	return sql.ScanSlice(rows, v)
 }
 
-func (gs *GroupSelect) sqlQuery() sql.Querier {
-	selector := gs.sql
-	selector.Select(selector.Columns(gs.fields...)...)
-	return selector
+// Modify adds a query modifier for attaching custom logic to queries.
+func (gs *GroupSelect) Modify(modifiers ...func(s *sql.Selector)) *GroupSelect {
+	gs.modifiers = append(gs.modifiers, modifiers...)
+	return gs
 }

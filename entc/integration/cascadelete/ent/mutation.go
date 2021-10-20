@@ -118,8 +118,8 @@ func (m CommentMutation) Tx() (*Tx, error) {
 	return tx, nil
 }
 
-// ID returns the ID value in the mutation. Note that the ID
-// is only available if it was provided to the builder.
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
 func (m *CommentMutation) ID() (id int, exists bool) {
 	if m.id == nil {
 		return
@@ -204,7 +204,7 @@ func (m *CommentMutation) ClearPost() {
 	m.clearedpost = true
 }
 
-// PostCleared returns if the "post" edge to the Post entity was cleared.
+// PostCleared reports if the "post" edge to the Post entity was cleared.
 func (m *CommentMutation) PostCleared() bool {
 	return m.clearedpost
 }
@@ -223,6 +223,11 @@ func (m *CommentMutation) PostIDs() (ids []int) {
 func (m *CommentMutation) ResetPost() {
 	m.post = nil
 	m.clearedpost = false
+}
+
+// Where appends a list predicates to the CommentMutation builder.
+func (m *CommentMutation) Where(ps ...predicate.Comment) {
+	m.predicates = append(m.predicates, ps...)
 }
 
 // Op returns the operation name.
@@ -520,8 +525,8 @@ func (m PostMutation) Tx() (*Tx, error) {
 	return tx, nil
 }
 
-// ID returns the ID value in the mutation. Note that the ID
-// is only available if it was provided to the builder.
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
 func (m *PostMutation) ID() (id int, exists bool) {
 	if m.id == nil {
 		return
@@ -619,9 +624,9 @@ func (m *PostMutation) ClearAuthor() {
 	m.clearedauthor = true
 }
 
-// AuthorCleared returns if the "author" edge to the User entity was cleared.
+// AuthorCleared reports if the "author" edge to the User entity was cleared.
 func (m *PostMutation) AuthorCleared() bool {
-	return m.clearedauthor
+	return m.AuthorIDCleared() || m.clearedauthor
 }
 
 // AuthorIDs returns the "author" edge IDs in the mutation.
@@ -655,7 +660,7 @@ func (m *PostMutation) ClearComments() {
 	m.clearedcomments = true
 }
 
-// CommentsCleared returns if the "comments" edge to the Comment entity was cleared.
+// CommentsCleared reports if the "comments" edge to the Comment entity was cleared.
 func (m *PostMutation) CommentsCleared() bool {
 	return m.clearedcomments
 }
@@ -666,6 +671,7 @@ func (m *PostMutation) RemoveCommentIDs(ids ...int) {
 		m.removedcomments = make(map[int]struct{})
 	}
 	for i := range ids {
+		delete(m.comments, ids[i])
 		m.removedcomments[ids[i]] = struct{}{}
 	}
 }
@@ -691,6 +697,11 @@ func (m *PostMutation) ResetComments() {
 	m.comments = nil
 	m.clearedcomments = false
 	m.removedcomments = nil
+}
+
+// Where appends a list predicates to the PostMutation builder.
+func (m *PostMutation) Where(ps ...predicate.Post) {
+	m.predicates = append(m.predicates, ps...)
 }
 
 // Op returns the operation name.
@@ -1021,8 +1032,8 @@ func (m UserMutation) Tx() (*Tx, error) {
 	return tx, nil
 }
 
-// ID returns the ID value in the mutation. Note that the ID
-// is only available if it was provided to the builder.
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
 func (m *UserMutation) ID() (id int, exists bool) {
 	if m.id == nil {
 		return
@@ -1081,7 +1092,7 @@ func (m *UserMutation) ClearPosts() {
 	m.clearedposts = true
 }
 
-// PostsCleared returns if the "posts" edge to the Post entity was cleared.
+// PostsCleared reports if the "posts" edge to the Post entity was cleared.
 func (m *UserMutation) PostsCleared() bool {
 	return m.clearedposts
 }
@@ -1092,6 +1103,7 @@ func (m *UserMutation) RemovePostIDs(ids ...int) {
 		m.removedposts = make(map[int]struct{})
 	}
 	for i := range ids {
+		delete(m.posts, ids[i])
 		m.removedposts[ids[i]] = struct{}{}
 	}
 }
@@ -1117,6 +1129,11 @@ func (m *UserMutation) ResetPosts() {
 	m.posts = nil
 	m.clearedposts = false
 	m.removedposts = nil
+}
+
+// Where appends a list predicates to the UserMutation builder.
+func (m *UserMutation) Where(ps ...predicate.User) {
+	m.predicates = append(m.predicates, ps...)
 }
 
 // Op returns the operation name.

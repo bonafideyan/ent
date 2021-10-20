@@ -291,8 +291,8 @@ func (mq *MediaQuery) GroupBy(field string, fields ...string) *MediaGroupBy {
 //		Select(media.FieldSource).
 //		Scan(ctx, &v)
 //
-func (mq *MediaQuery) Select(field string, fields ...string) *MediaSelect {
-	mq.fields = append([]string{field}, fields...)
+func (mq *MediaQuery) Select(fields ...string) *MediaSelect {
+	mq.fields = append(mq.fields, fields...)
 	return &MediaSelect{MediaQuery: mq}
 }
 
@@ -340,6 +340,10 @@ func (mq *MediaQuery) sqlAll(ctx context.Context) ([]*Media, error) {
 
 func (mq *MediaQuery) sqlCount(ctx context.Context) (int, error) {
 	_spec := mq.querySpec()
+	_spec.Node.Columns = mq.fields
+	if len(mq.fields) > 0 {
+		_spec.Unique = mq.unique != nil && *mq.unique
+	}
 	return sqlgraph.CountNodes(ctx, mq.driver, _spec)
 }
 
@@ -392,7 +396,7 @@ func (mq *MediaQuery) querySpec() *sqlgraph.QuerySpec {
 	if ps := mq.order; len(ps) > 0 {
 		_spec.Order = func(selector *sql.Selector) {
 			for i := range ps {
-				ps[i](selector, media.ValidColumn)
+				ps[i](selector)
 			}
 		}
 	}
@@ -402,16 +406,23 @@ func (mq *MediaQuery) querySpec() *sqlgraph.QuerySpec {
 func (mq *MediaQuery) sqlQuery(ctx context.Context) *sql.Selector {
 	builder := sql.Dialect(mq.driver.Dialect())
 	t1 := builder.Table(media.Table)
-	selector := builder.Select(t1.Columns(media.Columns...)...).From(t1)
+	columns := mq.fields
+	if len(columns) == 0 {
+		columns = media.Columns
+	}
+	selector := builder.Select(t1.Columns(columns...)...).From(t1)
 	if mq.sql != nil {
 		selector = mq.sql
-		selector.Select(selector.Columns(media.Columns...)...)
+		selector.Select(selector.Columns(columns...)...)
+	}
+	if mq.unique != nil && *mq.unique {
+		selector.Distinct()
 	}
 	for _, p := range mq.predicates {
 		p(selector)
 	}
 	for _, p := range mq.order {
-		p(selector, media.ValidColumn)
+		p(selector)
 	}
 	if offset := mq.offset; offset != nil {
 		// limit is mandatory for offset clause. We start
@@ -673,13 +684,24 @@ func (mgb *MediaGroupBy) sqlScan(ctx context.Context, v interface{}) error {
 }
 
 func (mgb *MediaGroupBy) sqlQuery() *sql.Selector {
-	selector := mgb.sql
-	columns := make([]string, 0, len(mgb.fields)+len(mgb.fns))
-	columns = append(columns, mgb.fields...)
+	selector := mgb.sql.Select()
+	aggregation := make([]string, 0, len(mgb.fns))
 	for _, fn := range mgb.fns {
-		columns = append(columns, fn(selector, media.ValidColumn))
+		aggregation = append(aggregation, fn(selector))
 	}
-	return selector.Select(columns...).GroupBy(mgb.fields...)
+	// If no columns were selected in a custom aggregation function, the default
+	// selection is the fields used for "group-by", and the aggregation functions.
+	if len(selector.SelectedColumns()) == 0 {
+		columns := make([]string, 0, len(mgb.fields)+len(mgb.fns))
+		for _, f := range mgb.fields {
+			columns = append(columns, selector.C(f))
+		}
+		for _, c := range aggregation {
+			columns = append(columns, c)
+		}
+		selector.Select(columns...)
+	}
+	return selector.GroupBy(selector.Columns(mgb.fields...)...)
 }
 
 // MediaSelect is the builder for selecting fields of Media entities.
@@ -895,16 +917,10 @@ func (ms *MediaSelect) BoolX(ctx context.Context) bool {
 
 func (ms *MediaSelect) sqlScan(ctx context.Context, v interface{}) error {
 	rows := &sql.Rows{}
-	query, args := ms.sqlQuery().Query()
+	query, args := ms.sql.Query()
 	if err := ms.driver.Query(ctx, query, args, rows); err != nil {
 		return err
 	}
 	defer rows.Close()
 	return sql.ScanSlice(rows, v)
-}
-
-func (ms *MediaSelect) sqlQuery() sql.Querier {
-	selector := ms.sql
-	selector.Select(selector.Columns(ms.fields...)...)
-	return selector
 }

@@ -14,9 +14,14 @@ sidebar_label: FAQ
 [How to define a network address field in PostgreSQL?](#how-to-define-a-network-address-field-in-postgresql)  
 [How to customize time fields to type `DATETIME` in MySQL?](#how-to-customize-time-fields-to-type-datetime-in-mysql)  
 [How to use a custom generator of IDs?](#how-to-use-a-custom-generator-of-ids)  
+[How to use a custom XID globally unique ID?](#how-to-use-a-custom-xid-globally-unique-id)  
 [How to define a spatial data type field in MySQL?](#how-to-define-a-spatial-data-type-field-in-mysql)  
 [How to extend the generated models?](#how-to-extend-the-generated-models)  
-[How to extend the generated builders?](#how-to-extend-the-generated-builders)
+[How to extend the generated builders?](#how-to-extend-the-generated-builders)   
+[How to store Protobuf objects in a BLOB column?](#how-to-store-protobuf-objects-in-a-blob-column)  
+[How to add `CHECK` constraints to table?](#how-to-add-check-constraints-to-table)  
+[How to define a custom precision numeric field?](#how-to-define-a-custom-precision-numeric-field)  
+[How to configure two or more `DB` to separate read and write?](#how-to-configure-two-or-more-db-to-separate-read-and-write)
 
 ## Answers
 
@@ -359,7 +364,7 @@ func (BaseMixin) Hooks() []ent.Hook {
 }
 
 func IDHook() ent.Hook {
-    sf := sonyflake.NewSonyflake(sonyflage.Settings{})
+    sf := sonyflake.NewSonyflake(sonyflake.Settings{})
 	type IDSetter interface {
 		SetID(uint64)
 	}
@@ -392,6 +397,66 @@ func (User) Mixin() []ent.Mixin {
 	}
 }
 ```
+
+#### How to use a custom XID globally unique ID?
+
+Package [xid](https://github.com/rs/xid) is a globally unique ID generator library that uses the [Mongo Object ID](https://docs.mongodb.org/manual/reference/object-id/)
+algorithm to generate a 12 byte, 20 character ID with no configuration. The xid package comes with [database/sql](https://golang.org/pkg/database/sql) `sql.Scanner` and `driver.Valuer` interfaces required by Ent for serialization.
+
+To store an XID in any string field use the [GoType](schema-fields.md#go-type) schema configuration:
+
+```go
+// Fields of type T.
+func (T) Fields() []ent.Field {
+	return []ent.Field{
+		field.String("id").
+			GoType(xid.ID{}).
+			DefaultFunc(xid.New),
+	}
+}
+```
+
+Or as a reusable [Mixin](schema-mixin.md) across multiple schemas: 
+
+```go
+package schema
+
+import (
+	"entgo.io/ent"
+	"entgo.io/ent/schema/field"
+	"entgo.io/ent/schema/mixin"
+	"github.com/rs/xid"
+)
+
+// BaseMixin to be shared will all different schemas.
+type BaseMixin struct {
+	mixin.Schema
+}
+
+// Fields of the User.
+func (BaseMixin) Fields() []ent.Field {
+	return []ent.Field{
+		field.String("id").
+			GoType(xid.ID{}).
+			DefaultFunc(xid.New),
+	}
+}
+
+// User holds the schema definition for the User entity.
+type User struct {
+	ent.Schema
+}
+
+// Mixin of the User.
+func (User) Mixin() []ent.Mixin {
+	return []ent.Mixin{
+		// Embed the BaseMixin in the user schema.
+		BaseMixin{},
+	}
+}
+```
+
+In order to use extended identifiers (XIDs) with gqlgen, follow the configuration mentioned in the [issue tracker](https://github.com/ent/ent/issues/1526#issuecomment-831034884).
 
 #### How to define a spatial data type field in MySQL?
 
@@ -533,3 +598,208 @@ func main() {
 	// ...
 }
 ```
+
+
+#### How to store Protobuf objects in a BLOB column?
+
+Assuming we have a Protobuf message defined:
+```protobuf
+syntax = "proto3";
+
+package pb;
+
+option go_package = "project/pb";
+
+message Hi {
+  string Greeting = 1;
+}
+```
+
+We add receiver methods to the generated protobuf struct such that it implements [ValueScanner](https://pkg.go.dev/entgo.io/ent/schema/field#ValueScanner)
+
+```go
+func (x *Hi) Value() (driver.Value, error) {
+	return proto.Marshal(x)
+}
+
+func (x *Hi) Scan(src interface{}) error {
+	if src == nil {
+		return nil
+	}
+	if b, ok := src.([]byte); ok {
+		if err := proto.Unmarshal(b, x); err != nil {
+			return err
+		}
+		return nil
+	}
+	return fmt.Errorf("unexpected type %T", src)
+}
+```
+
+We add a new `field.Bytes` to our schema, setting the generated protobuf struct as its underlying `GoType`:
+
+```go
+// Fields of the Message.
+func (Message) Fields() []ent.Field {
+	return []ent.Field{
+		field.Bytes("hi").
+			GoType(&pb.Hi{}),
+	}
+}
+```
+
+Test that it works:
+
+```go
+package main
+
+import (
+	"context"
+	"testing"
+
+	"project/ent/enttest"
+	"project/pb"
+
+	_ "github.com/mattn/go-sqlite3"
+	"github.com/stretchr/testify/require"
+)
+
+func TestMain(t *testing.T) {
+	client := enttest.Open(t, "sqlite3", "file:ent?mode=memory&cache=shared&_fk=1")
+	defer client.Close()
+
+	msg := client.Message.Create().
+		SetHi(&pb.Hi{
+			Greeting: "hello",
+		}).
+		SaveX(context.TODO())
+
+	ret := client.Message.GetX(context.TODO(), msg.ID)
+	require.Equal(t, "hello", ret.Hi.Greeting)
+}
+```
+
+#### How to add `CHECK` constraints to table?
+
+The [`entsql.Annotation`](schema-annotations.md) option allows adding custom `CHECK` constraints to the `CREATE TABLE`
+statement. In order to add `CHECK` constraints to your schema, use the following example:
+
+```go
+func (User) Annotations() []schema.Annotation {
+	return []schema.Annotation{
+		&entsql.Annotation{
+			// The `Check` option allows adding an
+			// unnamed CHECK constraint to table DDL.
+			Check: "website <> 'entgo.io'",
+
+			// The `Checks` option allows adding multiple CHECK constraints
+			// to table creation. The keys are used as the constraint names.
+			Checks: map[string]string{
+				"valid_nickname":  "nickname <> firstname",
+				"valid_firstname": "length(first_name) > 1",
+			},
+		},
+	}
+}
+```
+
+#### How to define a custom precision numeric field?
+
+Using [GoType](schema-fields.md#go-type) and [SchemaType](schema-fields.md#database-type) it is possible to define
+custom precision numeric fields. For example, defining a field that uses [big.Int](https://golang.org/pkg/math/big/).
+
+```go
+func (T) Fields() []ent.Field {
+	return []ent.Field{
+		field.Int("precise").
+			GoType(new(BigInt)).
+			SchemaType(map[string]string{
+				dialect.SQLite:   "numeric(78, 0)",
+				dialect.Postgres: "numeric(78, 0)",
+			}),
+	}
+}
+
+type BigInt struct {
+	big.Int
+}
+
+func (b *BigInt) Scan(src interface{}) error {
+	var i sql.NullString
+	if err := i.Scan(src); err != nil {
+		return err
+	}
+	if !i.Valid {
+		return nil
+	}
+	if _, ok := b.Int.SetString(i.String, 10); ok {
+		return nil
+	}
+	return fmt.Errorf("could not scan type %T with value %v into BigInt", src, src)
+}
+
+func (b *BigInt) Value() (driver.Value, error) {
+	return b.String(), nil
+}
+```
+
+#### How to configure two or more `DB` to separate read and write?
+
+You can wrap the `dialect.Driver` with your own driver and implement this logic. For example.
+
+You can extend it, add support for multiple read replicas and add some load-balancing magic.
+
+```go
+func main() {
+	// ...
+	wd, err := sql.Open(dialect.MySQL, "root:pass@tcp(<addr>)/<database>?parseTime=True")
+	if err != nil {
+		log.Fatal(err)
+	}
+	rd, err := sql.Open(dialect.MySQL, "readonly:pass@tcp(<addr>)/<database>?parseTime=True")
+	if err != nil {
+		log.Fatal(err)
+	}
+	client := ent.NewClient(ent.Driver(&multiDriver{w: wd, r: rd}))
+	defer client.Close()
+	// Use the client here.
+}
+
+
+type multiDriver struct {
+	r, w dialect.Driver
+}
+
+var _ dialect.Driver = (*multiDriver)(nil)
+
+func (d *multiDriver) Query(ctx context.Context, query string, args, v interface{}) error {
+	return d.r.Query(ctx, query, args, v)
+}
+
+func (d *multiDriver) Exec(ctx context.Context, query string, args, v interface{}) error {
+	return d.w.Exec(ctx, query, args, v)
+}
+
+func (d *multiDriver) Tx(ctx context.Context) (dialect.Tx, error) {
+	return d.w.Tx(ctx)
+}
+
+func (d *multiDriver) BeginTx(ctx context.Context, opts *sql.TxOptions) (dialect.Tx, error) {
+	return d.w.(interface {
+		BeginTx(context.Context, *sql.TxOptions) (dialect.Tx, error)
+	}).BeginTx(ctx, opts)
+}
+
+func (d *multiDriver) Close() error {
+	rerr := d.r.Close()
+	werr := d.w.Close()
+	if rerr != nil {
+		return rerr
+	}
+	if werr != nil {
+		return werr
+	}
+	return nil
+}
+```
+

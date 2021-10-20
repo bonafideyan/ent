@@ -8,6 +8,7 @@ package ent
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"entgo.io/ent/dialect/gremlin"
@@ -27,9 +28,9 @@ type GroupInfoUpdate struct {
 	mutation *GroupInfoMutation
 }
 
-// Where adds a new predicate for the GroupInfoUpdate builder.
+// Where appends a list predicates to the GroupInfoUpdate builder.
 func (giu *GroupInfoUpdate) Where(ps ...predicate.GroupInfo) *GroupInfoUpdate {
-	giu.mutation.predicates = append(giu.mutation.predicates, ps...)
+	giu.mutation.Where(ps...)
 	return giu
 }
 
@@ -121,6 +122,9 @@ func (giu *GroupInfoUpdate) Save(ctx context.Context) (int, error) {
 			return affected, err
 		})
 		for i := len(giu.hooks) - 1; i >= 0; i-- {
+			if giu.hooks[i] == nil {
+				return 0, fmt.Errorf("ent: uninitialized hook (forgotten import ent/runtime?)")
+			}
 			mut = giu.hooks[i](mut)
 		}
 		if _, err := mut.Mutate(ctx, giu.mutation); err != nil {
@@ -318,6 +322,9 @@ func (giuo *GroupInfoUpdateOne) Save(ctx context.Context) (*GroupInfo, error) {
 			return node, err
 		})
 		for i := len(giuo.hooks) - 1; i >= 0; i-- {
+			if giuo.hooks[i] == nil {
+				return nil, fmt.Errorf("ent: uninitialized hook (forgotten import ent/runtime?)")
+			}
 			mut = giuo.hooks[i](mut)
 		}
 		if _, err := mut.Mutate(ctx, giuo.mutation); err != nil {
@@ -353,7 +360,7 @@ func (giuo *GroupInfoUpdateOne) gremlinSave(ctx context.Context) (*GroupInfo, er
 	res := &gremlin.Response{}
 	id, ok := giuo.mutation.ID()
 	if !ok {
-		return nil, &ValidationError{Name: "ID", err: fmt.Errorf("missing GroupInfo.ID for update")}
+		return nil, &ValidationError{Name: "id", err: errors.New(`ent: missing "GroupInfo.id" for update`)}
 	}
 	query, bindings := giuo.gremlin(id).Query()
 	if err := giuo.driver.Exec(ctx, query, bindings, res); err != nil {

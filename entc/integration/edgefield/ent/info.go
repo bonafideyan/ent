@@ -57,9 +57,9 @@ func (*Info) scanValues(columns []string) ([]interface{}, error) {
 	for i := range columns {
 		switch columns[i] {
 		case info.FieldContent:
-			values[i] = &[]byte{}
+			values[i] = new([]byte)
 		case info.FieldID:
-			values[i] = &sql.NullInt64{}
+			values[i] = new(sql.NullInt64)
 		default:
 			return nil, fmt.Errorf("unexpected column %q for type Info", columns[i])
 		}
@@ -82,7 +82,6 @@ func (i *Info) assignValues(columns []string, values []interface{}) error {
 			}
 			i.ID = int(value.Int64)
 		case info.FieldContent:
-
 			if value, ok := values[j].(*[]byte); !ok {
 				return fmt.Errorf("unexpected type %T for field content", values[j])
 			} else if value != nil && len(*value) > 0 {

@@ -49,11 +49,12 @@ type (
 		foreignKeys map[string]struct{}
 		// Annotations that were defined for the field in the schema.
 		// The mapping is from the Annotation.Name() to a JSON decoded object.
-		Annotations map[string]interface{}
+		Annotations Annotations
 	}
 
 	// Field holds the information of a type field used for the templates.
 	Field struct {
+		cfg *Config
 		def *load.Field
 		// Name is the name of this field in the database schema.
 		Name string
@@ -85,7 +86,7 @@ type (
 		UserDefined bool
 		// Annotations that were defined for the field in the schema.
 		// The mapping is from the Annotation.Name() to a JSON decoded object.
-		Annotations map[string]interface{}
+		Annotations Annotations
 		// referenced foreign-key.
 		fk *ForeignKey
 	}
@@ -124,7 +125,7 @@ type (
 		Bidi bool
 		// Annotations that were defined for the edge in the schema.
 		// The mapping is from the Annotation.Name() to a JSON decoded object.
-		Annotations map[string]interface{}
+		Annotations Annotations
 	}
 
 	// Relation holds the relational database information for edges.
@@ -152,6 +153,9 @@ type (
 		Unique bool
 		// Columns are the table columns.
 		Columns []string
+		// Annotations that were defined for the index in the schema.
+		// The mapping is from the Annotation.Name() to a JSON decoded object.
+		Annotations Annotations
 	}
 
 	// ForeignKey holds the information for foreign-key columns of types.
@@ -192,6 +196,7 @@ func NewType(c *Config, schema *load.Schema) (*Type, error) {
 	typ := &Type{
 		Config: c,
 		ID: &Field{
+			cfg:  c,
 			Name: "id",
 			def: &load.Field{
 				Name: "id",
@@ -211,6 +216,7 @@ func NewType(c *Config, schema *load.Schema) (*Type, error) {
 	}
 	for _, f := range schema.Fields {
 		tf := &Field{
+			cfg:           c,
 			def:           f,
 			Name:          f.Name,
 			Type:          f.Info,
@@ -453,6 +459,17 @@ func (t Type) MutableFields() []*Field {
 	return fields
 }
 
+// ImmutableFields returns all type fields that are immutable (for update).
+func (t Type) ImmutableFields() []*Field {
+	fields := make([]*Field, 0, len(t.Fields))
+	for _, f := range t.Fields {
+		if f.Immutable {
+			fields = append(fields, f)
+		}
+	}
+	return fields
+}
+
 // MutationFields returns all the fields that are available on the typed-mutation.
 func (t Type) MutationFields() []*Field {
 	fields := make([]*Field, 0, len(t.Fields))
@@ -525,9 +542,18 @@ func (t Type) TagTypes() []string {
 // AddIndex adds a new index for the type.
 // It fails if the schema index is invalid.
 func (t *Type) AddIndex(idx *load.Index) error {
-	index := &Index{Name: idx.StorageKey, Unique: idx.Unique}
+	index := &Index{Name: idx.StorageKey, Unique: idx.Unique, Annotations: idx.Annotations}
 	if len(idx.Fields) == 0 && len(idx.Edges) == 0 {
 		return fmt.Errorf("missing fields or edges")
+	}
+	switch ant := entsqlIndexAnnotate(idx.Annotations); {
+	case ant == nil:
+	case len(ant.PrefixColumns) != 0 && ant.Prefix != 0:
+		return fmt.Errorf("index %q cannot contain both entsql.Prefix and entsql.PrefixColumn in annotation", index.Name)
+	case ant.Prefix != 0 && len(idx.Fields)+len(idx.Edges) != 1:
+		return fmt.Errorf("entsql.Prefix is used in a multicolumn index %q. Use entsql.PrefixColumn instead", index.Name)
+	case len(ant.PrefixColumns) > len(idx.Fields)+len(idx.Fields):
+		return fmt.Errorf("index %q has more entsql.PrefixColumn than column in its definitions", index.Name)
 	}
 	for _, name := range idx.Fields {
 		var f *Field
@@ -539,9 +565,6 @@ func (t *Type) AddIndex(idx *load.Index) error {
 			if !ok {
 				return fmt.Errorf("unknown index field %q", name)
 			}
-		}
-		if f.def.Size != nil && *f.def.Size > schema.DefaultStringLen {
-			return fmt.Errorf("field %q exceeds the index size limit (%d)", name, schema.DefaultStringLen)
 		}
 		index.Columns = append(index.Columns, f.StorageKey())
 	}
@@ -636,6 +659,9 @@ func (t *Type) setupFieldEdge(fk *ForeignKey, fkOwner *Edge, fkName string) erro
 	}
 	if tf.Optional != fkOwner.Optional {
 		return fmt.Errorf("mismatch optional/required config for edge %q and field %q", fkOwner.Name, fkName)
+	}
+	if tf.Immutable {
+		return fmt.Errorf("field edge %q cannot be immutable", fkName)
 	}
 	if t1, t2 := tf.Type.Type, fkOwner.Type.ID.Type.Type; t1 != t2 {
 		return fmt.Errorf("mismatch field type between edge field %q and id of type %q (%s != %s)", fkName, fkOwner.Type.Name, t1, t2)
@@ -849,7 +875,7 @@ func (f Field) UpdateDefaultName() string { return "Update" + f.DefaultName() }
 func (f Field) DefaultValue() interface{} { return f.def.DefaultValue }
 
 // DefaultFunc returns a bool stating if the default value is a func. Invoked by the template.
-func (f Field) DefaultFunc() interface{} { return f.def.DefaultKind == reflect.Func }
+func (f Field) DefaultFunc() bool { return f.def.DefaultKind == reflect.Func }
 
 // BuilderField returns the struct member of the field in the builder.
 func (f Field) BuilderField() string {
@@ -888,7 +914,7 @@ func (f Field) EnumValues() []string {
 
 // EnumName returns the constant name for the enum.
 func (f Field) EnumName(enum string) string {
-	if !token.IsExported(enum) {
+	if !token.IsExported(enum) || !token.IsIdentifier(enum) {
 		enum = pascal(enum)
 	}
 	return pascal(f.Name) + enum
@@ -956,6 +982,17 @@ func (f Field) MutationSet() string {
 	return name
 }
 
+// MutationClear returns the method name for clearing the field value.
+func (f Field) MutationClear() string {
+	return "Clear" + f.StructField()
+}
+
+// MutationCleared returns the method name for indicating if the field
+// was cleared in the mutation.
+func (f Field) MutationCleared() string {
+	return f.StructField() + "Cleared"
+}
+
 // IsBool returns true if the field is a bool field.
 func (f Field) IsBool() bool { return f.Type != nil && f.Type.Type == field.TypeBool }
 
@@ -979,9 +1016,6 @@ func (f Field) IsInt() bool { return f.Type != nil && f.Type.Type == field.TypeI
 
 // IsEnum returns true if the field is an enum field.
 func (f Field) IsEnum() bool { return f.Type != nil && f.Type.Type == field.TypeEnum }
-
-// IsAddable returns true if the field is an enum field.
-func (f Field) IsAddable() bool { return f.Type != nil && f.Type.Type == field.TypeEnum }
 
 // IsEdgeField reports if the given field is an edge-field (i.e. a foreign-key)
 // that was referenced by one of the edges).
@@ -1009,10 +1043,19 @@ func (f Field) Comment() string {
 	return ""
 }
 
-// NullType returns the sql null-type for optional and nullable fields.
-func (f Field) NullType() string {
+// NillableValue reports if the field holds a Go value (not a pointer), but the field is nillable.
+// It's used by the templates to prefix values with pointer operators (e.g. &intValue or *intValue).
+func (f Field) NillableValue() bool {
+	return f.Nillable && !f.Type.RType.IsPtr()
+}
+
+// ScanType returns the Go type that is used for `rows.Scan`.
+func (f Field) ScanType() string {
 	if f.Type.ValueScanner() {
-		return f.Type.String()
+		if f.Nillable && !f.standardNullType() {
+			return "sql.NullScanner"
+		}
+		return f.Type.RType.String()
 	}
 	switch f.Type.Type {
 	case field.TypeJSON, field.TypeBytes:
@@ -1032,10 +1075,49 @@ func (f Field) NullType() string {
 	return f.Type.String()
 }
 
-// NullTypeField extracts the nullable type field (if exists) from the given receiver.
+// NewScanType returns an expression for creating an new object
+// to be used by the `rows.Scan` method. An sql.Scanner or a
+// nillable-type supported by the SQL driver (e.g. []byte).
+func (f Field) NewScanType() string {
+	if f.Type.ValueScanner() {
+		expr := fmt.Sprintf("new(%s)", f.Type.RType.String())
+		if f.Nillable && !f.standardNullType() {
+			expr = fmt.Sprintf("&sql.NullScanner{S: %s}", expr)
+		}
+		return expr
+	}
+	expr := f.Type.String()
+	switch f.Type.Type {
+	case field.TypeJSON, field.TypeBytes:
+		expr = "[]byte"
+	case field.TypeString, field.TypeEnum:
+		expr = "sql.NullString"
+	case field.TypeBool:
+		expr = "sql.NullBool"
+	case field.TypeTime:
+		expr = "sql.NullTime"
+	case field.TypeInt, field.TypeInt8, field.TypeInt16, field.TypeInt32, field.TypeInt64,
+		field.TypeUint, field.TypeUint8, field.TypeUint16, field.TypeUint32, field.TypeUint64:
+		expr = "sql.NullInt64"
+	case field.TypeFloat32, field.TypeFloat64:
+		expr = "sql.NullFloat64"
+	}
+	return fmt.Sprintf("new(%s)", expr)
+}
+
+// ScanTypeField extracts the nullable type field (if exists) from the given receiver.
 // It also does the type conversion if needed.
-func (f Field) NullTypeField(rec string) string {
+func (f Field) ScanTypeField(rec string) string {
 	expr := rec
+	if f.Type.ValueScanner() {
+		if !f.Type.RType.IsPtr() {
+			expr = "*" + expr
+		}
+		if f.Nillable && !f.standardNullType() {
+			return fmt.Sprintf("%s.S.(*%s)", expr, f.Type.RType.String())
+		}
+		return expr
+	}
 	switch f.Type.Type {
 	case field.TypeEnum:
 		expr = fmt.Sprintf("%s(%s.String)", f.Type, rec)
@@ -1052,8 +1134,31 @@ func (f Field) NullTypeField(rec string) string {
 	return expr
 }
 
-// Column returns the table column. It sets it as a primary key (auto_increment) in case of ID field, unless stated
-// otherwise.
+// standardSQLType reports if the field is one of the standard SQL types.
+func (f Field) standardNullType() bool {
+	for _, t := range []reflect.Type{
+		nullBoolType,
+		nullBoolPType,
+		nullFloatType,
+		nullFloatPType,
+		nullInt32Type,
+		nullInt32PType,
+		nullInt64Type,
+		nullInt64PType,
+		nullTimeType,
+		nullTimePType,
+		nullStringType,
+		nullStringPType,
+	} {
+		if f.Type.RType.TypeEqual(t) {
+			return true
+		}
+	}
+	return false
+}
+
+// Column returns the table column. It sets it as a primary key (auto_increment)
+// in case of ID field, unless stated otherwise.
 func (f Field) Column() *schema.Column {
 	c := &schema.Column{
 		Name:     f.StorageKey(),
@@ -1070,6 +1175,16 @@ func (f Field) Column() *schema.Column {
 		if s, ok := f.DefaultValue().(string); ok {
 			c.Default = strconv.Quote(s)
 		}
+	}
+	// Override the default-value defined in the
+	// schema if it was provided by an annotation.
+	if ant := f.EntSQL(); ant != nil && ant.Default != "" {
+		c.Default = strconv.Quote(ant.Default)
+	}
+	// Override the collation defined in the
+	// schema if it was provided by an annotation.
+	if ant := f.EntSQL(); ant != nil && ant.Collation != "" {
+		c.Collation = strconv.Quote(ant.Collation)
 	}
 	if f.def != nil {
 		c.SchemaType = f.def.SchemaType
@@ -1114,6 +1229,11 @@ func (f Field) PK() *schema.Column {
 			c.Size = *f.def.Size
 		}
 	}
+	// Override the default-value defined in the
+	// schema if it was provided by an annotation.
+	if ant := f.EntSQL(); ant != nil && ant.Default != "" {
+		c.Default = strconv.Quote(ant.Default)
+	}
 	if f.def != nil {
 		c.SchemaType = f.def.SchemaType
 	}
@@ -1141,10 +1261,59 @@ func (f Field) ConvertedToBasic() bool {
 	return !f.HasGoType() || f.BasicType("ident") != ""
 }
 
+// SupportsAdd reports if the field supports the mutation "Add(T) T" interface.
+func (f Field) SupportsMutationAdd() bool {
+	if !f.Type.Numeric() || f.IsEdgeField() {
+		return false
+	}
+	return f.ConvertedToBasic() || f.implementsAdder()
+}
+
+// MutationAddAssignExpr returns the expression for summing to identifiers and assigning to the mutation field.
+//
+//	MutationAddAssignExpr(a, b) => *m.a += b		// Basic Go type.
+//	MutationAddAssignExpr(a, b) => *m.a = m.Add(b)	// Custom Go types that implement the (Add(T) T) interface.
+//
+func (f Field) MutationAddAssignExpr(ident1, ident2 string) (string, error) {
+	if !f.SupportsMutationAdd() {
+		return "", fmt.Errorf("field %q does not support the add operation (a + b)", f.Name)
+	}
+	expr := "*%s += %s"
+	if f.implementsAdder() {
+		expr = "*%[1]s = %[1]s.Add(%[2]s)"
+	}
+	return fmt.Sprintf(expr, ident1, ident2), nil
+}
+
+func (f Field) implementsAdder() bool {
+	if !f.HasGoType() {
+		return false
+	}
+	// If the custom GoType supports the "Add(T) T" interface.
+	m, ok := f.Type.RType.Methods["Add"]
+	if !ok || len(m.In) != 1 && len(m.Out) != 1 {
+		return false
+	}
+	return rtypeEqual(f.Type.RType, m.In[0]) && rtypeEqual(f.Type.RType, m.Out[0])
+}
+
+func rtypeEqual(t1, t2 *field.RType) bool {
+	return t1.Kind == t2.Kind && t1.Ident == t2.Ident && t1.PkgPath == t2.PkgPath
+}
+
 var (
-	nullBoolType   = reflect.TypeOf(sql.NullBool{})
-	nullTimeType   = reflect.TypeOf(sql.NullTime{})
-	nullStringType = reflect.TypeOf(sql.NullString{})
+	nullBoolType    = reflect.TypeOf(sql.NullBool{})
+	nullBoolPType   = reflect.TypeOf((*sql.NullBool)(nil))
+	nullFloatType   = reflect.TypeOf(sql.NullFloat64{})
+	nullFloatPType  = reflect.TypeOf((*sql.NullFloat64)(nil))
+	nullInt32Type   = reflect.TypeOf(sql.NullInt32{})
+	nullInt32PType  = reflect.TypeOf((*sql.NullInt32)(nil))
+	nullInt64Type   = reflect.TypeOf(sql.NullInt64{})
+	nullInt64PType  = reflect.TypeOf((*sql.NullInt64)(nil))
+	nullTimeType    = reflect.TypeOf(sql.NullTime{})
+	nullTimePType   = reflect.TypeOf((*sql.NullTime)(nil))
+	nullStringType  = reflect.TypeOf(sql.NullString{})
+	nullStringPType = reflect.TypeOf((*sql.NullString)(nil))
 )
 
 // BasicType returns a Go expression for the given identifier
@@ -1166,16 +1335,18 @@ func (f Field) BasicType(ident string) (expr string) {
 		switch {
 		case rt.Kind == reflect.Bool:
 			expr = fmt.Sprintf("bool(%s)", ident)
-		case rt.TypeEqual(nullBoolType):
+		case rt.TypeEqual(nullBoolType) || rt.TypeEqual(nullBoolPType):
 			expr = fmt.Sprintf("%s.Bool", ident)
 		}
 	case field.TypeBytes:
 		if rt.Kind == reflect.Slice {
 			expr = fmt.Sprintf("[]byte(%s)", ident)
+		} else if rt.Kind == reflect.Array {
+			expr = ident + "[:]"
 		}
 	case field.TypeTime:
 		switch {
-		case rt.TypeEqual(nullTimeType):
+		case rt.TypeEqual(nullTimeType) || rt.TypeEqual(nullTimePType):
 			expr = fmt.Sprintf("%s.Time", ident)
 		case rt.Kind == reflect.Struct:
 			expr = fmt.Sprintf("time.Time(%s)", ident)
@@ -1186,7 +1357,7 @@ func (f Field) BasicType(ident string) (expr string) {
 			expr = fmt.Sprintf("string(%s)", ident)
 		case t.Stringer():
 			expr = fmt.Sprintf("%s.String()", ident)
-		case rt.TypeEqual(nullStringType):
+		case rt.TypeEqual(nullStringType) || rt.TypeEqual(nullStringPType):
 			expr = fmt.Sprintf("%s.String", ident)
 		}
 	default:
@@ -1213,16 +1384,16 @@ func (f Field) enums(lf *load.Field) ([]Enum, error) {
 	enums := make([]Enum, 0, len(lf.Enums))
 	values := make(map[string]bool, len(lf.Enums))
 	for i := range lf.Enums {
-		switch name, value := lf.Enums[i].N, lf.Enums[i].V; {
+		switch name, value := f.EnumName(lf.Enums[i].N), lf.Enums[i].V; {
 		case value == "":
 			return nil, fmt.Errorf("%q field value cannot be empty", f.Name)
 		case values[value]:
 			return nil, fmt.Errorf("duplicate values %q for enum field %q", value, f.Name)
-		case strings.IndexFunc(value, unicode.IsSpace) != -1:
-			return nil, fmt.Errorf("enum value %q cannot contain spaces", value)
+		case !token.IsIdentifier(name):
+			return nil, fmt.Errorf("enum %q does not have a valid Go indetifier (%q)", value, name)
 		default:
 			values[value] = true
-			enums = append(enums, Enum{Name: f.EnumName(name), Value: value})
+			enums = append(enums, Enum{Name: name, Value: value})
 		}
 	}
 	if value := lf.DefaultValue; value != nil {
@@ -1231,6 +1402,15 @@ func (f Field) enums(lf *load.Field) ([]Enum, error) {
 		}
 	}
 	return enums, nil
+}
+
+// Ops returns all predicate operations of the field.
+func (f *Field) Ops() []Op {
+	ops := fieldOps(f)
+	if f.Name != "id" && f.cfg != nil && f.cfg.Storage.Ops != nil {
+		ops = append(ops, f.cfg.Storage.Ops(f)...)
+	}
+	return ops
 }
 
 // Label returns the Gremlin label name of the edge.
@@ -1337,7 +1517,10 @@ func (e *Edge) ForeignKey() (*ForeignKey, error) {
 //
 // Note that the zero value is returned if no field was defined in the schema.
 func (e Edge) Field() *Field {
-	if fk, err := e.ForeignKey(); err == nil {
+	if !e.OwnFK() {
+		return nil
+	}
+	if fk, err := e.ForeignKey(); err == nil && fk.Field.IsEdgeField() {
 		return fk.Field
 	}
 	return nil
@@ -1346,6 +1529,9 @@ func (e Edge) Field() *Field {
 // HasFieldSetter reports if this edge already has a field-edge setters for its mutation API.
 // It's used by the codegen templates to avoid generating duplicate setters for id APIs (e.g. SetOwnerID).
 func (e Edge) HasFieldSetter() bool {
+	if !e.OwnFK() {
+		return false
+	}
 	fk, err := e.ForeignKey()
 	if err != nil {
 		return false
@@ -1383,6 +1569,11 @@ func (e Edge) MutationClear() string {
 		name += "Edge"
 	}
 	return name
+}
+
+// MutationRemove returns the method name for removing edge ids.
+func (e Edge) MutationRemove() string {
+	return "Remove" + pascal(rules.Singularize(e.Name)) + "IDs"
 }
 
 // MutationCleared returns the method name for indicating if the edge
@@ -1514,6 +1705,18 @@ func builderField(name string) string {
 // entsqlAnnotate extracts the entsql annotation from a loaded annotation format.
 func entsqlAnnotate(annotation map[string]interface{}) *entsql.Annotation {
 	annotate := &entsql.Annotation{}
+	if annotation == nil || annotation[annotate.Name()] == nil {
+		return nil
+	}
+	if buf, err := json.Marshal(annotation[annotate.Name()]); err == nil {
+		_ = json.Unmarshal(buf, &annotate)
+	}
+	return annotate
+}
+
+// entsqlIndexAnnotate extracts the entsql annotation from a loaded annotation format.
+func entsqlIndexAnnotate(annotation map[string]interface{}) *entsql.IndexAnnotation {
+	annotate := &entsql.IndexAnnotation{}
 	if annotation == nil || annotation[annotate.Name()] == nil {
 		return nil
 	}

@@ -72,20 +72,21 @@ func Time(name string) *timeBuilder {
 //
 func JSON(name string, typ interface{}) *jsonBuilder {
 	t := reflect.TypeOf(typ)
-	info := &TypeInfo{
-		Type:    TypeJSON,
-		Ident:   t.String(),
-		PkgPath: t.PkgPath(),
-	}
+	b := &jsonBuilder{&Descriptor{
+		Name: name,
+		Info: &TypeInfo{
+			Type:    TypeJSON,
+			Ident:   t.String(),
+			PkgPath: t.PkgPath(),
+		},
+	}}
+	b.desc.goType(typ, t)
 	switch t.Kind() {
 	case reflect.Slice, reflect.Array, reflect.Ptr, reflect.Map:
-		info.Nillable = true
-		info.PkgPath = pkgPath(t)
+		b.desc.Info.Nillable = true
+		b.desc.Info.PkgPath = pkgPath(t)
 	}
-	return &jsonBuilder{&Descriptor{
-		Name: name,
-		Info: info,
-	}}
+	return b
 }
 
 // Strings returns a new JSON Field with type []string.
@@ -125,15 +126,17 @@ func Enum(name string) *enumBuilder {
 //
 func UUID(name string, typ driver.Valuer) *uuidBuilder {
 	rt := reflect.TypeOf(typ)
-	return &uuidBuilder{&Descriptor{
+	b := &uuidBuilder{&Descriptor{
 		Name: name,
 		Info: &TypeInfo{
 			Type:     TypeUUID,
 			Nillable: true,
 			Ident:    rt.String(),
-			PkgPath:  rt.PkgPath(),
+			PkgPath:  indirect(rt).PkgPath(),
 		},
 	}}
+	b.desc.goType(typ, valueScannerType)
+	return b
 }
 
 // Other represents a field that is not a good fit for any of the standard field types.
@@ -148,7 +151,7 @@ func UUID(name string, typ driver.Valuer) *uuidBuilder {
 //			dialect.Postgres: "varchar",
 //		})
 //
-func Other(name string, typ ValueScanner) *otherBuilder {
+func Other(name string, typ driver.Valuer) *otherBuilder {
 	ob := &otherBuilder{&Descriptor{
 		Name: name,
 		Info: &TypeInfo{Type: TypeOther},
@@ -342,7 +345,8 @@ func (b *timeBuilder) Optional() *timeBuilder {
 	return b
 }
 
-// Immutable indicates that this field cannot be updated.
+// Immutable fields are fields that can be set only in the creation of the entity.
+// i.e., no setters will be generated for the entity updaters (one and many).
 func (b *timeBuilder) Immutable() *timeBuilder {
 	b.desc.Immutable = true
 	return b
@@ -546,6 +550,19 @@ func (b *bytesBuilder) Optional() *bytesBuilder {
 	return b
 }
 
+// Sensitive fields not printable and not serializable.
+func (b *bytesBuilder) Sensitive() *bytesBuilder {
+	b.desc.Sensitive = true
+	return b
+}
+
+// Unique makes the field unique within all vertices of this type.
+// Only supported in PostgreSQL.
+func (b *bytesBuilder) Unique() *bytesBuilder {
+	b.desc.Unique = true
+	return b
+}
+
 // Immutable indicates that this field cannot be updated.
 func (b *bytesBuilder) Immutable() *bytesBuilder {
 	b.desc.Immutable = true
@@ -569,6 +586,45 @@ func (b *bytesBuilder) StructTag(s string) *bytesBuilder {
 // In SQLite, it does not have any effect on the type size, which is default to 1B bytes.
 func (b *bytesBuilder) MaxLen(i int) *bytesBuilder {
 	b.desc.Size = i
+	b.desc.Validators = append(b.desc.Validators, func(buf []byte) error {
+		if len(buf) > i {
+			return errors.New("value is greater than the required length")
+		}
+		return nil
+	})
+	return b
+}
+
+// MinLen adds a length validator for this field.
+// Operation fails if the length of the buffer is less than the given value.
+func (b *bytesBuilder) MinLen(i int) *bytesBuilder {
+	b.desc.Validators = append(b.desc.Validators, func(b []byte) error {
+		if len(b) < i {
+			return errors.New("value is less than the required length")
+		}
+		return nil
+	})
+	return b
+}
+
+// NotEmpty adds a length validator for this field.
+// Operation fails if the length of the buffer is zero.
+func (b *bytesBuilder) NotEmpty() *bytesBuilder {
+	return b.MinLen(1)
+}
+
+// Validate adds a validator for this field. Operation fails if the validation fails.
+//
+//	field.Bytes("blob").
+//		Validate(func(b []byte) error {
+//			if len(b) % 2 == 0 {
+//				return fmt.Errorf("ent/schema: blob length is even: %d", len(b))
+//			}
+//			return nil
+//		})
+//
+func (b *bytesBuilder) Validate(fn func([]byte) error) *bytesBuilder {
+	b.desc.Validators = append(b.desc.Validators, fn)
 	return b
 }
 
@@ -706,9 +762,9 @@ func (b *enumBuilder) Values(values ...string) *enumBuilder {
 //
 //	field.Enum("priority").
 //		NamedValues(
-//			"LOW", "low",
-//			"MID", "mid",
-//			"HIGH", "high",
+//			"Low", "LOW",
+//			"Mid", "MID",
+//			"High", "HIGH",
 //		)
 //
 func (b *enumBuilder) NamedValues(namevalue ...string) *enumBuilder {
@@ -806,6 +862,12 @@ type EnumValues interface {
 func (b *enumBuilder) GoType(ev EnumValues) *enumBuilder {
 	b.Values(ev.Values()...)
 	b.desc.goType(ev, stringType)
+	// If an error already exists, let that be returned instead.
+	// Otherwise check that the underlying type is either a string
+	// or implements Stringer.
+	if b.desc.Err == nil && b.desc.Info.RType.rtype.Kind() != reflect.String && !b.desc.Info.Stringer() {
+		b.desc.Err = errors.New("enum values which implement ValueScanner must also implement Stringer")
+	}
 	return b
 }
 
@@ -823,6 +885,13 @@ type uuidBuilder struct {
 // In SQL dialects is the column name and Gremlin is the property.
 func (b *uuidBuilder) StorageKey(key string) *uuidBuilder {
 	b.desc.StorageKey = key
+	return b
+}
+
+// Nillable indicates that this field is a nillable.
+// Unlike "Optional" only fields, "Nillable" fields are pointers in the generated struct.
+func (b *uuidBuilder) Nillable() *uuidBuilder {
+	b.desc.Nillable = true
 	return b
 }
 
@@ -1056,12 +1125,13 @@ func (d *Descriptor) goType(typ interface{}, expectType reflect.Type) {
 	tv := indirect(t)
 	info := &TypeInfo{
 		Type:    d.Info.Type,
-		Ident:   tv.String(),
+		Ident:   t.String(),
 		PkgPath: tv.PkgPath(),
 		RType: &RType{
-			rtype:   tv,
+			rtype:   t,
+			Kind:    t.Kind(),
 			Name:    tv.Name(),
-			Kind:    tv.Kind(),
+			Ident:   tv.String(),
 			PkgPath: tv.PkgPath(),
 			Methods: make(map[string]struct{ In, Out []*RType }, t.NumMethod()),
 		},
@@ -1070,8 +1140,10 @@ func (d *Descriptor) goType(typ interface{}, expectType reflect.Type) {
 	case reflect.Slice, reflect.Array, reflect.Ptr, reflect.Map:
 		info.Nillable = true
 	}
-	switch {
-	case t.Kind() == expectType.Kind() && t.ConvertibleTo(expectType):
+	switch pt := reflect.PtrTo(t); {
+	case pt.Implements(valueScannerType):
+		t = pt
+		fallthrough
 	case t.Implements(valueScannerType):
 		n := t.NumMethod()
 		for i := 0; i < n; i++ {
@@ -1079,39 +1151,38 @@ func (d *Descriptor) goType(typ interface{}, expectType reflect.Type) {
 			in := make([]*RType, m.Type.NumIn()-1)
 			for j := range in {
 				arg := m.Type.In(j + 1)
-				in[j] = &RType{Name: arg.Name(), Kind: arg.Kind(), PkgPath: arg.PkgPath()}
+				in[j] = &RType{Name: arg.Name(), Ident: arg.String(), Kind: arg.Kind(), PkgPath: arg.PkgPath()}
 			}
 			out := make([]*RType, m.Type.NumOut())
 			for j := range out {
 				ret := m.Type.Out(j)
-				out[j] = &RType{Name: ret.Name(), Kind: ret.Kind(), PkgPath: ret.PkgPath()}
+				out[j] = &RType{Name: ret.Name(), Ident: ret.String(), Kind: ret.Kind(), PkgPath: ret.PkgPath()}
 			}
 			info.RType.Methods[m.Name] = struct{ In, Out []*RType }{in, out}
 		}
+	case t.Kind() == expectType.Kind() && t.ConvertibleTo(expectType):
 	default:
 		d.Err = fmt.Errorf("GoType must be a %q type or ValueScanner", expectType)
-		if pt := reflect.PtrTo(t); pt.Implements(valueScannerType) {
-			d.Err = fmt.Errorf("%s. Use %s instead", d.Err, pt)
-		}
 	}
 	d.Info = info
 }
 
 func (d *Descriptor) checkDefaultFunc(expectType reflect.Type) {
-	typ := reflect.TypeOf(d.Default)
-	if typ.Kind() != reflect.Func || d.Err != nil {
-		return
-	}
-	err := fmt.Errorf("expect type (func() %s) for default value", d.Info)
-	if typ.NumIn() != 0 || typ.NumOut() != 1 {
-		d.Err = err
-	}
-	rtype := expectType
-	if d.Info.RType != nil {
-		rtype = d.Info.RType.rtype
-	}
-	if !typ.Out(0).AssignableTo(rtype) {
-		d.Err = err
+	for _, typ := range []reflect.Type{reflect.TypeOf(d.Default), reflect.TypeOf(d.UpdateDefault)} {
+		if typ == nil || typ.Kind() != reflect.Func || d.Err != nil {
+			continue
+		}
+		err := fmt.Errorf("expect type (func() %s) for default value", d.Info)
+		if typ.NumIn() != 0 || typ.NumOut() != 1 {
+			d.Err = err
+		}
+		rtype := expectType
+		if d.Info.RType != nil {
+			rtype = d.Info.RType.rtype
+		}
+		if !typ.Out(0).AssignableTo(rtype) {
+			d.Err = err
+		}
 	}
 }
 
@@ -1120,6 +1191,7 @@ var (
 	bytesType        = reflect.TypeOf([]byte(nil))
 	timeType         = reflect.TypeOf(time.Time{})
 	stringType       = reflect.TypeOf("")
+	valuerType       = reflect.TypeOf((*driver.Valuer)(nil)).Elem()
 	valueScannerType = reflect.TypeOf((*ValueScanner)(nil)).Elem()
 )
 

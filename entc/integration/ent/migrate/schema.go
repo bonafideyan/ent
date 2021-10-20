@@ -44,7 +44,7 @@ var (
 			},
 			{
 				Name:    "card_number",
-				Unique:  false,
+				Unique:  true,
 				Columns: []*schema.Column{CardsColumns[4]},
 			},
 			{
@@ -63,10 +63,9 @@ var (
 	}
 	// CommentsTable holds the schema information for the "comments" table.
 	CommentsTable = &schema.Table{
-		Name:        "comments",
-		Columns:     CommentsColumns,
-		PrimaryKey:  []*schema.Column{CommentsColumns[0]},
-		ForeignKeys: []*schema.ForeignKey{},
+		Name:       "comments",
+		Columns:    CommentsColumns,
+		PrimaryKey: []*schema.Column{CommentsColumns[0]},
 	}
 	// FieldTypesColumns holds the columns for the "field_types" table.
 	FieldTypesColumns = []*schema.Column{
@@ -92,23 +91,29 @@ var (
 		{Name: "optional_uint16", Type: field.TypeUint16, Nullable: true},
 		{Name: "optional_uint32", Type: field.TypeUint32, Nullable: true},
 		{Name: "optional_uint64", Type: field.TypeUint64, Nullable: true},
-		{Name: "duration", Type: field.TypeInt64, Nullable: true},
 		{Name: "state", Type: field.TypeEnum, Nullable: true, Enums: []string{"on", "off"}},
 		{Name: "optional_float", Type: field.TypeFloat64, Nullable: true},
 		{Name: "optional_float32", Type: field.TypeFloat32, Nullable: true},
 		{Name: "datetime", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"mysql": "datetime", "postgres": "date"}},
 		{Name: "decimal", Type: field.TypeFloat64, Nullable: true, SchemaType: map[string]string{"mysql": "decimal(6,2)", "postgres": "numeric"}},
-		{Name: "dir", Type: field.TypeString, Nullable: true},
+		{Name: "link_other", Type: field.TypeOther, Nullable: true, SchemaType: map[string]string{"mysql": "varchar(255)", "postgres": "varchar", "sqlite3": "varchar(255)"}},
+		{Name: "mac", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "macaddr"}},
+		{Name: "string_array", Type: field.TypeOther, Nullable: true, SchemaType: map[string]string{"mysql": "blob", "postgres": "text[]", "sqlite3": "json"}},
+		{Name: "password", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"mysql": "char(32)"}},
+		{Name: "string_scanner", Type: field.TypeString, Nullable: true},
+		{Name: "duration", Type: field.TypeInt64, Nullable: true},
+		{Name: "dir", Type: field.TypeString},
 		{Name: "ndir", Type: field.TypeString, Nullable: true},
 		{Name: "str", Type: field.TypeString, Nullable: true},
 		{Name: "null_str", Type: field.TypeString, Nullable: true},
 		{Name: "link", Type: field.TypeString, Nullable: true},
-		{Name: "link_other", Type: field.TypeOther, Nullable: true, SchemaType: map[string]string{"mysql": "varchar(255)", "postgres": "varchar", "sqlite3": "varchar(255)"}},
 		{Name: "null_link", Type: field.TypeString, Nullable: true},
 		{Name: "active", Type: field.TypeBool, Nullable: true},
 		{Name: "null_active", Type: field.TypeBool, Nullable: true},
 		{Name: "deleted", Type: field.TypeBool, Nullable: true},
 		{Name: "deleted_at", Type: field.TypeTime, Nullable: true},
+		{Name: "raw_data", Type: field.TypeBytes, Nullable: true, Size: 20},
+		{Name: "sensitive", Type: field.TypeBytes, Nullable: true},
 		{Name: "ip", Type: field.TypeBytes, Nullable: true},
 		{Name: "null_int64", Type: field.TypeInt, Nullable: true},
 		{Name: "schema_int", Type: field.TypeInt, Nullable: true},
@@ -118,8 +123,16 @@ var (
 		{Name: "schema_float32", Type: field.TypeFloat32, Nullable: true},
 		{Name: "null_float", Type: field.TypeFloat64, Nullable: true},
 		{Name: "role", Type: field.TypeEnum, Enums: []string{"ADMIN", "OWNER", "USER", "READ", "WRITE"}, Default: "READ"},
-		{Name: "mac", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "macaddr"}},
+		{Name: "priority", Type: field.TypeEnum, Nullable: true, Enums: []string{"UNKNOWN", "LOW", "HIGH"}},
 		{Name: "uuid", Type: field.TypeUUID, Nullable: true},
+		{Name: "nillable_uuid", Type: field.TypeUUID, Nullable: true},
+		{Name: "strings", Type: field.TypeJSON, Nullable: true},
+		{Name: "pair", Type: field.TypeBytes},
+		{Name: "nil_pair", Type: field.TypeBytes, Nullable: true},
+		{Name: "vstring", Type: field.TypeString},
+		{Name: "triple", Type: field.TypeString},
+		{Name: "big_int", Type: field.TypeInt, Nullable: true},
+		{Name: "password_other", Type: field.TypeOther, Nullable: true, SchemaType: map[string]string{"mysql": "char(32)", "postgres": "varchar", "sqlite3": "char(32)"}},
 		{Name: "file_field", Type: field.TypeInt, Nullable: true},
 	}
 	// FieldTypesTable holds the schema information for the "field_types" table.
@@ -130,7 +143,7 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "field_types_files_field",
-				Columns:    []*schema.Column{FieldTypesColumns[50]},
+				Columns:    []*schema.Column{FieldTypesColumns[64]},
 				RefColumns: []*schema.Column{FilesColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
@@ -210,10 +223,9 @@ var (
 	}
 	// FileTypesTable holds the schema information for the "file_types" table.
 	FileTypesTable = &schema.Table{
-		Name:        "file_types",
-		Columns:     FileTypesColumns,
-		PrimaryKey:  []*schema.Column{FileTypesColumns[0]},
-		ForeignKeys: []*schema.ForeignKey{},
+		Name:       "file_types",
+		Columns:    FileTypesColumns,
+		PrimaryKey: []*schema.Column{FileTypesColumns[0]},
 	}
 	// GoodsColumns holds the columns for the "goods" table.
 	GoodsColumns = []*schema.Column{
@@ -221,10 +233,9 @@ var (
 	}
 	// GoodsTable holds the schema information for the "goods" table.
 	GoodsTable = &schema.Table{
-		Name:        "goods",
-		Columns:     GoodsColumns,
-		PrimaryKey:  []*schema.Column{GoodsColumns[0]},
-		ForeignKeys: []*schema.ForeignKey{},
+		Name:       "goods",
+		Columns:    GoodsColumns,
+		PrimaryKey: []*schema.Column{GoodsColumns[0]},
 	}
 	// GroupsColumns holds the columns for the "groups" table.
 	GroupsColumns = []*schema.Column{
@@ -258,21 +269,20 @@ var (
 	}
 	// GroupInfosTable holds the schema information for the "group_infos" table.
 	GroupInfosTable = &schema.Table{
-		Name:        "group_infos",
-		Columns:     GroupInfosColumns,
-		PrimaryKey:  []*schema.Column{GroupInfosColumns[0]},
-		ForeignKeys: []*schema.ForeignKey{},
+		Name:       "group_infos",
+		Columns:    GroupInfosColumns,
+		PrimaryKey: []*schema.Column{GroupInfosColumns[0]},
 	}
 	// ItemsColumns holds the columns for the "items" table.
 	ItemsColumns = []*schema.Column{
-		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "id", Type: field.TypeString, Size: 64},
+		{Name: "text", Type: field.TypeString, Unique: true, Nullable: true, Size: 128},
 	}
 	// ItemsTable holds the schema information for the "items" table.
 	ItemsTable = &schema.Table{
-		Name:        "items",
-		Columns:     ItemsColumns,
-		PrimaryKey:  []*schema.Column{ItemsColumns[0]},
-		ForeignKeys: []*schema.ForeignKey{},
+		Name:       "items",
+		Columns:    ItemsColumns,
+		PrimaryKey: []*schema.Column{ItemsColumns[0]},
 	}
 	// NodesColumns holds the columns for the "nodes" table.
 	NodesColumns = []*schema.Column{
@@ -297,8 +307,10 @@ var (
 	// PetColumns holds the columns for the "pet" table.
 	PetColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "age", Type: field.TypeFloat64, Default: 0},
 		{Name: "name", Type: field.TypeString},
 		{Name: "uuid", Type: field.TypeUUID, Nullable: true},
+		{Name: "nickname", Type: field.TypeString, Nullable: true},
 		{Name: "user_pets", Type: field.TypeInt, Nullable: true},
 		{Name: "user_team", Type: field.TypeInt, Unique: true, Nullable: true},
 	}
@@ -310,13 +322,13 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "pet_users_pets",
-				Columns:    []*schema.Column{PetColumns[3]},
+				Columns:    []*schema.Column{PetColumns[5]},
 				RefColumns: []*schema.Column{UsersColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
 			{
 				Symbol:     "pet_users_team",
-				Columns:    []*schema.Column{PetColumns[4]},
+				Columns:    []*schema.Column{PetColumns[6]},
 				RefColumns: []*schema.Column{UsersColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
@@ -325,7 +337,12 @@ var (
 			{
 				Name:    "pet_name_user_pets",
 				Unique:  false,
-				Columns: []*schema.Column{PetColumns[1], PetColumns[3]},
+				Columns: []*schema.Column{PetColumns[2], PetColumns[5]},
+			},
+			{
+				Name:    "pet_nickname",
+				Unique:  true,
+				Columns: []*schema.Column{PetColumns[4]},
 			},
 		},
 	}
@@ -335,10 +352,9 @@ var (
 	}
 	// SpecsTable holds the schema information for the "specs" table.
 	SpecsTable = &schema.Table{
-		Name:        "specs",
-		Columns:     SpecsColumns,
-		PrimaryKey:  []*schema.Column{SpecsColumns[0]},
-		ForeignKeys: []*schema.ForeignKey{},
+		Name:       "specs",
+		Columns:    SpecsColumns,
+		PrimaryKey: []*schema.Column{SpecsColumns[0]},
 	}
 	// TasksColumns holds the columns for the "tasks" table.
 	TasksColumns = []*schema.Column{
@@ -347,10 +363,9 @@ var (
 	}
 	// TasksTable holds the schema information for the "tasks" table.
 	TasksTable = &schema.Table{
-		Name:        "tasks",
-		Columns:     TasksColumns,
-		PrimaryKey:  []*schema.Column{TasksColumns[0]},
-		ForeignKeys: []*schema.ForeignKey{},
+		Name:       "tasks",
+		Columns:    TasksColumns,
+		PrimaryKey: []*schema.Column{TasksColumns[0]},
 	}
 	// UsersColumns holds the columns for the "users" table.
 	UsersColumns = []*schema.Column{
@@ -363,7 +378,8 @@ var (
 		{Name: "address", Type: field.TypeString, Nullable: true},
 		{Name: "phone", Type: field.TypeString, Unique: true, Nullable: true},
 		{Name: "password", Type: field.TypeString, Nullable: true},
-		{Name: "role", Type: field.TypeEnum, Enums: []string{"user", "admin", "free-user"}, Default: "user"},
+		{Name: "role", Type: field.TypeEnum, Enums: []string{"user", "admin", "free-user", "test user"}, Default: "user"},
+		{Name: "employment", Type: field.TypeEnum, Enums: []string{"Full-Time", "Part-Time", "Contract"}, Default: "Full-Time"},
 		{Name: "sso_cert", Type: field.TypeString, Nullable: true},
 		{Name: "group_blocked", Type: field.TypeInt, Nullable: true},
 		{Name: "user_spouse", Type: field.TypeInt, Unique: true, Nullable: true},
@@ -377,19 +393,19 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "users_groups_blocked",
-				Columns:    []*schema.Column{UsersColumns[11]},
+				Columns:    []*schema.Column{UsersColumns[12]},
 				RefColumns: []*schema.Column{GroupsColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
 			{
 				Symbol:     "users_users_spouse",
-				Columns:    []*schema.Column{UsersColumns[12]},
+				Columns:    []*schema.Column{UsersColumns[13]},
 				RefColumns: []*schema.Column{UsersColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
 			{
 				Symbol:     "users_users_parent",
-				Columns:    []*schema.Column{UsersColumns[13]},
+				Columns:    []*schema.Column{UsersColumns[14]},
 				RefColumns: []*schema.Column{UsersColumns[0]},
 				OnDelete:   schema.SetNull,
 			},

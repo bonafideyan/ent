@@ -8,6 +8,7 @@ package ent
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"entgo.io/ent/dialect/gremlin"
@@ -26,9 +27,9 @@ type FileTypeUpdate struct {
 	mutation *FileTypeMutation
 }
 
-// Where adds a new predicate for the FileTypeUpdate builder.
+// Where appends a list predicates to the FileTypeUpdate builder.
 func (ftu *FileTypeUpdate) Where(ps ...predicate.FileType) *FileTypeUpdate {
-	ftu.mutation.predicates = append(ftu.mutation.predicates, ps...)
+	ftu.mutation.Where(ps...)
 	return ftu
 }
 
@@ -133,6 +134,9 @@ func (ftu *FileTypeUpdate) Save(ctx context.Context) (int, error) {
 			return affected, err
 		})
 		for i := len(ftu.hooks) - 1; i >= 0; i-- {
+			if ftu.hooks[i] == nil {
+				return 0, fmt.Errorf("ent: uninitialized hook (forgotten import ent/runtime?)")
+			}
 			mut = ftu.hooks[i](mut)
 		}
 		if _, err := mut.Mutate(ctx, ftu.mutation); err != nil {
@@ -168,12 +172,12 @@ func (ftu *FileTypeUpdate) ExecX(ctx context.Context) {
 func (ftu *FileTypeUpdate) check() error {
 	if v, ok := ftu.mutation.GetType(); ok {
 		if err := filetype.TypeValidator(v); err != nil {
-			return &ValidationError{Name: "type", err: fmt.Errorf("ent: validator failed for field \"type\": %w", err)}
+			return &ValidationError{Name: "type", err: fmt.Errorf(`ent: validator failed for field "FileType.type": %w`, err)}
 		}
 	}
 	if v, ok := ftu.mutation.State(); ok {
 		if err := filetype.StateValidator(v); err != nil {
-			return &ValidationError{Name: "state", err: fmt.Errorf("ent: validator failed for field \"state\": %w", err)}
+			return &ValidationError{Name: "state", err: fmt.Errorf(`ent: validator failed for field "FileType.state": %w`, err)}
 		}
 	}
 	return nil
@@ -362,6 +366,9 @@ func (ftuo *FileTypeUpdateOne) Save(ctx context.Context) (*FileType, error) {
 			return node, err
 		})
 		for i := len(ftuo.hooks) - 1; i >= 0; i-- {
+			if ftuo.hooks[i] == nil {
+				return nil, fmt.Errorf("ent: uninitialized hook (forgotten import ent/runtime?)")
+			}
 			mut = ftuo.hooks[i](mut)
 		}
 		if _, err := mut.Mutate(ctx, ftuo.mutation); err != nil {
@@ -397,12 +404,12 @@ func (ftuo *FileTypeUpdateOne) ExecX(ctx context.Context) {
 func (ftuo *FileTypeUpdateOne) check() error {
 	if v, ok := ftuo.mutation.GetType(); ok {
 		if err := filetype.TypeValidator(v); err != nil {
-			return &ValidationError{Name: "type", err: fmt.Errorf("ent: validator failed for field \"type\": %w", err)}
+			return &ValidationError{Name: "type", err: fmt.Errorf(`ent: validator failed for field "FileType.type": %w`, err)}
 		}
 	}
 	if v, ok := ftuo.mutation.State(); ok {
 		if err := filetype.StateValidator(v); err != nil {
-			return &ValidationError{Name: "state", err: fmt.Errorf("ent: validator failed for field \"state\": %w", err)}
+			return &ValidationError{Name: "state", err: fmt.Errorf(`ent: validator failed for field "FileType.state": %w`, err)}
 		}
 	}
 	return nil
@@ -412,7 +419,7 @@ func (ftuo *FileTypeUpdateOne) gremlinSave(ctx context.Context) (*FileType, erro
 	res := &gremlin.Response{}
 	id, ok := ftuo.mutation.ID()
 	if !ok {
-		return nil, &ValidationError{Name: "ID", err: fmt.Errorf("missing FileType.ID for update")}
+		return nil, &ValidationError{Name: "id", err: errors.New(`ent: missing "FileType.id" for update`)}
 	}
 	query, bindings := ftuo.gremlin(id).Query()
 	if err := ftuo.driver.Exec(ctx, query, bindings, res); err != nil {

@@ -12,12 +12,16 @@ import (
 	"log"
 
 	"entgo.io/ent/entc/integration/edgefield/ent/migrate"
+	"github.com/google/uuid"
 
+	"entgo.io/ent/entc/integration/edgefield/ent/car"
 	"entgo.io/ent/entc/integration/edgefield/ent/card"
 	"entgo.io/ent/entc/integration/edgefield/ent/info"
 	"entgo.io/ent/entc/integration/edgefield/ent/metadata"
+	"entgo.io/ent/entc/integration/edgefield/ent/node"
 	"entgo.io/ent/entc/integration/edgefield/ent/pet"
 	"entgo.io/ent/entc/integration/edgefield/ent/post"
+	"entgo.io/ent/entc/integration/edgefield/ent/rental"
 	"entgo.io/ent/entc/integration/edgefield/ent/user"
 
 	"entgo.io/ent/dialect"
@@ -30,16 +34,22 @@ type Client struct {
 	config
 	// Schema is the client for creating, migrating and dropping schema.
 	Schema *migrate.Schema
+	// Car is the client for interacting with the Car builders.
+	Car *CarClient
 	// Card is the client for interacting with the Card builders.
 	Card *CardClient
 	// Info is the client for interacting with the Info builders.
 	Info *InfoClient
 	// Metadata is the client for interacting with the Metadata builders.
 	Metadata *MetadataClient
+	// Node is the client for interacting with the Node builders.
+	Node *NodeClient
 	// Pet is the client for interacting with the Pet builders.
 	Pet *PetClient
 	// Post is the client for interacting with the Post builders.
 	Post *PostClient
+	// Rental is the client for interacting with the Rental builders.
+	Rental *RentalClient
 	// User is the client for interacting with the User builders.
 	User *UserClient
 }
@@ -55,11 +65,14 @@ func NewClient(opts ...Option) *Client {
 
 func (c *Client) init() {
 	c.Schema = migrate.NewSchema(c.driver)
+	c.Car = NewCarClient(c.config)
 	c.Card = NewCardClient(c.config)
 	c.Info = NewInfoClient(c.config)
 	c.Metadata = NewMetadataClient(c.config)
+	c.Node = NewNodeClient(c.config)
 	c.Pet = NewPetClient(c.config)
 	c.Post = NewPostClient(c.config)
+	c.Rental = NewRentalClient(c.config)
 	c.User = NewUserClient(c.config)
 }
 
@@ -94,11 +107,14 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 	return &Tx{
 		ctx:      ctx,
 		config:   cfg,
+		Car:      NewCarClient(cfg),
 		Card:     NewCardClient(cfg),
 		Info:     NewInfoClient(cfg),
 		Metadata: NewMetadataClient(cfg),
+		Node:     NewNodeClient(cfg),
 		Pet:      NewPetClient(cfg),
 		Post:     NewPostClient(cfg),
+		Rental:   NewRentalClient(cfg),
 		User:     NewUserClient(cfg),
 	}, nil
 }
@@ -118,11 +134,14 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 	cfg.driver = &txDriver{tx: tx, drv: c.driver}
 	return &Tx{
 		config:   cfg,
+		Car:      NewCarClient(cfg),
 		Card:     NewCardClient(cfg),
 		Info:     NewInfoClient(cfg),
 		Metadata: NewMetadataClient(cfg),
+		Node:     NewNodeClient(cfg),
 		Pet:      NewPetClient(cfg),
 		Post:     NewPostClient(cfg),
+		Rental:   NewRentalClient(cfg),
 		User:     NewUserClient(cfg),
 	}, nil
 }
@@ -130,7 +149,7 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 // Debug returns a new debug-client. It's used to get verbose logging on specific operations.
 //
 //	client.Debug().
-//		Card.
+//		Car.
 //		Query().
 //		Count(ctx)
 //
@@ -153,12 +172,121 @@ func (c *Client) Close() error {
 // Use adds the mutation hooks to all the entity clients.
 // In order to add hooks to a specific client, call: `client.Node.Use(...)`.
 func (c *Client) Use(hooks ...Hook) {
+	c.Car.Use(hooks...)
 	c.Card.Use(hooks...)
 	c.Info.Use(hooks...)
 	c.Metadata.Use(hooks...)
+	c.Node.Use(hooks...)
 	c.Pet.Use(hooks...)
 	c.Post.Use(hooks...)
+	c.Rental.Use(hooks...)
 	c.User.Use(hooks...)
+}
+
+// CarClient is a client for the Car schema.
+type CarClient struct {
+	config
+}
+
+// NewCarClient returns a client for the Car from the given config.
+func NewCarClient(c config) *CarClient {
+	return &CarClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `car.Hooks(f(g(h())))`.
+func (c *CarClient) Use(hooks ...Hook) {
+	c.hooks.Car = append(c.hooks.Car, hooks...)
+}
+
+// Create returns a create builder for Car.
+func (c *CarClient) Create() *CarCreate {
+	mutation := newCarMutation(c.config, OpCreate)
+	return &CarCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of Car entities.
+func (c *CarClient) CreateBulk(builders ...*CarCreate) *CarCreateBulk {
+	return &CarCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for Car.
+func (c *CarClient) Update() *CarUpdate {
+	mutation := newCarMutation(c.config, OpUpdate)
+	return &CarUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *CarClient) UpdateOne(ca *Car) *CarUpdateOne {
+	mutation := newCarMutation(c.config, OpUpdateOne, withCar(ca))
+	return &CarUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *CarClient) UpdateOneID(id uuid.UUID) *CarUpdateOne {
+	mutation := newCarMutation(c.config, OpUpdateOne, withCarID(id))
+	return &CarUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for Car.
+func (c *CarClient) Delete() *CarDelete {
+	mutation := newCarMutation(c.config, OpDelete)
+	return &CarDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a delete builder for the given entity.
+func (c *CarClient) DeleteOne(ca *Car) *CarDeleteOne {
+	return c.DeleteOneID(ca.ID)
+}
+
+// DeleteOneID returns a delete builder for the given id.
+func (c *CarClient) DeleteOneID(id uuid.UUID) *CarDeleteOne {
+	builder := c.Delete().Where(car.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &CarDeleteOne{builder}
+}
+
+// Query returns a query builder for Car.
+func (c *CarClient) Query() *CarQuery {
+	return &CarQuery{
+		config: c.config,
+	}
+}
+
+// Get returns a Car entity by its id.
+func (c *CarClient) Get(ctx context.Context, id uuid.UUID) (*Car, error) {
+	return c.Query().Where(car.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *CarClient) GetX(ctx context.Context, id uuid.UUID) *Car {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// QueryRentals queries the rentals edge of a Car.
+func (c *CarClient) QueryRentals(ca *Car) *RentalQuery {
+	query := &RentalQuery{config: c.config}
+	query.path = func(ctx context.Context) (fromV *sql.Selector, _ error) {
+		id := ca.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(car.Table, car.FieldID, id),
+			sqlgraph.To(rental.Table, rental.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, car.RentalsTable, car.RentalsColumn),
+		)
+		fromV = sqlgraph.Neighbors(ca.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// Hooks returns the client hooks.
+func (c *CarClient) Hooks() []Hook {
+	return c.hooks.Car
 }
 
 // CardClient is a client for the Card schema.
@@ -227,7 +355,9 @@ func (c *CardClient) DeleteOneID(id int) *CardDeleteOne {
 
 // Query returns a query builder for Card.
 func (c *CardClient) Query() *CardQuery {
-	return &CardQuery{config: c.config}
+	return &CardQuery{
+		config: c.config,
+	}
 }
 
 // Get returns a Card entity by its id.
@@ -331,7 +461,9 @@ func (c *InfoClient) DeleteOneID(id int) *InfoDeleteOne {
 
 // Query returns a query builder for Info.
 func (c *InfoClient) Query() *InfoQuery {
-	return &InfoQuery{config: c.config}
+	return &InfoQuery{
+		config: c.config,
+	}
 }
 
 // Get returns a Info entity by its id.
@@ -435,7 +567,9 @@ func (c *MetadataClient) DeleteOneID(id int) *MetadataDeleteOne {
 
 // Query returns a query builder for Metadata.
 func (c *MetadataClient) Query() *MetadataQuery {
-	return &MetadataQuery{config: c.config}
+	return &MetadataQuery{
+		config: c.config,
+	}
 }
 
 // Get returns a Metadata entity by its id.
@@ -468,9 +602,163 @@ func (c *MetadataClient) QueryUser(m *Metadata) *UserQuery {
 	return query
 }
 
+// QueryChildren queries the children edge of a Metadata.
+func (c *MetadataClient) QueryChildren(m *Metadata) *MetadataQuery {
+	query := &MetadataQuery{config: c.config}
+	query.path = func(ctx context.Context) (fromV *sql.Selector, _ error) {
+		id := m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(metadata.Table, metadata.FieldID, id),
+			sqlgraph.To(metadata.Table, metadata.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, true, metadata.ChildrenTable, metadata.ChildrenColumn),
+		)
+		fromV = sqlgraph.Neighbors(m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryParent queries the parent edge of a Metadata.
+func (c *MetadataClient) QueryParent(m *Metadata) *MetadataQuery {
+	query := &MetadataQuery{config: c.config}
+	query.path = func(ctx context.Context) (fromV *sql.Selector, _ error) {
+		id := m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(metadata.Table, metadata.FieldID, id),
+			sqlgraph.To(metadata.Table, metadata.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, false, metadata.ParentTable, metadata.ParentColumn),
+		)
+		fromV = sqlgraph.Neighbors(m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
 // Hooks returns the client hooks.
 func (c *MetadataClient) Hooks() []Hook {
 	return c.hooks.Metadata
+}
+
+// NodeClient is a client for the Node schema.
+type NodeClient struct {
+	config
+}
+
+// NewNodeClient returns a client for the Node from the given config.
+func NewNodeClient(c config) *NodeClient {
+	return &NodeClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `node.Hooks(f(g(h())))`.
+func (c *NodeClient) Use(hooks ...Hook) {
+	c.hooks.Node = append(c.hooks.Node, hooks...)
+}
+
+// Create returns a create builder for Node.
+func (c *NodeClient) Create() *NodeCreate {
+	mutation := newNodeMutation(c.config, OpCreate)
+	return &NodeCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of Node entities.
+func (c *NodeClient) CreateBulk(builders ...*NodeCreate) *NodeCreateBulk {
+	return &NodeCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for Node.
+func (c *NodeClient) Update() *NodeUpdate {
+	mutation := newNodeMutation(c.config, OpUpdate)
+	return &NodeUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *NodeClient) UpdateOne(n *Node) *NodeUpdateOne {
+	mutation := newNodeMutation(c.config, OpUpdateOne, withNode(n))
+	return &NodeUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *NodeClient) UpdateOneID(id int) *NodeUpdateOne {
+	mutation := newNodeMutation(c.config, OpUpdateOne, withNodeID(id))
+	return &NodeUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for Node.
+func (c *NodeClient) Delete() *NodeDelete {
+	mutation := newNodeMutation(c.config, OpDelete)
+	return &NodeDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a delete builder for the given entity.
+func (c *NodeClient) DeleteOne(n *Node) *NodeDeleteOne {
+	return c.DeleteOneID(n.ID)
+}
+
+// DeleteOneID returns a delete builder for the given id.
+func (c *NodeClient) DeleteOneID(id int) *NodeDeleteOne {
+	builder := c.Delete().Where(node.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &NodeDeleteOne{builder}
+}
+
+// Query returns a query builder for Node.
+func (c *NodeClient) Query() *NodeQuery {
+	return &NodeQuery{
+		config: c.config,
+	}
+}
+
+// Get returns a Node entity by its id.
+func (c *NodeClient) Get(ctx context.Context, id int) (*Node, error) {
+	return c.Query().Where(node.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *NodeClient) GetX(ctx context.Context, id int) *Node {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// QueryPrev queries the prev edge of a Node.
+func (c *NodeClient) QueryPrev(n *Node) *NodeQuery {
+	query := &NodeQuery{config: c.config}
+	query.path = func(ctx context.Context) (fromV *sql.Selector, _ error) {
+		id := n.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(node.Table, node.FieldID, id),
+			sqlgraph.To(node.Table, node.FieldID),
+			sqlgraph.Edge(sqlgraph.O2O, true, node.PrevTable, node.PrevColumn),
+		)
+		fromV = sqlgraph.Neighbors(n.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryNext queries the next edge of a Node.
+func (c *NodeClient) QueryNext(n *Node) *NodeQuery {
+	query := &NodeQuery{config: c.config}
+	query.path = func(ctx context.Context) (fromV *sql.Selector, _ error) {
+		id := n.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(node.Table, node.FieldID, id),
+			sqlgraph.To(node.Table, node.FieldID),
+			sqlgraph.Edge(sqlgraph.O2O, false, node.NextTable, node.NextColumn),
+		)
+		fromV = sqlgraph.Neighbors(n.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// Hooks returns the client hooks.
+func (c *NodeClient) Hooks() []Hook {
+	return c.hooks.Node
 }
 
 // PetClient is a client for the Pet schema.
@@ -539,7 +827,9 @@ func (c *PetClient) DeleteOneID(id int) *PetDeleteOne {
 
 // Query returns a query builder for Pet.
 func (c *PetClient) Query() *PetQuery {
-	return &PetQuery{config: c.config}
+	return &PetQuery{
+		config: c.config,
+	}
 }
 
 // Get returns a Pet entity by its id.
@@ -643,7 +933,9 @@ func (c *PostClient) DeleteOneID(id int) *PostDeleteOne {
 
 // Query returns a query builder for Post.
 func (c *PostClient) Query() *PostQuery {
-	return &PostQuery{config: c.config}
+	return &PostQuery{
+		config: c.config,
+	}
 }
 
 // Get returns a Post entity by its id.
@@ -679,6 +971,128 @@ func (c *PostClient) QueryAuthor(po *Post) *UserQuery {
 // Hooks returns the client hooks.
 func (c *PostClient) Hooks() []Hook {
 	return c.hooks.Post
+}
+
+// RentalClient is a client for the Rental schema.
+type RentalClient struct {
+	config
+}
+
+// NewRentalClient returns a client for the Rental from the given config.
+func NewRentalClient(c config) *RentalClient {
+	return &RentalClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `rental.Hooks(f(g(h())))`.
+func (c *RentalClient) Use(hooks ...Hook) {
+	c.hooks.Rental = append(c.hooks.Rental, hooks...)
+}
+
+// Create returns a create builder for Rental.
+func (c *RentalClient) Create() *RentalCreate {
+	mutation := newRentalMutation(c.config, OpCreate)
+	return &RentalCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of Rental entities.
+func (c *RentalClient) CreateBulk(builders ...*RentalCreate) *RentalCreateBulk {
+	return &RentalCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for Rental.
+func (c *RentalClient) Update() *RentalUpdate {
+	mutation := newRentalMutation(c.config, OpUpdate)
+	return &RentalUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *RentalClient) UpdateOne(r *Rental) *RentalUpdateOne {
+	mutation := newRentalMutation(c.config, OpUpdateOne, withRental(r))
+	return &RentalUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *RentalClient) UpdateOneID(id int) *RentalUpdateOne {
+	mutation := newRentalMutation(c.config, OpUpdateOne, withRentalID(id))
+	return &RentalUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for Rental.
+func (c *RentalClient) Delete() *RentalDelete {
+	mutation := newRentalMutation(c.config, OpDelete)
+	return &RentalDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a delete builder for the given entity.
+func (c *RentalClient) DeleteOne(r *Rental) *RentalDeleteOne {
+	return c.DeleteOneID(r.ID)
+}
+
+// DeleteOneID returns a delete builder for the given id.
+func (c *RentalClient) DeleteOneID(id int) *RentalDeleteOne {
+	builder := c.Delete().Where(rental.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &RentalDeleteOne{builder}
+}
+
+// Query returns a query builder for Rental.
+func (c *RentalClient) Query() *RentalQuery {
+	return &RentalQuery{
+		config: c.config,
+	}
+}
+
+// Get returns a Rental entity by its id.
+func (c *RentalClient) Get(ctx context.Context, id int) (*Rental, error) {
+	return c.Query().Where(rental.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *RentalClient) GetX(ctx context.Context, id int) *Rental {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// QueryUser queries the user edge of a Rental.
+func (c *RentalClient) QueryUser(r *Rental) *UserQuery {
+	query := &UserQuery{config: c.config}
+	query.path = func(ctx context.Context) (fromV *sql.Selector, _ error) {
+		id := r.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(rental.Table, rental.FieldID, id),
+			sqlgraph.To(user.Table, user.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, rental.UserTable, rental.UserColumn),
+		)
+		fromV = sqlgraph.Neighbors(r.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryCar queries the car edge of a Rental.
+func (c *RentalClient) QueryCar(r *Rental) *CarQuery {
+	query := &CarQuery{config: c.config}
+	query.path = func(ctx context.Context) (fromV *sql.Selector, _ error) {
+		id := r.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(rental.Table, rental.FieldID, id),
+			sqlgraph.To(car.Table, car.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, rental.CarTable, rental.CarColumn),
+		)
+		fromV = sqlgraph.Neighbors(r.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// Hooks returns the client hooks.
+func (c *RentalClient) Hooks() []Hook {
+	return c.hooks.Rental
 }
 
 // UserClient is a client for the User schema.
@@ -747,7 +1161,9 @@ func (c *UserClient) DeleteOneID(id int) *UserDeleteOne {
 
 // Query returns a query builder for User.
 func (c *UserClient) Query() *UserQuery {
-	return &UserQuery{config: c.config}
+	return &UserQuery{
+		config: c.config,
+	}
 }
 
 // Get returns a User entity by its id.
@@ -869,6 +1285,22 @@ func (c *UserClient) QueryInfo(u *User) *InfoQuery {
 			sqlgraph.From(user.Table, user.FieldID, id),
 			sqlgraph.To(info.Table, info.FieldID),
 			sqlgraph.Edge(sqlgraph.O2M, true, user.InfoTable, user.InfoColumn),
+		)
+		fromV = sqlgraph.Neighbors(u.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryRentals queries the rentals edge of a User.
+func (c *UserClient) QueryRentals(u *User) *RentalQuery {
+	query := &RentalQuery{config: c.config}
+	query.path = func(ctx context.Context) (fromV *sql.Selector, _ error) {
+		id := u.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(user.Table, user.FieldID, id),
+			sqlgraph.To(rental.Table, rental.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, user.RentalsTable, user.RentalsColumn),
 		)
 		fromV = sqlgraph.Neighbors(u.driver.Dialect(), step)
 		return fromV, nil

@@ -136,6 +136,20 @@ func (uc *UserCreate) SetNillableRole(u *user.Role) *UserCreate {
 	return uc
 }
 
+// SetEmployment sets the "employment" field.
+func (uc *UserCreate) SetEmployment(u user.Employment) *UserCreate {
+	uc.mutation.SetEmployment(u)
+	return uc
+}
+
+// SetNillableEmployment sets the "employment" field if the given value is not nil.
+func (uc *UserCreate) SetNillableEmployment(u *user.Employment) *UserCreate {
+	if u != nil {
+		uc.SetEmployment(*u)
+	}
+	return uc
+}
+
 // SetSSOCert sets the "SSOCert" field.
 func (uc *UserCreate) SetSSOCert(s string) *UserCreate {
 	uc.mutation.SetSSOCert(s)
@@ -358,11 +372,17 @@ func (uc *UserCreate) Save(ctx context.Context) (*User, error) {
 				return nil, err
 			}
 			uc.mutation = mutation
-			node, err = uc.gremlinSave(ctx)
+			if node, err = uc.gremlinSave(ctx); err != nil {
+				return nil, err
+			}
+			mutation.id = &node.ID
 			mutation.done = true
 			return node, err
 		})
 		for i := len(uc.hooks) - 1; i >= 0; i-- {
+			if uc.hooks[i] == nil {
+				return nil, fmt.Errorf("ent: uninitialized hook (forgotten import ent/runtime?)")
+			}
 			mut = uc.hooks[i](mut)
 		}
 		if _, err := mut.Mutate(ctx, uc.mutation); err != nil {
@@ -381,6 +401,19 @@ func (uc *UserCreate) SaveX(ctx context.Context) *User {
 	return v
 }
 
+// Exec executes the query.
+func (uc *UserCreate) Exec(ctx context.Context) error {
+	_, err := uc.Save(ctx)
+	return err
+}
+
+// ExecX is like Exec, but panics if an error occurs.
+func (uc *UserCreate) ExecX(ctx context.Context) {
+	if err := uc.Exec(ctx); err != nil {
+		panic(err)
+	}
+}
+
 // defaults sets the default values of the builder before save.
 func (uc *UserCreate) defaults() {
 	if _, ok := uc.mutation.Last(); !ok {
@@ -395,30 +428,42 @@ func (uc *UserCreate) defaults() {
 		v := user.DefaultRole
 		uc.mutation.SetRole(v)
 	}
+	if _, ok := uc.mutation.Employment(); !ok {
+		v := user.DefaultEmployment
+		uc.mutation.SetEmployment(v)
+	}
 }
 
 // check runs all checks and user-defined validators on the builder.
 func (uc *UserCreate) check() error {
 	if v, ok := uc.mutation.OptionalInt(); ok {
 		if err := user.OptionalIntValidator(v); err != nil {
-			return &ValidationError{Name: "optional_int", err: fmt.Errorf("ent: validator failed for field \"optional_int\": %w", err)}
+			return &ValidationError{Name: "optional_int", err: fmt.Errorf(`ent: validator failed for field "User.optional_int": %w`, err)}
 		}
 	}
 	if _, ok := uc.mutation.Age(); !ok {
-		return &ValidationError{Name: "age", err: errors.New("ent: missing required field \"age\"")}
+		return &ValidationError{Name: "age", err: errors.New(`ent: missing required field "User.age"`)}
 	}
 	if _, ok := uc.mutation.Name(); !ok {
-		return &ValidationError{Name: "name", err: errors.New("ent: missing required field \"name\"")}
+		return &ValidationError{Name: "name", err: errors.New(`ent: missing required field "User.name"`)}
 	}
 	if _, ok := uc.mutation.Last(); !ok {
-		return &ValidationError{Name: "last", err: errors.New("ent: missing required field \"last\"")}
+		return &ValidationError{Name: "last", err: errors.New(`ent: missing required field "User.last"`)}
 	}
 	if _, ok := uc.mutation.Role(); !ok {
-		return &ValidationError{Name: "role", err: errors.New("ent: missing required field \"role\"")}
+		return &ValidationError{Name: "role", err: errors.New(`ent: missing required field "User.role"`)}
 	}
 	if v, ok := uc.mutation.Role(); ok {
 		if err := user.RoleValidator(v); err != nil {
-			return &ValidationError{Name: "role", err: fmt.Errorf("ent: validator failed for field \"role\": %w", err)}
+			return &ValidationError{Name: "role", err: fmt.Errorf(`ent: validator failed for field "User.role": %w`, err)}
+		}
+	}
+	if _, ok := uc.mutation.Employment(); !ok {
+		return &ValidationError{Name: "employment", err: errors.New(`ent: missing required field "User.employment"`)}
+	}
+	if v, ok := uc.mutation.Employment(); ok {
+		if err := user.EmploymentValidator(v); err != nil {
+			return &ValidationError{Name: "employment", err: fmt.Errorf(`ent: validator failed for field "User.employment": %w`, err)}
 		}
 	}
 	return nil
@@ -481,6 +526,9 @@ func (uc *UserCreate) gremlin() *dsl.Traversal {
 	}
 	if value, ok := uc.mutation.Role(); ok {
 		v.Property(dsl.Single, user.FieldRole, value)
+	}
+	if value, ok := uc.mutation.Employment(); ok {
+		v.Property(dsl.Single, user.FieldEmployment, value)
 	}
 	if value, ok := uc.mutation.SSOCert(); ok {
 		v.Property(dsl.Single, user.FieldSSOCert, value)

@@ -98,23 +98,29 @@ var schemaGraph = func() *sqlgraph.Schema {
 			fieldtype.FieldOptionalUint16:        {Type: field.TypeUint16, Column: fieldtype.FieldOptionalUint16},
 			fieldtype.FieldOptionalUint32:        {Type: field.TypeUint32, Column: fieldtype.FieldOptionalUint32},
 			fieldtype.FieldOptionalUint64:        {Type: field.TypeUint64, Column: fieldtype.FieldOptionalUint64},
-			fieldtype.FieldDuration:              {Type: field.TypeInt64, Column: fieldtype.FieldDuration},
 			fieldtype.FieldState:                 {Type: field.TypeEnum, Column: fieldtype.FieldState},
 			fieldtype.FieldOptionalFloat:         {Type: field.TypeFloat64, Column: fieldtype.FieldOptionalFloat},
 			fieldtype.FieldOptionalFloat32:       {Type: field.TypeFloat32, Column: fieldtype.FieldOptionalFloat32},
 			fieldtype.FieldDatetime:              {Type: field.TypeTime, Column: fieldtype.FieldDatetime},
 			fieldtype.FieldDecimal:               {Type: field.TypeFloat64, Column: fieldtype.FieldDecimal},
+			fieldtype.FieldLinkOther:             {Type: field.TypeOther, Column: fieldtype.FieldLinkOther},
+			fieldtype.FieldMAC:                   {Type: field.TypeString, Column: fieldtype.FieldMAC},
+			fieldtype.FieldStringArray:           {Type: field.TypeOther, Column: fieldtype.FieldStringArray},
+			fieldtype.FieldPassword:              {Type: field.TypeString, Column: fieldtype.FieldPassword},
+			fieldtype.FieldStringScanner:         {Type: field.TypeString, Column: fieldtype.FieldStringScanner},
+			fieldtype.FieldDuration:              {Type: field.TypeInt64, Column: fieldtype.FieldDuration},
 			fieldtype.FieldDir:                   {Type: field.TypeString, Column: fieldtype.FieldDir},
 			fieldtype.FieldNdir:                  {Type: field.TypeString, Column: fieldtype.FieldNdir},
 			fieldtype.FieldStr:                   {Type: field.TypeString, Column: fieldtype.FieldStr},
 			fieldtype.FieldNullStr:               {Type: field.TypeString, Column: fieldtype.FieldNullStr},
 			fieldtype.FieldLink:                  {Type: field.TypeString, Column: fieldtype.FieldLink},
-			fieldtype.FieldLinkOther:             {Type: field.TypeOther, Column: fieldtype.FieldLinkOther},
 			fieldtype.FieldNullLink:              {Type: field.TypeString, Column: fieldtype.FieldNullLink},
 			fieldtype.FieldActive:                {Type: field.TypeBool, Column: fieldtype.FieldActive},
 			fieldtype.FieldNullActive:            {Type: field.TypeBool, Column: fieldtype.FieldNullActive},
 			fieldtype.FieldDeleted:               {Type: field.TypeBool, Column: fieldtype.FieldDeleted},
 			fieldtype.FieldDeletedAt:             {Type: field.TypeTime, Column: fieldtype.FieldDeletedAt},
+			fieldtype.FieldRawData:               {Type: field.TypeBytes, Column: fieldtype.FieldRawData},
+			fieldtype.FieldSensitive:             {Type: field.TypeBytes, Column: fieldtype.FieldSensitive},
 			fieldtype.FieldIP:                    {Type: field.TypeBytes, Column: fieldtype.FieldIP},
 			fieldtype.FieldNullInt64:             {Type: field.TypeInt, Column: fieldtype.FieldNullInt64},
 			fieldtype.FieldSchemaInt:             {Type: field.TypeInt, Column: fieldtype.FieldSchemaInt},
@@ -124,8 +130,16 @@ var schemaGraph = func() *sqlgraph.Schema {
 			fieldtype.FieldSchemaFloat32:         {Type: field.TypeFloat32, Column: fieldtype.FieldSchemaFloat32},
 			fieldtype.FieldNullFloat:             {Type: field.TypeFloat64, Column: fieldtype.FieldNullFloat},
 			fieldtype.FieldRole:                  {Type: field.TypeEnum, Column: fieldtype.FieldRole},
-			fieldtype.FieldMAC:                   {Type: field.TypeString, Column: fieldtype.FieldMAC},
+			fieldtype.FieldPriority:              {Type: field.TypeEnum, Column: fieldtype.FieldPriority},
 			fieldtype.FieldUUID:                  {Type: field.TypeUUID, Column: fieldtype.FieldUUID},
+			fieldtype.FieldNillableUUID:          {Type: field.TypeUUID, Column: fieldtype.FieldNillableUUID},
+			fieldtype.FieldStrings:               {Type: field.TypeJSON, Column: fieldtype.FieldStrings},
+			fieldtype.FieldPair:                  {Type: field.TypeBytes, Column: fieldtype.FieldPair},
+			fieldtype.FieldNilPair:               {Type: field.TypeBytes, Column: fieldtype.FieldNilPair},
+			fieldtype.FieldVstring:               {Type: field.TypeString, Column: fieldtype.FieldVstring},
+			fieldtype.FieldTriple:                {Type: field.TypeString, Column: fieldtype.FieldTriple},
+			fieldtype.FieldBigInt:                {Type: field.TypeInt, Column: fieldtype.FieldBigInt},
+			fieldtype.FieldPasswordOther:         {Type: field.TypeOther, Column: fieldtype.FieldPasswordOther},
 		},
 	}
 	graph.Nodes[3] = &sqlgraph.Node{
@@ -212,12 +226,14 @@ var schemaGraph = func() *sqlgraph.Schema {
 			Table:   item.Table,
 			Columns: item.Columns,
 			ID: &sqlgraph.FieldSpec{
-				Type:   field.TypeInt,
+				Type:   field.TypeString,
 				Column: item.FieldID,
 			},
 		},
-		Type:   "Item",
-		Fields: map[string]*sqlgraph.FieldSpec{},
+		Type: "Item",
+		Fields: map[string]*sqlgraph.FieldSpec{
+			item.FieldText: {Type: field.TypeString, Column: item.FieldText},
+		},
 	}
 	graph.Nodes[9] = &sqlgraph.Node{
 		NodeSpec: sqlgraph.NodeSpec{
@@ -244,8 +260,10 @@ var schemaGraph = func() *sqlgraph.Schema {
 		},
 		Type: "Pet",
 		Fields: map[string]*sqlgraph.FieldSpec{
-			pet.FieldName: {Type: field.TypeString, Column: pet.FieldName},
-			pet.FieldUUID: {Type: field.TypeUUID, Column: pet.FieldUUID},
+			pet.FieldAge:      {Type: field.TypeFloat64, Column: pet.FieldAge},
+			pet.FieldName:     {Type: field.TypeString, Column: pet.FieldName},
+			pet.FieldUUID:     {Type: field.TypeUUID, Column: pet.FieldUUID},
+			pet.FieldNickname: {Type: field.TypeString, Column: pet.FieldNickname},
 		},
 	}
 	graph.Nodes[11] = &sqlgraph.Node{
@@ -294,6 +312,7 @@ var schemaGraph = func() *sqlgraph.Schema {
 			user.FieldPhone:       {Type: field.TypeString, Column: user.FieldPhone},
 			user.FieldPassword:    {Type: field.TypeString, Column: user.FieldPassword},
 			user.FieldRole:        {Type: field.TypeEnum, Column: user.FieldRole},
+			user.FieldEmployment:  {Type: field.TypeEnum, Column: user.FieldEmployment},
 			user.FieldSSOCert:     {Type: field.TypeString, Column: user.FieldSSOCert},
 		},
 	}
@@ -920,11 +939,6 @@ func (f *FieldTypeFilter) WhereOptionalUint64(p entql.Uint64P) {
 	f.Where(p.Field(fieldtype.FieldOptionalUint64))
 }
 
-// WhereDuration applies the entql int64 predicate on the duration field.
-func (f *FieldTypeFilter) WhereDuration(p entql.Int64P) {
-	f.Where(p.Field(fieldtype.FieldDuration))
-}
-
 // WhereState applies the entql string predicate on the state field.
 func (f *FieldTypeFilter) WhereState(p entql.StringP) {
 	f.Where(p.Field(fieldtype.FieldState))
@@ -948,6 +962,36 @@ func (f *FieldTypeFilter) WhereDatetime(p entql.TimeP) {
 // WhereDecimal applies the entql float64 predicate on the decimal field.
 func (f *FieldTypeFilter) WhereDecimal(p entql.Float64P) {
 	f.Where(p.Field(fieldtype.FieldDecimal))
+}
+
+// WhereLinkOther applies the entql other predicate on the link_other field.
+func (f *FieldTypeFilter) WhereLinkOther(p entql.OtherP) {
+	f.Where(p.Field(fieldtype.FieldLinkOther))
+}
+
+// WhereMAC applies the entql string predicate on the mac field.
+func (f *FieldTypeFilter) WhereMAC(p entql.StringP) {
+	f.Where(p.Field(fieldtype.FieldMAC))
+}
+
+// WhereStringArray applies the entql other predicate on the string_array field.
+func (f *FieldTypeFilter) WhereStringArray(p entql.OtherP) {
+	f.Where(p.Field(fieldtype.FieldStringArray))
+}
+
+// WherePassword applies the entql string predicate on the password field.
+func (f *FieldTypeFilter) WherePassword(p entql.StringP) {
+	f.Where(p.Field(fieldtype.FieldPassword))
+}
+
+// WhereStringScanner applies the entql string predicate on the string_scanner field.
+func (f *FieldTypeFilter) WhereStringScanner(p entql.StringP) {
+	f.Where(p.Field(fieldtype.FieldStringScanner))
+}
+
+// WhereDuration applies the entql int64 predicate on the duration field.
+func (f *FieldTypeFilter) WhereDuration(p entql.Int64P) {
+	f.Where(p.Field(fieldtype.FieldDuration))
 }
 
 // WhereDir applies the entql string predicate on the dir field.
@@ -975,11 +1019,6 @@ func (f *FieldTypeFilter) WhereLink(p entql.StringP) {
 	f.Where(p.Field(fieldtype.FieldLink))
 }
 
-// WhereLinkOther applies the entql other predicate on the link_other field.
-func (f *FieldTypeFilter) WhereLinkOther(p entql.OtherP) {
-	f.Where(p.Field(fieldtype.FieldLinkOther))
-}
-
 // WhereNullLink applies the entql string predicate on the null_link field.
 func (f *FieldTypeFilter) WhereNullLink(p entql.StringP) {
 	f.Where(p.Field(fieldtype.FieldNullLink))
@@ -1003,6 +1042,16 @@ func (f *FieldTypeFilter) WhereDeleted(p entql.BoolP) {
 // WhereDeletedAt applies the entql time.Time predicate on the deleted_at field.
 func (f *FieldTypeFilter) WhereDeletedAt(p entql.TimeP) {
 	f.Where(p.Field(fieldtype.FieldDeletedAt))
+}
+
+// WhereRawData applies the entql []byte predicate on the raw_data field.
+func (f *FieldTypeFilter) WhereRawData(p entql.BytesP) {
+	f.Where(p.Field(fieldtype.FieldRawData))
+}
+
+// WhereSensitive applies the entql []byte predicate on the sensitive field.
+func (f *FieldTypeFilter) WhereSensitive(p entql.BytesP) {
+	f.Where(p.Field(fieldtype.FieldSensitive))
 }
 
 // WhereIP applies the entql []byte predicate on the ip field.
@@ -1050,14 +1099,54 @@ func (f *FieldTypeFilter) WhereRole(p entql.StringP) {
 	f.Where(p.Field(fieldtype.FieldRole))
 }
 
-// WhereMAC applies the entql string predicate on the mac field.
-func (f *FieldTypeFilter) WhereMAC(p entql.StringP) {
-	f.Where(p.Field(fieldtype.FieldMAC))
+// WherePriority applies the entql string predicate on the priority field.
+func (f *FieldTypeFilter) WherePriority(p entql.StringP) {
+	f.Where(p.Field(fieldtype.FieldPriority))
 }
 
 // WhereUUID applies the entql [16]byte predicate on the uuid field.
 func (f *FieldTypeFilter) WhereUUID(p entql.ValueP) {
 	f.Where(p.Field(fieldtype.FieldUUID))
+}
+
+// WhereNillableUUID applies the entql [16]byte predicate on the nillable_uuid field.
+func (f *FieldTypeFilter) WhereNillableUUID(p entql.ValueP) {
+	f.Where(p.Field(fieldtype.FieldNillableUUID))
+}
+
+// WhereStrings applies the entql json.RawMessage predicate on the strings field.
+func (f *FieldTypeFilter) WhereStrings(p entql.BytesP) {
+	f.Where(p.Field(fieldtype.FieldStrings))
+}
+
+// WherePair applies the entql []byte predicate on the pair field.
+func (f *FieldTypeFilter) WherePair(p entql.BytesP) {
+	f.Where(p.Field(fieldtype.FieldPair))
+}
+
+// WhereNilPair applies the entql []byte predicate on the nil_pair field.
+func (f *FieldTypeFilter) WhereNilPair(p entql.BytesP) {
+	f.Where(p.Field(fieldtype.FieldNilPair))
+}
+
+// WhereVstring applies the entql string predicate on the vstring field.
+func (f *FieldTypeFilter) WhereVstring(p entql.StringP) {
+	f.Where(p.Field(fieldtype.FieldVstring))
+}
+
+// WhereTriple applies the entql string predicate on the triple field.
+func (f *FieldTypeFilter) WhereTriple(p entql.StringP) {
+	f.Where(p.Field(fieldtype.FieldTriple))
+}
+
+// WhereBigInt applies the entql int predicate on the big_int field.
+func (f *FieldTypeFilter) WhereBigInt(p entql.IntP) {
+	f.Where(p.Field(fieldtype.FieldBigInt))
+}
+
+// WherePasswordOther applies the entql other predicate on the password_other field.
+func (f *FieldTypeFilter) WherePasswordOther(p entql.OtherP) {
+	f.Where(p.Field(fieldtype.FieldPasswordOther))
 }
 
 // addPredicate implements the predicateAdder interface.
@@ -1490,9 +1579,14 @@ func (f *ItemFilter) Where(p entql.P) {
 	})
 }
 
-// WhereID applies the entql int predicate on the id field.
-func (f *ItemFilter) WhereID(p entql.IntP) {
+// WhereID applies the entql string predicate on the id field.
+func (f *ItemFilter) WhereID(p entql.StringP) {
 	f.Where(p.Field(item.FieldID))
+}
+
+// WhereText applies the entql string predicate on the text field.
+func (f *ItemFilter) WhereText(p entql.StringP) {
+	f.Where(p.Field(item.FieldText))
 }
 
 // addPredicate implements the predicateAdder interface.
@@ -1606,6 +1700,11 @@ func (f *PetFilter) WhereID(p entql.IntP) {
 	f.Where(p.Field(pet.FieldID))
 }
 
+// WhereAge applies the entql float64 predicate on the age field.
+func (f *PetFilter) WhereAge(p entql.Float64P) {
+	f.Where(p.Field(pet.FieldAge))
+}
+
 // WhereName applies the entql string predicate on the name field.
 func (f *PetFilter) WhereName(p entql.StringP) {
 	f.Where(p.Field(pet.FieldName))
@@ -1614,6 +1713,11 @@ func (f *PetFilter) WhereName(p entql.StringP) {
 // WhereUUID applies the entql [16]byte predicate on the uuid field.
 func (f *PetFilter) WhereUUID(p entql.ValueP) {
 	f.Where(p.Field(pet.FieldUUID))
+}
+
+// WhereNickname applies the entql string predicate on the nickname field.
+func (f *PetFilter) WhereNickname(p entql.StringP) {
+	f.Where(p.Field(pet.FieldNickname))
 }
 
 // WhereHasTeam applies a predicate to check if query has an edge team.
@@ -1823,6 +1927,11 @@ func (f *UserFilter) WherePassword(p entql.StringP) {
 // WhereRole applies the entql string predicate on the role field.
 func (f *UserFilter) WhereRole(p entql.StringP) {
 	f.Where(p.Field(user.FieldRole))
+}
+
+// WhereEmployment applies the entql string predicate on the employment field.
+func (f *UserFilter) WhereEmployment(p entql.StringP) {
+	f.Where(p.Field(user.FieldEmployment))
 }
 
 // WhereSSOCert applies the entql string predicate on the SSOCert field.

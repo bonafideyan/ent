@@ -4,6 +4,8 @@ This source code is licensed under the Apache 2.0 license found
 in the LICENSE file in the root directory of this source tree.
 */}}
 
+{{/* gotype: entgo.io/ent/entc/gen.Type*/}}
+
 {{ define "meta" }}
 
 {{- with extend $ "Package" $.Package -}}
@@ -76,7 +78,7 @@ const (
 			{{- if $f.UpdateDefault }}
 				{{- $default := $f.UpdateDefaultName }}
 				// {{ $default }} holds the default value on update for the "{{ $f.Name }}" field.
-				{{ $default }} {{ if $f.IsTime }}func() {{ end }}{{ $f.Type }}
+				{{ $default }} func() {{ $f.Type }}
 			{{- end }}
 			{{- with $f.Validators }}
 				{{- $name := $f.Validator }}
@@ -128,7 +130,7 @@ const (
 	{{ $name := $f.Validator }}
 	// {{ $name }} is a validator for the "{{ $f.Name }}" field enum values. It is called by the builders before save.
 	func {{ $name }}({{ $receiver }} {{ $enum }}) error {
-		switch {{ $receiver }} {
+		switch {{ $receiver }}{{ if $f.Type.Stringer }}.String(){{ end }} {
 			case {{ range $i, $e := $f.Enums }}{{ if ne $i 0 }},{{ end }}{{ if $f.HasGoType }}"{{ $e.Value }}"{{ else }}{{ $e.Name }}{{ end }}{{ end }}:
 				return nil
 			default:

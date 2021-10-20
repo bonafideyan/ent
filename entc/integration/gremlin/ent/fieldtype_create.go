@@ -285,20 +285,6 @@ func (ftc *FieldTypeCreate) SetNillableOptionalUint64(u *uint64) *FieldTypeCreat
 	return ftc
 }
 
-// SetDuration sets the "duration" field.
-func (ftc *FieldTypeCreate) SetDuration(t time.Duration) *FieldTypeCreate {
-	ftc.mutation.SetDuration(t)
-	return ftc
-}
-
-// SetNillableDuration sets the "duration" field if the given value is not nil.
-func (ftc *FieldTypeCreate) SetNillableDuration(t *time.Duration) *FieldTypeCreate {
-	if t != nil {
-		ftc.SetDuration(*t)
-	}
-	return ftc
-}
-
 // SetState sets the "state" field.
 func (ftc *FieldTypeCreate) SetState(f fieldtype.State) *FieldTypeCreate {
 	ftc.mutation.SetState(f)
@@ -369,6 +355,74 @@ func (ftc *FieldTypeCreate) SetNillableDecimal(f *float64) *FieldTypeCreate {
 	return ftc
 }
 
+// SetLinkOther sets the "link_other" field.
+func (ftc *FieldTypeCreate) SetLinkOther(s *schema.Link) *FieldTypeCreate {
+	ftc.mutation.SetLinkOther(s)
+	return ftc
+}
+
+// SetMAC sets the "mac" field.
+func (ftc *FieldTypeCreate) SetMAC(s schema.MAC) *FieldTypeCreate {
+	ftc.mutation.SetMAC(s)
+	return ftc
+}
+
+// SetNillableMAC sets the "mac" field if the given value is not nil.
+func (ftc *FieldTypeCreate) SetNillableMAC(s *schema.MAC) *FieldTypeCreate {
+	if s != nil {
+		ftc.SetMAC(*s)
+	}
+	return ftc
+}
+
+// SetStringArray sets the "string_array" field.
+func (ftc *FieldTypeCreate) SetStringArray(s schema.Strings) *FieldTypeCreate {
+	ftc.mutation.SetStringArray(s)
+	return ftc
+}
+
+// SetPassword sets the "password" field.
+func (ftc *FieldTypeCreate) SetPassword(s string) *FieldTypeCreate {
+	ftc.mutation.SetPassword(s)
+	return ftc
+}
+
+// SetNillablePassword sets the "password" field if the given value is not nil.
+func (ftc *FieldTypeCreate) SetNillablePassword(s *string) *FieldTypeCreate {
+	if s != nil {
+		ftc.SetPassword(*s)
+	}
+	return ftc
+}
+
+// SetStringScanner sets the "string_scanner" field.
+func (ftc *FieldTypeCreate) SetStringScanner(ss schema.StringScanner) *FieldTypeCreate {
+	ftc.mutation.SetStringScanner(ss)
+	return ftc
+}
+
+// SetNillableStringScanner sets the "string_scanner" field if the given value is not nil.
+func (ftc *FieldTypeCreate) SetNillableStringScanner(ss *schema.StringScanner) *FieldTypeCreate {
+	if ss != nil {
+		ftc.SetStringScanner(*ss)
+	}
+	return ftc
+}
+
+// SetDuration sets the "duration" field.
+func (ftc *FieldTypeCreate) SetDuration(t time.Duration) *FieldTypeCreate {
+	ftc.mutation.SetDuration(t)
+	return ftc
+}
+
+// SetNillableDuration sets the "duration" field if the given value is not nil.
+func (ftc *FieldTypeCreate) SetNillableDuration(t *time.Duration) *FieldTypeCreate {
+	if t != nil {
+		ftc.SetDuration(*t)
+	}
+	return ftc
+}
+
 // SetDir sets the "dir" field.
 func (ftc *FieldTypeCreate) SetDir(h http.Dir) *FieldTypeCreate {
 	ftc.mutation.SetDir(h)
@@ -403,8 +457,16 @@ func (ftc *FieldTypeCreate) SetStr(ss sql.NullString) *FieldTypeCreate {
 	return ftc
 }
 
+// SetNillableStr sets the "str" field if the given value is not nil.
+func (ftc *FieldTypeCreate) SetNillableStr(ss *sql.NullString) *FieldTypeCreate {
+	if ss != nil {
+		ftc.SetStr(*ss)
+	}
+	return ftc
+}
+
 // SetNullStr sets the "null_str" field.
-func (ftc *FieldTypeCreate) SetNullStr(ss sql.NullString) *FieldTypeCreate {
+func (ftc *FieldTypeCreate) SetNullStr(ss *sql.NullString) *FieldTypeCreate {
 	ftc.mutation.SetNullStr(ss)
 	return ftc
 }
@@ -415,14 +477,16 @@ func (ftc *FieldTypeCreate) SetLink(s schema.Link) *FieldTypeCreate {
 	return ftc
 }
 
-// SetLinkOther sets the "link_other" field.
-func (ftc *FieldTypeCreate) SetLinkOther(s schema.Link) *FieldTypeCreate {
-	ftc.mutation.SetLinkOther(s)
+// SetNillableLink sets the "link" field if the given value is not nil.
+func (ftc *FieldTypeCreate) SetNillableLink(s *schema.Link) *FieldTypeCreate {
+	if s != nil {
+		ftc.SetLink(*s)
+	}
 	return ftc
 }
 
 // SetNullLink sets the "null_link" field.
-func (ftc *FieldTypeCreate) SetNullLink(s schema.Link) *FieldTypeCreate {
+func (ftc *FieldTypeCreate) SetNullLink(s *schema.Link) *FieldTypeCreate {
 	ftc.mutation.SetNullLink(s)
 	return ftc
 }
@@ -456,14 +520,26 @@ func (ftc *FieldTypeCreate) SetNillableNullActive(s *schema.Status) *FieldTypeCr
 }
 
 // SetDeleted sets the "deleted" field.
-func (ftc *FieldTypeCreate) SetDeleted(sb sql.NullBool) *FieldTypeCreate {
+func (ftc *FieldTypeCreate) SetDeleted(sb *sql.NullBool) *FieldTypeCreate {
 	ftc.mutation.SetDeleted(sb)
 	return ftc
 }
 
 // SetDeletedAt sets the "deleted_at" field.
-func (ftc *FieldTypeCreate) SetDeletedAt(st sql.NullTime) *FieldTypeCreate {
+func (ftc *FieldTypeCreate) SetDeletedAt(st *sql.NullTime) *FieldTypeCreate {
 	ftc.mutation.SetDeletedAt(st)
+	return ftc
+}
+
+// SetRawData sets the "raw_data" field.
+func (ftc *FieldTypeCreate) SetRawData(b []byte) *FieldTypeCreate {
+	ftc.mutation.SetRawData(b)
+	return ftc
+}
+
+// SetSensitive sets the "sensitive" field.
+func (ftc *FieldTypeCreate) SetSensitive(b []byte) *FieldTypeCreate {
+	ftc.mutation.SetSensitive(b)
 	return ftc
 }
 
@@ -474,7 +550,7 @@ func (ftc *FieldTypeCreate) SetIP(n net.IP) *FieldTypeCreate {
 }
 
 // SetNullInt64 sets the "null_int64" field.
-func (ftc *FieldTypeCreate) SetNullInt64(si sql.NullInt64) *FieldTypeCreate {
+func (ftc *FieldTypeCreate) SetNullInt64(si *sql.NullInt64) *FieldTypeCreate {
 	ftc.mutation.SetNullInt64(si)
 	return ftc
 }
@@ -550,7 +626,7 @@ func (ftc *FieldTypeCreate) SetNillableSchemaFloat32(s *schema.Float32) *FieldTy
 }
 
 // SetNullFloat sets the "null_float" field.
-func (ftc *FieldTypeCreate) SetNullFloat(sf sql.NullFloat64) *FieldTypeCreate {
+func (ftc *FieldTypeCreate) SetNullFloat(sf *sql.NullFloat64) *FieldTypeCreate {
 	ftc.mutation.SetNullFloat(sf)
 	return ftc
 }
@@ -569,15 +645,111 @@ func (ftc *FieldTypeCreate) SetNillableRole(r *role.Role) *FieldTypeCreate {
 	return ftc
 }
 
-// SetMAC sets the "mac" field.
-func (ftc *FieldTypeCreate) SetMAC(s schema.MAC) *FieldTypeCreate {
-	ftc.mutation.SetMAC(s)
+// SetPriority sets the "priority" field.
+func (ftc *FieldTypeCreate) SetPriority(r role.Priority) *FieldTypeCreate {
+	ftc.mutation.SetPriority(r)
+	return ftc
+}
+
+// SetNillablePriority sets the "priority" field if the given value is not nil.
+func (ftc *FieldTypeCreate) SetNillablePriority(r *role.Priority) *FieldTypeCreate {
+	if r != nil {
+		ftc.SetPriority(*r)
+	}
 	return ftc
 }
 
 // SetUUID sets the "uuid" field.
 func (ftc *FieldTypeCreate) SetUUID(u uuid.UUID) *FieldTypeCreate {
 	ftc.mutation.SetUUID(u)
+	return ftc
+}
+
+// SetNillableUUID sets the "nillable_uuid" field.
+func (ftc *FieldTypeCreate) SetNillableUUID(u uuid.UUID) *FieldTypeCreate {
+	ftc.mutation.SetNillableUUID(u)
+	return ftc
+}
+
+// SetStrings sets the "strings" field.
+func (ftc *FieldTypeCreate) SetStrings(s []string) *FieldTypeCreate {
+	ftc.mutation.SetStrings(s)
+	return ftc
+}
+
+// SetPair sets the "pair" field.
+func (ftc *FieldTypeCreate) SetPair(s schema.Pair) *FieldTypeCreate {
+	ftc.mutation.SetPair(s)
+	return ftc
+}
+
+// SetNillablePair sets the "pair" field if the given value is not nil.
+func (ftc *FieldTypeCreate) SetNillablePair(s *schema.Pair) *FieldTypeCreate {
+	if s != nil {
+		ftc.SetPair(*s)
+	}
+	return ftc
+}
+
+// SetNilPair sets the "nil_pair" field.
+func (ftc *FieldTypeCreate) SetNilPair(s *schema.Pair) *FieldTypeCreate {
+	ftc.mutation.SetNilPair(s)
+	return ftc
+}
+
+// SetVstring sets the "vstring" field.
+func (ftc *FieldTypeCreate) SetVstring(ss schema.VString) *FieldTypeCreate {
+	ftc.mutation.SetVstring(ss)
+	return ftc
+}
+
+// SetNillableVstring sets the "vstring" field if the given value is not nil.
+func (ftc *FieldTypeCreate) SetNillableVstring(ss *schema.VString) *FieldTypeCreate {
+	if ss != nil {
+		ftc.SetVstring(*ss)
+	}
+	return ftc
+}
+
+// SetTriple sets the "triple" field.
+func (ftc *FieldTypeCreate) SetTriple(s schema.Triple) *FieldTypeCreate {
+	ftc.mutation.SetTriple(s)
+	return ftc
+}
+
+// SetNillableTriple sets the "triple" field if the given value is not nil.
+func (ftc *FieldTypeCreate) SetNillableTriple(s *schema.Triple) *FieldTypeCreate {
+	if s != nil {
+		ftc.SetTriple(*s)
+	}
+	return ftc
+}
+
+// SetBigInt sets the "big_int" field.
+func (ftc *FieldTypeCreate) SetBigInt(si schema.BigInt) *FieldTypeCreate {
+	ftc.mutation.SetBigInt(si)
+	return ftc
+}
+
+// SetNillableBigInt sets the "big_int" field if the given value is not nil.
+func (ftc *FieldTypeCreate) SetNillableBigInt(si *schema.BigInt) *FieldTypeCreate {
+	if si != nil {
+		ftc.SetBigInt(*si)
+	}
+	return ftc
+}
+
+// SetPasswordOther sets the "password_other" field.
+func (ftc *FieldTypeCreate) SetPasswordOther(s schema.Password) *FieldTypeCreate {
+	ftc.mutation.SetPasswordOther(s)
+	return ftc
+}
+
+// SetNillablePasswordOther sets the "password_other" field if the given value is not nil.
+func (ftc *FieldTypeCreate) SetNillablePasswordOther(s *schema.Password) *FieldTypeCreate {
+	if s != nil {
+		ftc.SetPasswordOther(*s)
+	}
 	return ftc
 }
 
@@ -608,11 +780,17 @@ func (ftc *FieldTypeCreate) Save(ctx context.Context) (*FieldType, error) {
 				return nil, err
 			}
 			ftc.mutation = mutation
-			node, err = ftc.gremlinSave(ctx)
+			if node, err = ftc.gremlinSave(ctx); err != nil {
+				return nil, err
+			}
+			mutation.id = &node.ID
 			mutation.done = true
 			return node, err
 		})
 		for i := len(ftc.hooks) - 1; i >= 0; i-- {
+			if ftc.hooks[i] == nil {
+				return nil, fmt.Errorf("ent: uninitialized hook (forgotten import ent/runtime?)")
+			}
 			mut = ftc.hooks[i](mut)
 		}
 		if _, err := mut.Mutate(ctx, ftc.mutation); err != nil {
@@ -631,8 +809,25 @@ func (ftc *FieldTypeCreate) SaveX(ctx context.Context) *FieldType {
 	return v
 }
 
+// Exec executes the query.
+func (ftc *FieldTypeCreate) Exec(ctx context.Context) error {
+	_, err := ftc.Save(ctx)
+	return err
+}
+
+// ExecX is like Exec, but panics if an error occurs.
+func (ftc *FieldTypeCreate) ExecX(ctx context.Context) {
+	if err := ftc.Exec(ctx); err != nil {
+		panic(err)
+	}
+}
+
 // defaults sets the default values of the builder before save.
 func (ftc *FieldTypeCreate) defaults() {
+	if _, ok := ftc.mutation.Dir(); !ok {
+		v := fieldtype.DefaultDir()
+		ftc.mutation.SetDir(v)
+	}
 	if _, ok := ftc.mutation.Str(); !ok {
 		v := fieldtype.DefaultStr()
 		ftc.mutation.SetStr(v)
@@ -649,57 +844,96 @@ func (ftc *FieldTypeCreate) defaults() {
 		v := fieldtype.DefaultRole
 		ftc.mutation.SetRole(v)
 	}
+	if _, ok := ftc.mutation.Pair(); !ok {
+		v := fieldtype.DefaultPair()
+		ftc.mutation.SetPair(v)
+	}
+	if _, ok := ftc.mutation.Vstring(); !ok {
+		v := fieldtype.DefaultVstring()
+		ftc.mutation.SetVstring(v)
+	}
+	if _, ok := ftc.mutation.Triple(); !ok {
+		v := fieldtype.DefaultTriple()
+		ftc.mutation.SetTriple(v)
+	}
 }
 
 // check runs all checks and user-defined validators on the builder.
 func (ftc *FieldTypeCreate) check() error {
 	if _, ok := ftc.mutation.Int(); !ok {
-		return &ValidationError{Name: "int", err: errors.New("ent: missing required field \"int\"")}
+		return &ValidationError{Name: "int", err: errors.New(`ent: missing required field "FieldType.int"`)}
 	}
 	if _, ok := ftc.mutation.Int8(); !ok {
-		return &ValidationError{Name: "int8", err: errors.New("ent: missing required field \"int8\"")}
+		return &ValidationError{Name: "int8", err: errors.New(`ent: missing required field "FieldType.int8"`)}
 	}
 	if _, ok := ftc.mutation.Int16(); !ok {
-		return &ValidationError{Name: "int16", err: errors.New("ent: missing required field \"int16\"")}
+		return &ValidationError{Name: "int16", err: errors.New(`ent: missing required field "FieldType.int16"`)}
 	}
 	if _, ok := ftc.mutation.Int32(); !ok {
-		return &ValidationError{Name: "int32", err: errors.New("ent: missing required field \"int32\"")}
+		return &ValidationError{Name: "int32", err: errors.New(`ent: missing required field "FieldType.int32"`)}
 	}
 	if _, ok := ftc.mutation.Int64(); !ok {
-		return &ValidationError{Name: "int64", err: errors.New("ent: missing required field \"int64\"")}
+		return &ValidationError{Name: "int64", err: errors.New(`ent: missing required field "FieldType.int64"`)}
 	}
 	if v, ok := ftc.mutation.ValidateOptionalInt32(); ok {
 		if err := fieldtype.ValidateOptionalInt32Validator(v); err != nil {
-			return &ValidationError{Name: "validate_optional_int32", err: fmt.Errorf("ent: validator failed for field \"validate_optional_int32\": %w", err)}
+			return &ValidationError{Name: "validate_optional_int32", err: fmt.Errorf(`ent: validator failed for field "FieldType.validate_optional_int32": %w`, err)}
 		}
 	}
 	if v, ok := ftc.mutation.State(); ok {
 		if err := fieldtype.StateValidator(v); err != nil {
-			return &ValidationError{Name: "state", err: fmt.Errorf("ent: validator failed for field \"state\": %w", err)}
-		}
-	}
-	if v, ok := ftc.mutation.Ndir(); ok {
-		if err := fieldtype.NdirValidator(string(v)); err != nil {
-			return &ValidationError{Name: "ndir", err: fmt.Errorf("ent: validator failed for field \"ndir\": %w", err)}
-		}
-	}
-	if v, ok := ftc.mutation.Link(); ok {
-		if err := fieldtype.LinkValidator(v.String()); err != nil {
-			return &ValidationError{Name: "link", err: fmt.Errorf("ent: validator failed for field \"link\": %w", err)}
-		}
-	}
-	if _, ok := ftc.mutation.Role(); !ok {
-		return &ValidationError{Name: "role", err: errors.New("ent: missing required field \"role\"")}
-	}
-	if v, ok := ftc.mutation.Role(); ok {
-		if err := fieldtype.RoleValidator(v); err != nil {
-			return &ValidationError{Name: "role", err: fmt.Errorf("ent: validator failed for field \"role\": %w", err)}
+			return &ValidationError{Name: "state", err: fmt.Errorf(`ent: validator failed for field "FieldType.state": %w`, err)}
 		}
 	}
 	if v, ok := ftc.mutation.MAC(); ok {
 		if err := fieldtype.MACValidator(v.String()); err != nil {
-			return &ValidationError{Name: "mac", err: fmt.Errorf("ent: validator failed for field \"mac\": %w", err)}
+			return &ValidationError{Name: "mac", err: fmt.Errorf(`ent: validator failed for field "FieldType.mac": %w`, err)}
 		}
+	}
+	if _, ok := ftc.mutation.Dir(); !ok {
+		return &ValidationError{Name: "dir", err: errors.New(`ent: missing required field "FieldType.dir"`)}
+	}
+	if v, ok := ftc.mutation.Ndir(); ok {
+		if err := fieldtype.NdirValidator(string(v)); err != nil {
+			return &ValidationError{Name: "ndir", err: fmt.Errorf(`ent: validator failed for field "FieldType.ndir": %w`, err)}
+		}
+	}
+	if v, ok := ftc.mutation.Link(); ok {
+		if err := fieldtype.LinkValidator(v.String()); err != nil {
+			return &ValidationError{Name: "link", err: fmt.Errorf(`ent: validator failed for field "FieldType.link": %w`, err)}
+		}
+	}
+	if v, ok := ftc.mutation.RawData(); ok {
+		if err := fieldtype.RawDataValidator(v); err != nil {
+			return &ValidationError{Name: "raw_data", err: fmt.Errorf(`ent: validator failed for field "FieldType.raw_data": %w`, err)}
+		}
+	}
+	if v, ok := ftc.mutation.IP(); ok {
+		if err := fieldtype.IPValidator([]byte(v)); err != nil {
+			return &ValidationError{Name: "ip", err: fmt.Errorf(`ent: validator failed for field "FieldType.ip": %w`, err)}
+		}
+	}
+	if _, ok := ftc.mutation.Role(); !ok {
+		return &ValidationError{Name: "role", err: errors.New(`ent: missing required field "FieldType.role"`)}
+	}
+	if v, ok := ftc.mutation.Role(); ok {
+		if err := fieldtype.RoleValidator(v); err != nil {
+			return &ValidationError{Name: "role", err: fmt.Errorf(`ent: validator failed for field "FieldType.role": %w`, err)}
+		}
+	}
+	if v, ok := ftc.mutation.Priority(); ok {
+		if err := fieldtype.PriorityValidator(v); err != nil {
+			return &ValidationError{Name: "priority", err: fmt.Errorf(`ent: validator failed for field "FieldType.priority": %w`, err)}
+		}
+	}
+	if _, ok := ftc.mutation.Pair(); !ok {
+		return &ValidationError{Name: "pair", err: errors.New(`ent: missing required field "FieldType.pair"`)}
+	}
+	if _, ok := ftc.mutation.Vstring(); !ok {
+		return &ValidationError{Name: "vstring", err: errors.New(`ent: missing required field "FieldType.vstring"`)}
+	}
+	if _, ok := ftc.mutation.Triple(); !ok {
+		return &ValidationError{Name: "triple", err: errors.New(`ent: missing required field "FieldType.triple"`)}
 	}
 	return nil
 }
@@ -785,9 +1019,6 @@ func (ftc *FieldTypeCreate) gremlin() *dsl.Traversal {
 	if value, ok := ftc.mutation.OptionalUint64(); ok {
 		v.Property(dsl.Single, fieldtype.FieldOptionalUint64, value)
 	}
-	if value, ok := ftc.mutation.Duration(); ok {
-		v.Property(dsl.Single, fieldtype.FieldDuration, value)
-	}
 	if value, ok := ftc.mutation.State(); ok {
 		v.Property(dsl.Single, fieldtype.FieldState, value)
 	}
@@ -802,6 +1033,24 @@ func (ftc *FieldTypeCreate) gremlin() *dsl.Traversal {
 	}
 	if value, ok := ftc.mutation.Decimal(); ok {
 		v.Property(dsl.Single, fieldtype.FieldDecimal, value)
+	}
+	if value, ok := ftc.mutation.LinkOther(); ok {
+		v.Property(dsl.Single, fieldtype.FieldLinkOther, value)
+	}
+	if value, ok := ftc.mutation.MAC(); ok {
+		v.Property(dsl.Single, fieldtype.FieldMAC, value)
+	}
+	if value, ok := ftc.mutation.StringArray(); ok {
+		v.Property(dsl.Single, fieldtype.FieldStringArray, value)
+	}
+	if value, ok := ftc.mutation.Password(); ok {
+		v.Property(dsl.Single, fieldtype.FieldPassword, value)
+	}
+	if value, ok := ftc.mutation.StringScanner(); ok {
+		v.Property(dsl.Single, fieldtype.FieldStringScanner, value)
+	}
+	if value, ok := ftc.mutation.Duration(); ok {
+		v.Property(dsl.Single, fieldtype.FieldDuration, value)
 	}
 	if value, ok := ftc.mutation.Dir(); ok {
 		v.Property(dsl.Single, fieldtype.FieldDir, value)
@@ -818,9 +1067,6 @@ func (ftc *FieldTypeCreate) gremlin() *dsl.Traversal {
 	if value, ok := ftc.mutation.Link(); ok {
 		v.Property(dsl.Single, fieldtype.FieldLink, value)
 	}
-	if value, ok := ftc.mutation.LinkOther(); ok {
-		v.Property(dsl.Single, fieldtype.FieldLinkOther, value)
-	}
 	if value, ok := ftc.mutation.NullLink(); ok {
 		v.Property(dsl.Single, fieldtype.FieldNullLink, value)
 	}
@@ -835,6 +1081,12 @@ func (ftc *FieldTypeCreate) gremlin() *dsl.Traversal {
 	}
 	if value, ok := ftc.mutation.DeletedAt(); ok {
 		v.Property(dsl.Single, fieldtype.FieldDeletedAt, value)
+	}
+	if value, ok := ftc.mutation.RawData(); ok {
+		v.Property(dsl.Single, fieldtype.FieldRawData, value)
+	}
+	if value, ok := ftc.mutation.Sensitive(); ok {
+		v.Property(dsl.Single, fieldtype.FieldSensitive, value)
 	}
 	if value, ok := ftc.mutation.IP(); ok {
 		v.Property(dsl.Single, fieldtype.FieldIP, value)
@@ -863,11 +1115,35 @@ func (ftc *FieldTypeCreate) gremlin() *dsl.Traversal {
 	if value, ok := ftc.mutation.Role(); ok {
 		v.Property(dsl.Single, fieldtype.FieldRole, value)
 	}
-	if value, ok := ftc.mutation.MAC(); ok {
-		v.Property(dsl.Single, fieldtype.FieldMAC, value)
+	if value, ok := ftc.mutation.Priority(); ok {
+		v.Property(dsl.Single, fieldtype.FieldPriority, value)
 	}
 	if value, ok := ftc.mutation.UUID(); ok {
 		v.Property(dsl.Single, fieldtype.FieldUUID, value)
+	}
+	if value, ok := ftc.mutation.NillableUUID(); ok {
+		v.Property(dsl.Single, fieldtype.FieldNillableUUID, value)
+	}
+	if value, ok := ftc.mutation.Strings(); ok {
+		v.Property(dsl.Single, fieldtype.FieldStrings, value)
+	}
+	if value, ok := ftc.mutation.Pair(); ok {
+		v.Property(dsl.Single, fieldtype.FieldPair, value)
+	}
+	if value, ok := ftc.mutation.NilPair(); ok {
+		v.Property(dsl.Single, fieldtype.FieldNilPair, value)
+	}
+	if value, ok := ftc.mutation.Vstring(); ok {
+		v.Property(dsl.Single, fieldtype.FieldVstring, value)
+	}
+	if value, ok := ftc.mutation.Triple(); ok {
+		v.Property(dsl.Single, fieldtype.FieldTriple, value)
+	}
+	if value, ok := ftc.mutation.BigInt(); ok {
+		v.Property(dsl.Single, fieldtype.FieldBigInt, value)
+	}
+	if value, ok := ftc.mutation.PasswordOther(); ok {
+		v.Property(dsl.Single, fieldtype.FieldPasswordOther, value)
 	}
 	return v.ValueMap(true)
 }

@@ -16,16 +16,22 @@ import (
 // Tx is a transactional client that is created by calling Client.Tx().
 type Tx struct {
 	config
+	// Car is the client for interacting with the Car builders.
+	Car *CarClient
 	// Card is the client for interacting with the Card builders.
 	Card *CardClient
 	// Info is the client for interacting with the Info builders.
 	Info *InfoClient
 	// Metadata is the client for interacting with the Metadata builders.
 	Metadata *MetadataClient
+	// Node is the client for interacting with the Node builders.
+	Node *NodeClient
 	// Pet is the client for interacting with the Pet builders.
 	Pet *PetClient
 	// Post is the client for interacting with the Post builders.
 	Post *PostClient
+	// Rental is the client for interacting with the Rental builders.
+	Rental *RentalClient
 	// User is the client for interacting with the User builders.
 	User *UserClient
 
@@ -58,7 +64,7 @@ type (
 	// and returns a Committer. For example:
 	//
 	//	hook := func(next ent.Committer) ent.Committer {
-	//		return ent.CommitFunc(func(context.Context, tx *ent.Tx) error {
+	//		return ent.CommitFunc(func(ctx context.Context, tx *ent.Tx) error {
 	//			// Do some stuff before.
 	//			if err := next.Commit(ctx, tx); err != nil {
 	//				return err
@@ -113,7 +119,7 @@ type (
 	// and returns a Rollbacker. For example:
 	//
 	//	hook := func(next ent.Rollbacker) ent.Rollbacker {
-	//		return ent.RollbackFunc(func(context.Context, tx *ent.Tx) error {
+	//		return ent.RollbackFunc(func(ctx context.Context, tx *ent.Tx) error {
 	//			// Do some stuff before.
 	//			if err := next.Rollback(ctx, tx); err != nil {
 	//				return err
@@ -163,11 +169,14 @@ func (tx *Tx) Client() *Client {
 }
 
 func (tx *Tx) init() {
+	tx.Car = NewCarClient(tx.config)
 	tx.Card = NewCardClient(tx.config)
 	tx.Info = NewInfoClient(tx.config)
 	tx.Metadata = NewMetadataClient(tx.config)
+	tx.Node = NewNodeClient(tx.config)
 	tx.Pet = NewPetClient(tx.config)
 	tx.Post = NewPostClient(tx.config)
+	tx.Rental = NewRentalClient(tx.config)
 	tx.User = NewUserClient(tx.config)
 }
 
@@ -178,7 +187,7 @@ func (tx *Tx) init() {
 // of them in order to commit or rollback the transaction.
 //
 // If a closed transaction is embedded in one of the generated entities, and the entity
-// applies a query, for example: Card.QueryXXX(), the query will be executed
+// applies a query, for example: Car.QueryXXX(), the query will be executed
 // through the driver which created this transaction.
 //
 // Note that txDriver is not goroutine safe.

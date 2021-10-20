@@ -8,6 +8,7 @@ package ent
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"entgo.io/ent/dialect/gremlin"
@@ -28,9 +29,30 @@ type PetUpdate struct {
 	mutation *PetMutation
 }
 
-// Where adds a new predicate for the PetUpdate builder.
+// Where appends a list predicates to the PetUpdate builder.
 func (pu *PetUpdate) Where(ps ...predicate.Pet) *PetUpdate {
-	pu.mutation.predicates = append(pu.mutation.predicates, ps...)
+	pu.mutation.Where(ps...)
+	return pu
+}
+
+// SetAge sets the "age" field.
+func (pu *PetUpdate) SetAge(f float64) *PetUpdate {
+	pu.mutation.ResetAge()
+	pu.mutation.SetAge(f)
+	return pu
+}
+
+// SetNillableAge sets the "age" field if the given value is not nil.
+func (pu *PetUpdate) SetNillableAge(f *float64) *PetUpdate {
+	if f != nil {
+		pu.SetAge(*f)
+	}
+	return pu
+}
+
+// AddAge adds f to the "age" field.
+func (pu *PetUpdate) AddAge(f float64) *PetUpdate {
+	pu.mutation.AddAge(f)
 	return pu
 }
 
@@ -49,6 +71,26 @@ func (pu *PetUpdate) SetUUID(u uuid.UUID) *PetUpdate {
 // ClearUUID clears the value of the "uuid" field.
 func (pu *PetUpdate) ClearUUID() *PetUpdate {
 	pu.mutation.ClearUUID()
+	return pu
+}
+
+// SetNickname sets the "nickname" field.
+func (pu *PetUpdate) SetNickname(s string) *PetUpdate {
+	pu.mutation.SetNickname(s)
+	return pu
+}
+
+// SetNillableNickname sets the "nickname" field if the given value is not nil.
+func (pu *PetUpdate) SetNillableNickname(s *string) *PetUpdate {
+	if s != nil {
+		pu.SetNickname(*s)
+	}
+	return pu
+}
+
+// ClearNickname clears the value of the "nickname" field.
+func (pu *PetUpdate) ClearNickname() *PetUpdate {
+	pu.mutation.ClearNickname()
 	return pu
 }
 
@@ -127,6 +169,9 @@ func (pu *PetUpdate) Save(ctx context.Context) (int, error) {
 			return affected, err
 		})
 		for i := len(pu.hooks) - 1; i >= 0; i-- {
+			if pu.hooks[i] == nil {
+				return 0, fmt.Errorf("ent: uninitialized hook (forgotten import ent/runtime?)")
+			}
 			mut = pu.hooks[i](mut)
 		}
 		if _, err := mut.Mutate(ctx, pu.mutation); err != nil {
@@ -186,15 +231,27 @@ func (pu *PetUpdate) gremlin() *dsl.Traversal {
 
 		trs []*dsl.Traversal
 	)
+	if value, ok := pu.mutation.Age(); ok {
+		v.Property(dsl.Single, pet.FieldAge, value)
+	}
+	if value, ok := pu.mutation.AddedAge(); ok {
+		v.Property(dsl.Single, pet.FieldAge, __.Union(__.Values(pet.FieldAge), __.Constant(value)).Sum())
+	}
 	if value, ok := pu.mutation.Name(); ok {
 		v.Property(dsl.Single, pet.FieldName, value)
 	}
 	if value, ok := pu.mutation.UUID(); ok {
 		v.Property(dsl.Single, pet.FieldUUID, value)
 	}
+	if value, ok := pu.mutation.Nickname(); ok {
+		v.Property(dsl.Single, pet.FieldNickname, value)
+	}
 	var properties []interface{}
 	if pu.mutation.UUIDCleared() {
 		properties = append(properties, pet.FieldUUID)
+	}
+	if pu.mutation.NicknameCleared() {
+		properties = append(properties, pet.FieldNickname)
 	}
 	if len(properties) > 0 {
 		v.SideEffect(__.Properties(properties...).Drop())
@@ -240,6 +297,27 @@ type PetUpdateOne struct {
 	mutation *PetMutation
 }
 
+// SetAge sets the "age" field.
+func (puo *PetUpdateOne) SetAge(f float64) *PetUpdateOne {
+	puo.mutation.ResetAge()
+	puo.mutation.SetAge(f)
+	return puo
+}
+
+// SetNillableAge sets the "age" field if the given value is not nil.
+func (puo *PetUpdateOne) SetNillableAge(f *float64) *PetUpdateOne {
+	if f != nil {
+		puo.SetAge(*f)
+	}
+	return puo
+}
+
+// AddAge adds f to the "age" field.
+func (puo *PetUpdateOne) AddAge(f float64) *PetUpdateOne {
+	puo.mutation.AddAge(f)
+	return puo
+}
+
 // SetName sets the "name" field.
 func (puo *PetUpdateOne) SetName(s string) *PetUpdateOne {
 	puo.mutation.SetName(s)
@@ -255,6 +333,26 @@ func (puo *PetUpdateOne) SetUUID(u uuid.UUID) *PetUpdateOne {
 // ClearUUID clears the value of the "uuid" field.
 func (puo *PetUpdateOne) ClearUUID() *PetUpdateOne {
 	puo.mutation.ClearUUID()
+	return puo
+}
+
+// SetNickname sets the "nickname" field.
+func (puo *PetUpdateOne) SetNickname(s string) *PetUpdateOne {
+	puo.mutation.SetNickname(s)
+	return puo
+}
+
+// SetNillableNickname sets the "nickname" field if the given value is not nil.
+func (puo *PetUpdateOne) SetNillableNickname(s *string) *PetUpdateOne {
+	if s != nil {
+		puo.SetNickname(*s)
+	}
+	return puo
+}
+
+// ClearNickname clears the value of the "nickname" field.
+func (puo *PetUpdateOne) ClearNickname() *PetUpdateOne {
+	puo.mutation.ClearNickname()
 	return puo
 }
 
@@ -340,6 +438,9 @@ func (puo *PetUpdateOne) Save(ctx context.Context) (*Pet, error) {
 			return node, err
 		})
 		for i := len(puo.hooks) - 1; i >= 0; i-- {
+			if puo.hooks[i] == nil {
+				return nil, fmt.Errorf("ent: uninitialized hook (forgotten import ent/runtime?)")
+			}
 			mut = puo.hooks[i](mut)
 		}
 		if _, err := mut.Mutate(ctx, puo.mutation); err != nil {
@@ -375,7 +476,7 @@ func (puo *PetUpdateOne) gremlinSave(ctx context.Context) (*Pet, error) {
 	res := &gremlin.Response{}
 	id, ok := puo.mutation.ID()
 	if !ok {
-		return nil, &ValidationError{Name: "ID", err: fmt.Errorf("missing Pet.ID for update")}
+		return nil, &ValidationError{Name: "id", err: errors.New(`ent: missing "Pet.id" for update`)}
 	}
 	query, bindings := puo.gremlin(id).Query()
 	if err := puo.driver.Exec(ctx, query, bindings, res); err != nil {
@@ -404,15 +505,27 @@ func (puo *PetUpdateOne) gremlin(id string) *dsl.Traversal {
 
 		trs []*dsl.Traversal
 	)
+	if value, ok := puo.mutation.Age(); ok {
+		v.Property(dsl.Single, pet.FieldAge, value)
+	}
+	if value, ok := puo.mutation.AddedAge(); ok {
+		v.Property(dsl.Single, pet.FieldAge, __.Union(__.Values(pet.FieldAge), __.Constant(value)).Sum())
+	}
 	if value, ok := puo.mutation.Name(); ok {
 		v.Property(dsl.Single, pet.FieldName, value)
 	}
 	if value, ok := puo.mutation.UUID(); ok {
 		v.Property(dsl.Single, pet.FieldUUID, value)
 	}
+	if value, ok := puo.mutation.Nickname(); ok {
+		v.Property(dsl.Single, pet.FieldNickname, value)
+	}
 	var properties []interface{}
 	if puo.mutation.UUIDCleared() {
 		properties = append(properties, pet.FieldUUID)
+	}
+	if puo.mutation.NicknameCleared() {
+		properties = append(properties, pet.FieldNickname)
 	}
 	if len(properties) > 0 {
 		v.SideEffect(__.Properties(properties...).Drop())

@@ -329,8 +329,8 @@ func (cq *CardQuery) GroupBy(field string, fields ...string) *CardGroupBy {
 //		Select(card.FieldNumber).
 //		Scan(ctx, &v)
 //
-func (cq *CardQuery) Select(field string, fields ...string) *CardSelect {
-	cq.fields = append([]string{field}, fields...)
+func (cq *CardQuery) Select(fields ...string) *CardSelect {
+	cq.fields = append(cq.fields, fields...)
 	return &CardSelect{CardQuery: cq}
 }
 
@@ -419,6 +419,10 @@ func (cq *CardQuery) sqlAll(ctx context.Context) ([]*Card, error) {
 
 func (cq *CardQuery) sqlCount(ctx context.Context) (int, error) {
 	_spec := cq.querySpec()
+	_spec.Node.Columns = cq.fields
+	if len(cq.fields) > 0 {
+		_spec.Unique = cq.unique != nil && *cq.unique
+	}
 	return sqlgraph.CountNodes(ctx, cq.driver, _spec)
 }
 
@@ -471,7 +475,7 @@ func (cq *CardQuery) querySpec() *sqlgraph.QuerySpec {
 	if ps := cq.order; len(ps) > 0 {
 		_spec.Order = func(selector *sql.Selector) {
 			for i := range ps {
-				ps[i](selector, card.ValidColumn)
+				ps[i](selector)
 			}
 		}
 	}
@@ -481,16 +485,23 @@ func (cq *CardQuery) querySpec() *sqlgraph.QuerySpec {
 func (cq *CardQuery) sqlQuery(ctx context.Context) *sql.Selector {
 	builder := sql.Dialect(cq.driver.Dialect())
 	t1 := builder.Table(card.Table)
-	selector := builder.Select(t1.Columns(card.Columns...)...).From(t1)
+	columns := cq.fields
+	if len(columns) == 0 {
+		columns = card.Columns
+	}
+	selector := builder.Select(t1.Columns(columns...)...).From(t1)
 	if cq.sql != nil {
 		selector = cq.sql
-		selector.Select(selector.Columns(card.Columns...)...)
+		selector.Select(selector.Columns(columns...)...)
+	}
+	if cq.unique != nil && *cq.unique {
+		selector.Distinct()
 	}
 	for _, p := range cq.predicates {
 		p(selector)
 	}
 	for _, p := range cq.order {
-		p(selector, card.ValidColumn)
+		p(selector)
 	}
 	if offset := cq.offset; offset != nil {
 		// limit is mandatory for offset clause. We start
@@ -752,13 +763,24 @@ func (cgb *CardGroupBy) sqlScan(ctx context.Context, v interface{}) error {
 }
 
 func (cgb *CardGroupBy) sqlQuery() *sql.Selector {
-	selector := cgb.sql
-	columns := make([]string, 0, len(cgb.fields)+len(cgb.fns))
-	columns = append(columns, cgb.fields...)
+	selector := cgb.sql.Select()
+	aggregation := make([]string, 0, len(cgb.fns))
 	for _, fn := range cgb.fns {
-		columns = append(columns, fn(selector, card.ValidColumn))
+		aggregation = append(aggregation, fn(selector))
 	}
-	return selector.Select(columns...).GroupBy(cgb.fields...)
+	// If no columns were selected in a custom aggregation function, the default
+	// selection is the fields used for "group-by", and the aggregation functions.
+	if len(selector.SelectedColumns()) == 0 {
+		columns := make([]string, 0, len(cgb.fields)+len(cgb.fns))
+		for _, f := range cgb.fields {
+			columns = append(columns, selector.C(f))
+		}
+		for _, c := range aggregation {
+			columns = append(columns, c)
+		}
+		selector.Select(columns...)
+	}
+	return selector.GroupBy(selector.Columns(cgb.fields...)...)
 }
 
 // CardSelect is the builder for selecting fields of Card entities.
@@ -974,16 +996,10 @@ func (cs *CardSelect) BoolX(ctx context.Context) bool {
 
 func (cs *CardSelect) sqlScan(ctx context.Context, v interface{}) error {
 	rows := &sql.Rows{}
-	query, args := cs.sqlQuery().Query()
+	query, args := cs.sql.Query()
 	if err := cs.driver.Query(ctx, query, args, rows); err != nil {
 		return err
 	}
 	defer rows.Close()
 	return sql.ScanSlice(rows, v)
-}
-
-func (cs *CardSelect) sqlQuery() sql.Querier {
-	selector := cs.sql
-	selector.Select(selector.Columns(cs.fields...)...)
-	return selector
 }

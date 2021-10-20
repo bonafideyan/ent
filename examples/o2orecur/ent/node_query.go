@@ -364,8 +364,8 @@ func (nq *NodeQuery) GroupBy(field string, fields ...string) *NodeGroupBy {
 //		Select(node.FieldValue).
 //		Scan(ctx, &v)
 //
-func (nq *NodeQuery) Select(field string, fields ...string) *NodeSelect {
-	nq.fields = append([]string{field}, fields...)
+func (nq *NodeQuery) Select(fields ...string) *NodeSelect {
+	nq.fields = append(nq.fields, fields...)
 	return &NodeSelect{NodeQuery: nq}
 }
 
@@ -483,6 +483,10 @@ func (nq *NodeQuery) sqlAll(ctx context.Context) ([]*Node, error) {
 
 func (nq *NodeQuery) sqlCount(ctx context.Context) (int, error) {
 	_spec := nq.querySpec()
+	_spec.Node.Columns = nq.fields
+	if len(nq.fields) > 0 {
+		_spec.Unique = nq.unique != nil && *nq.unique
+	}
 	return sqlgraph.CountNodes(ctx, nq.driver, _spec)
 }
 
@@ -535,7 +539,7 @@ func (nq *NodeQuery) querySpec() *sqlgraph.QuerySpec {
 	if ps := nq.order; len(ps) > 0 {
 		_spec.Order = func(selector *sql.Selector) {
 			for i := range ps {
-				ps[i](selector, node.ValidColumn)
+				ps[i](selector)
 			}
 		}
 	}
@@ -545,16 +549,23 @@ func (nq *NodeQuery) querySpec() *sqlgraph.QuerySpec {
 func (nq *NodeQuery) sqlQuery(ctx context.Context) *sql.Selector {
 	builder := sql.Dialect(nq.driver.Dialect())
 	t1 := builder.Table(node.Table)
-	selector := builder.Select(t1.Columns(node.Columns...)...).From(t1)
+	columns := nq.fields
+	if len(columns) == 0 {
+		columns = node.Columns
+	}
+	selector := builder.Select(t1.Columns(columns...)...).From(t1)
 	if nq.sql != nil {
 		selector = nq.sql
-		selector.Select(selector.Columns(node.Columns...)...)
+		selector.Select(selector.Columns(columns...)...)
+	}
+	if nq.unique != nil && *nq.unique {
+		selector.Distinct()
 	}
 	for _, p := range nq.predicates {
 		p(selector)
 	}
 	for _, p := range nq.order {
-		p(selector, node.ValidColumn)
+		p(selector)
 	}
 	if offset := nq.offset; offset != nil {
 		// limit is mandatory for offset clause. We start
@@ -816,13 +827,24 @@ func (ngb *NodeGroupBy) sqlScan(ctx context.Context, v interface{}) error {
 }
 
 func (ngb *NodeGroupBy) sqlQuery() *sql.Selector {
-	selector := ngb.sql
-	columns := make([]string, 0, len(ngb.fields)+len(ngb.fns))
-	columns = append(columns, ngb.fields...)
+	selector := ngb.sql.Select()
+	aggregation := make([]string, 0, len(ngb.fns))
 	for _, fn := range ngb.fns {
-		columns = append(columns, fn(selector, node.ValidColumn))
+		aggregation = append(aggregation, fn(selector))
 	}
-	return selector.Select(columns...).GroupBy(ngb.fields...)
+	// If no columns were selected in a custom aggregation function, the default
+	// selection is the fields used for "group-by", and the aggregation functions.
+	if len(selector.SelectedColumns()) == 0 {
+		columns := make([]string, 0, len(ngb.fields)+len(ngb.fns))
+		for _, f := range ngb.fields {
+			columns = append(columns, selector.C(f))
+		}
+		for _, c := range aggregation {
+			columns = append(columns, c)
+		}
+		selector.Select(columns...)
+	}
+	return selector.GroupBy(selector.Columns(ngb.fields...)...)
 }
 
 // NodeSelect is the builder for selecting fields of Node entities.
@@ -1038,16 +1060,10 @@ func (ns *NodeSelect) BoolX(ctx context.Context) bool {
 
 func (ns *NodeSelect) sqlScan(ctx context.Context, v interface{}) error {
 	rows := &sql.Rows{}
-	query, args := ns.sqlQuery().Query()
+	query, args := ns.sql.Query()
 	if err := ns.driver.Query(ctx, query, args, rows); err != nil {
 		return err
 	}
 	defer rows.Close()
 	return sql.ScanSlice(rows, v)
-}
-
-func (ns *NodeSelect) sqlQuery() sql.Querier {
-	selector := ns.sql
-	selector.Select(selector.Columns(ns.fields...)...)
-	return selector
 }

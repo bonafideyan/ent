@@ -62,6 +62,15 @@ func (i *Inspector) Tables(ctx context.Context) ([]*Table, error) {
 		}
 		tables = append(tables, t)
 	}
+
+	fki, ok := i.sqlDialect.(interface {
+		foreignKeys(context.Context, dialect.Tx, []*Table) error
+	})
+	if ok {
+		if err := fki.foreignKeys(ctx, tx, tables); err != nil {
+			return nil, err
+		}
+	}
 	return tables, nil
 }
 
@@ -76,7 +85,7 @@ func (i *Inspector) tables(ctx context.Context) ([]string, error) {
 		rows  = &sql.Rows{}
 	)
 	if err := i.Query(ctx, query, args, rows); err != nil {
-		return nil, fmt.Errorf("mysql: reading table names %w", err)
+		return nil, fmt.Errorf("%q driver: reading table names %w", i.Dialect(), err)
 	}
 	defer rows.Close()
 	if err := sql.ScanSlice(rows, &names); err != nil {

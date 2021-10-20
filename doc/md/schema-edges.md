@@ -422,6 +422,28 @@ func Do(ctx context.Context, client *ent.Client) error {
 }
 ```
 
+Note that, the foreign-key column can be configured and exposed as an entity field using the
+[Edge Field](#edge-field) option as follows:
+
+```go {4,14}
+// Fields of the User.
+func (User) Fields() []ent.Field {
+	return []ent.Field{
+		field.Int("spouse_id").
+			Optional(),
+    }
+}
+
+// Edges of the User.
+func (User) Edges() []ent.Edge {
+	return []ent.Edge{
+		edge.To("spouse", User.Type).
+			Unique().
+			Field("spouse_id"),
+	}
+}
+```
+
 The full example exists in [GitHub](https://github.com/ent/ent/tree/master/examples/o2obidi).
 
 ## O2M Two Types
@@ -503,6 +525,30 @@ func Do(ctx context.Context, client *ent.Client) error {
 	return nil
 }
 ```
+
+Note that, the foreign-key column can be configured and exposed as an entity field using the 
+[Edge Field](#edge-field) option as follows:
+
+```go {4,15}
+// Fields of the Pet.
+func (Pet) Fields() []ent.Field {
+	return []ent.Field{
+		field.Int("owner_id").
+			Optional(),
+    }
+}
+
+// Edges of the Pet.
+func (Pet) Edges() []ent.Edge {
+	return []ent.Edge{
+		edge.From("owner", User.Type).
+			Ref("pets").
+			Unique().
+			Field("owner_id"),
+	}
+}
+```
+
 The full example exists in [GitHub](https://github.com/ent/ent/tree/master/examples/o2m2types).
 
 ## O2M Same Type
@@ -609,6 +655,29 @@ func Do(ctx context.Context, client *ent.Client) error {
 	// Output: Node(id=1, value=2)
 
 	return nil
+}
+```
+
+Note that, the foreign-key column can be configured and exposed as an entity field using the
+[Edge Field](#edge-field) option as follows:
+
+```go {4,15}
+// Fields of the Node.
+func (Node) Fields() []ent.Field {
+	return []ent.Field{
+		field.Int("parent_id").
+			Optional(),
+    }
+}
+
+// Edges of the Node.
+func (Node) Edges() []ent.Edge {
+	return []ent.Edge{
+		edge.To("children", Node.Type).
+			From("parent").
+			Unique().
+			Field("parent_id"),
+	}
 }
 ```
 
@@ -865,7 +934,9 @@ The full example exists in [GitHub](https://github.com/ent/ent/tree/master/examp
 ## Edge Field
 
 The `Field` option for edges allows users to expose foreign-keys as regular fields on the schema.
-Note that only relations that hold foreign-keys (edge-ids) are allowed to use this option.
+Note that only relations that hold foreign-keys (edge-ids) are allowed to use this option. Support
+for non-foreign-key fields in join tables is in progress (as of September 2021) and can be tracked with
+this [GitHub Issue](https://github.com/ent/ent/issues/1061).
 
 ```go
 // Fields of the Post.
@@ -977,9 +1048,20 @@ func (User) Edges() []ent.Edge {
 		edge.To("pets", Pet.Type).
 			// Set the column name in the "pets" table for O2M relationship.
 			StorageKey(edge.Column("owner_id")),
+		edge.To("cars", Car.Type).
+			// Set the symbol of the foreign-key constraint for O2M relationship.
+			StorageKey(edge.Symbol("cars_owner_id")),
 		edge.To("friends", User.Type).
-			// Set the join-table and the column names for M2M relationship.
+			// Set the join-table, and the column names for a M2M relationship.
 			StorageKey(edge.Table("friends"), edge.Columns("user_id", "friend_id")),
+		edge.To("groups", Group.Type).
+			// Set the join-table, its column names and the symbols
+			// of the foreign-key constraints for M2M relationship.
+			StorageKey(
+				edge.Table("groups"),
+				edge.Columns("user_id", "group_id"),
+				edge.Symbols("groups_id1", "groups_id2")
+			),
 	}
 }
 ```

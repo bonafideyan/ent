@@ -45,9 +45,9 @@ func (*User) scanValues(columns []string) ([]interface{}, error) {
 	for i := range columns {
 		switch columns[i] {
 		case user.FieldT, user.FieldURL, user.FieldRaw, user.FieldDirs, user.FieldInts, user.FieldFloats, user.FieldStrings:
-			values[i] = &[]byte{}
+			values[i] = new([]byte)
 		case user.FieldID:
-			values[i] = &sql.NullInt64{}
+			values[i] = new(sql.NullInt64)
 		default:
 			return nil, fmt.Errorf("unexpected column %q for type User", columns[i])
 		}
@@ -70,7 +70,6 @@ func (u *User) assignValues(columns []string, values []interface{}) error {
 			}
 			u.ID = int(value.Int64)
 		case user.FieldT:
-
 			if value, ok := values[i].(*[]byte); !ok {
 				return fmt.Errorf("unexpected type %T for field t", values[i])
 			} else if value != nil && len(*value) > 0 {
@@ -79,7 +78,6 @@ func (u *User) assignValues(columns []string, values []interface{}) error {
 				}
 			}
 		case user.FieldURL:
-
 			if value, ok := values[i].(*[]byte); !ok {
 				return fmt.Errorf("unexpected type %T for field url", values[i])
 			} else if value != nil && len(*value) > 0 {
@@ -88,7 +86,6 @@ func (u *User) assignValues(columns []string, values []interface{}) error {
 				}
 			}
 		case user.FieldRaw:
-
 			if value, ok := values[i].(*[]byte); !ok {
 				return fmt.Errorf("unexpected type %T for field raw", values[i])
 			} else if value != nil && len(*value) > 0 {
@@ -97,7 +94,6 @@ func (u *User) assignValues(columns []string, values []interface{}) error {
 				}
 			}
 		case user.FieldDirs:
-
 			if value, ok := values[i].(*[]byte); !ok {
 				return fmt.Errorf("unexpected type %T for field dirs", values[i])
 			} else if value != nil && len(*value) > 0 {
@@ -106,7 +102,6 @@ func (u *User) assignValues(columns []string, values []interface{}) error {
 				}
 			}
 		case user.FieldInts:
-
 			if value, ok := values[i].(*[]byte); !ok {
 				return fmt.Errorf("unexpected type %T for field ints", values[i])
 			} else if value != nil && len(*value) > 0 {
@@ -115,7 +110,6 @@ func (u *User) assignValues(columns []string, values []interface{}) error {
 				}
 			}
 		case user.FieldFloats:
-
 			if value, ok := values[i].(*[]byte); !ok {
 				return fmt.Errorf("unexpected type %T for field floats", values[i])
 			} else if value != nil && len(*value) > 0 {
@@ -124,7 +118,6 @@ func (u *User) assignValues(columns []string, values []interface{}) error {
 				}
 			}
 		case user.FieldStrings:
-
 			if value, ok := values[i].(*[]byte); !ok {
 				return fmt.Errorf("unexpected type %T for field strings", values[i])
 			} else if value != nil && len(*value) > 0 {

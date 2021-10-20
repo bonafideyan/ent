@@ -7,6 +7,7 @@
 package ent
 
 import (
+	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
@@ -67,8 +68,6 @@ type FieldType struct {
 	OptionalUint32 uint32 `json:"optional_uint32,omitempty"`
 	// OptionalUint64 holds the value of the "optional_uint64" field.
 	OptionalUint64 uint64 `json:"optional_uint64,omitempty"`
-	// Duration holds the value of the "duration" field.
-	Duration time.Duration `json:"duration,omitempty"`
 	// State holds the value of the "state" field.
 	State fieldtype.State `json:"state,omitempty"`
 	// OptionalFloat holds the value of the "optional_float" field.
@@ -79,6 +78,18 @@ type FieldType struct {
 	Datetime time.Time `json:"datetime,omitempty"`
 	// Decimal holds the value of the "decimal" field.
 	Decimal float64 `json:"decimal,omitempty"`
+	// LinkOther holds the value of the "link_other" field.
+	LinkOther *schema.Link `json:"link_other,omitempty"`
+	// MAC holds the value of the "mac" field.
+	MAC schema.MAC `json:"mac,omitempty"`
+	// StringArray holds the value of the "string_array" field.
+	StringArray schema.Strings `json:"string_array,omitempty"`
+	// Password holds the value of the "password" field.
+	Password string `json:"-"`
+	// StringScanner holds the value of the "string_scanner" field.
+	StringScanner *schema.StringScanner `json:"string_scanner,omitempty"`
+	// Duration holds the value of the "duration" field.
+	Duration time.Duration `json:"duration,omitempty"`
 	// Dir holds the value of the "dir" field.
 	Dir http.Dir `json:"dir,omitempty"`
 	// Ndir holds the value of the "ndir" field.
@@ -89,8 +100,6 @@ type FieldType struct {
 	NullStr *sql.NullString `json:"null_str,omitempty"`
 	// Link holds the value of the "link" field.
 	Link schema.Link `json:"link,omitempty"`
-	// LinkOther holds the value of the "link_other" field.
-	LinkOther schema.Link `json:"link_other,omitempty"`
 	// NullLink holds the value of the "null_link" field.
 	NullLink *schema.Link `json:"null_link,omitempty"`
 	// Active holds the value of the "active" field.
@@ -98,13 +107,17 @@ type FieldType struct {
 	// NullActive holds the value of the "null_active" field.
 	NullActive *schema.Status `json:"null_active,omitempty"`
 	// Deleted holds the value of the "deleted" field.
-	Deleted sql.NullBool `json:"deleted,omitempty"`
+	Deleted *sql.NullBool `json:"deleted,omitempty"`
 	// DeletedAt holds the value of the "deleted_at" field.
-	DeletedAt sql.NullTime `json:"deleted_at,omitempty"`
+	DeletedAt *sql.NullTime `json:"deleted_at,omitempty"`
+	// RawData holds the value of the "raw_data" field.
+	RawData []byte `json:"raw_data,omitempty"`
+	// Sensitive holds the value of the "sensitive" field.
+	Sensitive []byte `json:"-"`
 	// IP holds the value of the "ip" field.
 	IP net.IP `json:"ip,omitempty"`
 	// NullInt64 holds the value of the "null_int64" field.
-	NullInt64 sql.NullInt64 `json:"null_int64,omitempty"`
+	NullInt64 *sql.NullInt64 `json:"null_int64,omitempty"`
 	// SchemaInt holds the value of the "schema_int" field.
 	SchemaInt schema.Int `json:"schema_int,omitempty"`
 	// SchemaInt8 holds the value of the "schema_int8" field.
@@ -116,14 +129,30 @@ type FieldType struct {
 	// SchemaFloat32 holds the value of the "schema_float32" field.
 	SchemaFloat32 schema.Float32 `json:"schema_float32,omitempty"`
 	// NullFloat holds the value of the "null_float" field.
-	NullFloat sql.NullFloat64 `json:"null_float,omitempty"`
+	NullFloat *sql.NullFloat64 `json:"null_float,omitempty"`
 	// Role holds the value of the "role" field.
 	Role role.Role `json:"role,omitempty"`
-	// MAC holds the value of the "mac" field.
-	MAC schema.MAC `json:"mac,omitempty"`
+	// Priority holds the value of the "priority" field.
+	Priority role.Priority `json:"priority,omitempty"`
 	// UUID holds the value of the "uuid" field.
-	UUID       uuid.UUID `json:"uuid,omitempty"`
-	file_field *int
+	UUID uuid.UUID `json:"uuid,omitempty"`
+	// NillableUUID holds the value of the "nillable_uuid" field.
+	NillableUUID *uuid.UUID `json:"nillable_uuid,omitempty"`
+	// Strings holds the value of the "strings" field.
+	Strings []string `json:"strings,omitempty"`
+	// Pair holds the value of the "pair" field.
+	Pair schema.Pair `json:"pair,omitempty"`
+	// NilPair holds the value of the "nil_pair" field.
+	NilPair *schema.Pair `json:"nil_pair,omitempty"`
+	// Vstring holds the value of the "vstring" field.
+	Vstring schema.VString `json:"vstring,omitempty"`
+	// Triple holds the value of the "triple" field.
+	Triple schema.Triple `json:"triple,omitempty"`
+	// BigInt holds the value of the "big_int" field.
+	BigInt schema.BigInt `json:"big_int,omitempty"`
+	// PasswordOther holds the value of the "password_other" field.
+	PasswordOther schema.Password `json:"-"`
+	file_field    *int
 }
 
 // scanValues returns the types for scanning values from sql.Rows.
@@ -131,26 +160,48 @@ func (*FieldType) scanValues(columns []string) ([]interface{}, error) {
 	values := make([]interface{}, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case fieldtype.FieldIP:
-			values[i] = &[]byte{}
-		case fieldtype.FieldLink, fieldtype.FieldLinkOther, fieldtype.FieldNullLink:
-			values[i] = &schema.Link{}
+		case fieldtype.FieldNullLink:
+			values[i] = &sql.NullScanner{S: new(schema.Link)}
+		case fieldtype.FieldNilPair:
+			values[i] = &sql.NullScanner{S: new(schema.Pair)}
+		case fieldtype.FieldStringScanner:
+			values[i] = &sql.NullScanner{S: new(schema.StringScanner)}
+		case fieldtype.FieldNillableUUID:
+			values[i] = &sql.NullScanner{S: new(uuid.UUID)}
+		case fieldtype.FieldRawData, fieldtype.FieldSensitive, fieldtype.FieldIP, fieldtype.FieldStrings:
+			values[i] = new([]byte)
+		case fieldtype.FieldPriority:
+			values[i] = new(role.Priority)
+		case fieldtype.FieldBigInt:
+			values[i] = new(schema.BigInt)
+		case fieldtype.FieldLinkOther, fieldtype.FieldLink:
+			values[i] = new(schema.Link)
 		case fieldtype.FieldMAC:
-			values[i] = &schema.MAC{}
+			values[i] = new(schema.MAC)
+		case fieldtype.FieldPair:
+			values[i] = new(schema.Pair)
+		case fieldtype.FieldPasswordOther:
+			values[i] = new(schema.Password)
+		case fieldtype.FieldStringArray:
+			values[i] = new(schema.Strings)
+		case fieldtype.FieldTriple:
+			values[i] = new(schema.Triple)
+		case fieldtype.FieldVstring:
+			values[i] = new(schema.VString)
 		case fieldtype.FieldActive, fieldtype.FieldNullActive, fieldtype.FieldDeleted:
-			values[i] = &sql.NullBool{}
+			values[i] = new(sql.NullBool)
 		case fieldtype.FieldOptionalFloat, fieldtype.FieldOptionalFloat32, fieldtype.FieldDecimal, fieldtype.FieldSchemaFloat, fieldtype.FieldSchemaFloat32, fieldtype.FieldNullFloat:
-			values[i] = &sql.NullFloat64{}
+			values[i] = new(sql.NullFloat64)
 		case fieldtype.FieldID, fieldtype.FieldInt, fieldtype.FieldInt8, fieldtype.FieldInt16, fieldtype.FieldInt32, fieldtype.FieldInt64, fieldtype.FieldOptionalInt, fieldtype.FieldOptionalInt8, fieldtype.FieldOptionalInt16, fieldtype.FieldOptionalInt32, fieldtype.FieldOptionalInt64, fieldtype.FieldNillableInt, fieldtype.FieldNillableInt8, fieldtype.FieldNillableInt16, fieldtype.FieldNillableInt32, fieldtype.FieldNillableInt64, fieldtype.FieldValidateOptionalInt32, fieldtype.FieldOptionalUint, fieldtype.FieldOptionalUint8, fieldtype.FieldOptionalUint16, fieldtype.FieldOptionalUint32, fieldtype.FieldOptionalUint64, fieldtype.FieldDuration, fieldtype.FieldNullInt64, fieldtype.FieldSchemaInt, fieldtype.FieldSchemaInt8, fieldtype.FieldSchemaInt64:
-			values[i] = &sql.NullInt64{}
-		case fieldtype.FieldState, fieldtype.FieldDir, fieldtype.FieldNdir, fieldtype.FieldStr, fieldtype.FieldNullStr, fieldtype.FieldRole:
-			values[i] = &sql.NullString{}
+			values[i] = new(sql.NullInt64)
+		case fieldtype.FieldState, fieldtype.FieldPassword, fieldtype.FieldDir, fieldtype.FieldNdir, fieldtype.FieldStr, fieldtype.FieldNullStr, fieldtype.FieldRole:
+			values[i] = new(sql.NullString)
 		case fieldtype.FieldDatetime, fieldtype.FieldDeletedAt:
-			values[i] = &sql.NullTime{}
+			values[i] = new(sql.NullTime)
 		case fieldtype.FieldUUID:
-			values[i] = &uuid.UUID{}
+			values[i] = new(uuid.UUID)
 		case fieldtype.ForeignKeys[0]: // file_field
-			values[i] = &sql.NullInt64{}
+			values[i] = new(sql.NullInt64)
 		default:
 			return nil, fmt.Errorf("unexpected column %q for type FieldType", columns[i])
 		}
@@ -303,12 +354,6 @@ func (ft *FieldType) assignValues(columns []string, values []interface{}) error 
 			} else if value.Valid {
 				ft.OptionalUint64 = uint64(value.Int64)
 			}
-		case fieldtype.FieldDuration:
-			if value, ok := values[i].(*sql.NullInt64); !ok {
-				return fmt.Errorf("unexpected type %T for field duration", values[i])
-			} else if value.Valid {
-				ft.Duration = time.Duration(value.Int64)
-			}
 		case fieldtype.FieldState:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field state", values[i])
@@ -339,6 +384,43 @@ func (ft *FieldType) assignValues(columns []string, values []interface{}) error 
 			} else if value.Valid {
 				ft.Decimal = value.Float64
 			}
+		case fieldtype.FieldLinkOther:
+			if value, ok := values[i].(*schema.Link); !ok {
+				return fmt.Errorf("unexpected type %T for field link_other", values[i])
+			} else if value != nil {
+				ft.LinkOther = value
+			}
+		case fieldtype.FieldMAC:
+			if value, ok := values[i].(*schema.MAC); !ok {
+				return fmt.Errorf("unexpected type %T for field mac", values[i])
+			} else if value != nil {
+				ft.MAC = *value
+			}
+		case fieldtype.FieldStringArray:
+			if value, ok := values[i].(*schema.Strings); !ok {
+				return fmt.Errorf("unexpected type %T for field string_array", values[i])
+			} else if value != nil {
+				ft.StringArray = *value
+			}
+		case fieldtype.FieldPassword:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field password", values[i])
+			} else if value.Valid {
+				ft.Password = value.String
+			}
+		case fieldtype.FieldStringScanner:
+			if value, ok := values[i].(*sql.NullScanner); !ok {
+				return fmt.Errorf("unexpected type %T for field string_scanner", values[i])
+			} else if value.Valid {
+				ft.StringScanner = new(schema.StringScanner)
+				*ft.StringScanner = *value.S.(*schema.StringScanner)
+			}
+		case fieldtype.FieldDuration:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field duration", values[i])
+			} else if value.Valid {
+				ft.Duration = time.Duration(value.Int64)
+			}
 		case fieldtype.FieldDir:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field dir", values[i])
@@ -355,13 +437,13 @@ func (ft *FieldType) assignValues(columns []string, values []interface{}) error 
 		case fieldtype.FieldStr:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field str", values[i])
-			} else if value != nil {
+			} else if value.Valid {
 				ft.Str = *value
 			}
 		case fieldtype.FieldNullStr:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field null_str", values[i])
-			} else if value != nil {
+			} else if value.Valid {
 				ft.NullStr = value
 			}
 		case fieldtype.FieldLink:
@@ -370,17 +452,11 @@ func (ft *FieldType) assignValues(columns []string, values []interface{}) error 
 			} else if value != nil {
 				ft.Link = *value
 			}
-		case fieldtype.FieldLinkOther:
-			if value, ok := values[i].(*schema.Link); !ok {
-				return fmt.Errorf("unexpected type %T for field link_other", values[i])
-			} else if value != nil {
-				ft.LinkOther = *value
-			}
 		case fieldtype.FieldNullLink:
-			if value, ok := values[i].(*schema.Link); !ok {
+			if value, ok := values[i].(*sql.NullScanner); !ok {
 				return fmt.Errorf("unexpected type %T for field null_link", values[i])
-			} else if value != nil {
-				ft.NullLink = value
+			} else if value.Valid {
+				ft.NullLink = value.S.(*schema.Link)
 			}
 		case fieldtype.FieldActive:
 			if value, ok := values[i].(*sql.NullBool); !ok {
@@ -398,14 +474,26 @@ func (ft *FieldType) assignValues(columns []string, values []interface{}) error 
 		case fieldtype.FieldDeleted:
 			if value, ok := values[i].(*sql.NullBool); !ok {
 				return fmt.Errorf("unexpected type %T for field deleted", values[i])
-			} else if value != nil {
-				ft.Deleted = *value
+			} else if value.Valid {
+				ft.Deleted = value
 			}
 		case fieldtype.FieldDeletedAt:
 			if value, ok := values[i].(*sql.NullTime); !ok {
 				return fmt.Errorf("unexpected type %T for field deleted_at", values[i])
+			} else if value.Valid {
+				ft.DeletedAt = value
+			}
+		case fieldtype.FieldRawData:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field raw_data", values[i])
 			} else if value != nil {
-				ft.DeletedAt = *value
+				ft.RawData = *value
+			}
+		case fieldtype.FieldSensitive:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field sensitive", values[i])
+			} else if value != nil {
+				ft.Sensitive = *value
 			}
 		case fieldtype.FieldIP:
 			if value, ok := values[i].(*[]byte); !ok {
@@ -416,8 +504,8 @@ func (ft *FieldType) assignValues(columns []string, values []interface{}) error 
 		case fieldtype.FieldNullInt64:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
 				return fmt.Errorf("unexpected type %T for field null_int64", values[i])
-			} else if value != nil {
-				ft.NullInt64 = *value
+			} else if value.Valid {
+				ft.NullInt64 = value
 			}
 		case fieldtype.FieldSchemaInt:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
@@ -452,8 +540,8 @@ func (ft *FieldType) assignValues(columns []string, values []interface{}) error 
 		case fieldtype.FieldNullFloat:
 			if value, ok := values[i].(*sql.NullFloat64); !ok {
 				return fmt.Errorf("unexpected type %T for field null_float", values[i])
-			} else if value != nil {
-				ft.NullFloat = *value
+			} else if value.Valid {
+				ft.NullFloat = value
 			}
 		case fieldtype.FieldRole:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -461,17 +549,68 @@ func (ft *FieldType) assignValues(columns []string, values []interface{}) error 
 			} else if value.Valid {
 				ft.Role = role.Role(value.String)
 			}
-		case fieldtype.FieldMAC:
-			if value, ok := values[i].(*schema.MAC); !ok {
-				return fmt.Errorf("unexpected type %T for field mac", values[i])
+		case fieldtype.FieldPriority:
+			if value, ok := values[i].(*role.Priority); !ok {
+				return fmt.Errorf("unexpected type %T for field priority", values[i])
 			} else if value != nil {
-				ft.MAC = *value
+				ft.Priority = *value
 			}
 		case fieldtype.FieldUUID:
 			if value, ok := values[i].(*uuid.UUID); !ok {
 				return fmt.Errorf("unexpected type %T for field uuid", values[i])
 			} else if value != nil {
 				ft.UUID = *value
+			}
+		case fieldtype.FieldNillableUUID:
+			if value, ok := values[i].(*sql.NullScanner); !ok {
+				return fmt.Errorf("unexpected type %T for field nillable_uuid", values[i])
+			} else if value.Valid {
+				ft.NillableUUID = new(uuid.UUID)
+				*ft.NillableUUID = *value.S.(*uuid.UUID)
+			}
+		case fieldtype.FieldStrings:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field strings", values[i])
+			} else if value != nil && len(*value) > 0 {
+				if err := json.Unmarshal(*value, &ft.Strings); err != nil {
+					return fmt.Errorf("unmarshal field strings: %w", err)
+				}
+			}
+		case fieldtype.FieldPair:
+			if value, ok := values[i].(*schema.Pair); !ok {
+				return fmt.Errorf("unexpected type %T for field pair", values[i])
+			} else if value != nil {
+				ft.Pair = *value
+			}
+		case fieldtype.FieldNilPair:
+			if value, ok := values[i].(*sql.NullScanner); !ok {
+				return fmt.Errorf("unexpected type %T for field nil_pair", values[i])
+			} else if value.Valid {
+				ft.NilPair = value.S.(*schema.Pair)
+			}
+		case fieldtype.FieldVstring:
+			if value, ok := values[i].(*schema.VString); !ok {
+				return fmt.Errorf("unexpected type %T for field vstring", values[i])
+			} else if value != nil {
+				ft.Vstring = *value
+			}
+		case fieldtype.FieldTriple:
+			if value, ok := values[i].(*schema.Triple); !ok {
+				return fmt.Errorf("unexpected type %T for field triple", values[i])
+			} else if value != nil {
+				ft.Triple = *value
+			}
+		case fieldtype.FieldBigInt:
+			if value, ok := values[i].(*schema.BigInt); !ok {
+				return fmt.Errorf("unexpected type %T for field big_int", values[i])
+			} else if value != nil {
+				ft.BigInt = *value
+			}
+		case fieldtype.FieldPasswordOther:
+			if value, ok := values[i].(*schema.Password); !ok {
+				return fmt.Errorf("unexpected type %T for field password_other", values[i])
+			} else if value != nil {
+				ft.PasswordOther = *value
 			}
 		case fieldtype.ForeignKeys[0]:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
@@ -560,8 +699,6 @@ func (ft *FieldType) String() string {
 	builder.WriteString(fmt.Sprintf("%v", ft.OptionalUint32))
 	builder.WriteString(", optional_uint64=")
 	builder.WriteString(fmt.Sprintf("%v", ft.OptionalUint64))
-	builder.WriteString(", duration=")
-	builder.WriteString(fmt.Sprintf("%v", ft.Duration))
 	builder.WriteString(", state=")
 	builder.WriteString(fmt.Sprintf("%v", ft.State))
 	builder.WriteString(", optional_float=")
@@ -572,6 +709,19 @@ func (ft *FieldType) String() string {
 	builder.WriteString(ft.Datetime.Format(time.ANSIC))
 	builder.WriteString(", decimal=")
 	builder.WriteString(fmt.Sprintf("%v", ft.Decimal))
+	builder.WriteString(", link_other=")
+	builder.WriteString(fmt.Sprintf("%v", ft.LinkOther))
+	builder.WriteString(", mac=")
+	builder.WriteString(fmt.Sprintf("%v", ft.MAC))
+	builder.WriteString(", string_array=")
+	builder.WriteString(fmt.Sprintf("%v", ft.StringArray))
+	builder.WriteString(", password=<sensitive>")
+	if v := ft.StringScanner; v != nil {
+		builder.WriteString(", string_scanner=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
+	builder.WriteString(", duration=")
+	builder.WriteString(fmt.Sprintf("%v", ft.Duration))
 	builder.WriteString(", dir=")
 	builder.WriteString(fmt.Sprintf("%v", ft.Dir))
 	if v := ft.Ndir; v != nil {
@@ -586,8 +736,6 @@ func (ft *FieldType) String() string {
 	}
 	builder.WriteString(", link=")
 	builder.WriteString(fmt.Sprintf("%v", ft.Link))
-	builder.WriteString(", link_other=")
-	builder.WriteString(fmt.Sprintf("%v", ft.LinkOther))
 	if v := ft.NullLink; v != nil {
 		builder.WriteString(", null_link=")
 		builder.WriteString(fmt.Sprintf("%v", *v))
@@ -598,10 +746,15 @@ func (ft *FieldType) String() string {
 		builder.WriteString(", null_active=")
 		builder.WriteString(fmt.Sprintf("%v", *v))
 	}
-	builder.WriteString(", deleted=")
-	builder.WriteString(fmt.Sprintf("%v", ft.Deleted))
+	if v := ft.Deleted; v != nil {
+		builder.WriteString(", deleted=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
 	builder.WriteString(", deleted_at=")
 	builder.WriteString(fmt.Sprintf("%v", ft.DeletedAt))
+	builder.WriteString(", raw_data=")
+	builder.WriteString(fmt.Sprintf("%v", ft.RawData))
+	builder.WriteString(", sensitive=<sensitive>")
 	builder.WriteString(", ip=")
 	builder.WriteString(fmt.Sprintf("%v", ft.IP))
 	builder.WriteString(", null_int64=")
@@ -620,10 +773,29 @@ func (ft *FieldType) String() string {
 	builder.WriteString(fmt.Sprintf("%v", ft.NullFloat))
 	builder.WriteString(", role=")
 	builder.WriteString(fmt.Sprintf("%v", ft.Role))
-	builder.WriteString(", mac=")
-	builder.WriteString(fmt.Sprintf("%v", ft.MAC))
+	builder.WriteString(", priority=")
+	builder.WriteString(fmt.Sprintf("%v", ft.Priority))
 	builder.WriteString(", uuid=")
 	builder.WriteString(fmt.Sprintf("%v", ft.UUID))
+	if v := ft.NillableUUID; v != nil {
+		builder.WriteString(", nillable_uuid=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
+	builder.WriteString(", strings=")
+	builder.WriteString(fmt.Sprintf("%v", ft.Strings))
+	builder.WriteString(", pair=")
+	builder.WriteString(fmt.Sprintf("%v", ft.Pair))
+	if v := ft.NilPair; v != nil {
+		builder.WriteString(", nil_pair=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
+	builder.WriteString(", vstring=")
+	builder.WriteString(fmt.Sprintf("%v", ft.Vstring))
+	builder.WriteString(", triple=")
+	builder.WriteString(fmt.Sprintf("%v", ft.Triple))
+	builder.WriteString(", big_int=")
+	builder.WriteString(fmt.Sprintf("%v", ft.BigInt))
+	builder.WriteString(", password_other=<sensitive>")
 	builder.WriteByte(')')
 	return builder.String()
 }

@@ -14,8 +14,9 @@ import (
 var (
 	// BlobsColumns holds the columns for the "blobs" table.
 	BlobsColumns = []*schema.Column{
-		{Name: "id", Type: field.TypeUUID, Unique: true},
+		{Name: "id", Type: field.TypeUUID, Unique: true, Default: "uuid_generate_v4()"},
 		{Name: "uuid", Type: field.TypeUUID, Unique: true},
+		{Name: "count", Type: field.TypeInt, Default: 0},
 		{Name: "blob_parent", Type: field.TypeUUID, Unique: true, Nullable: true},
 	}
 	// BlobsTable holds the schema information for the "blobs" table.
@@ -26,7 +27,7 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "blobs_blobs_parent",
-				Columns:    []*schema.Column{BlobsColumns[2]},
+				Columns:    []*schema.Column{BlobsColumns[3]},
 				RefColumns: []*schema.Column{BlobsColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
@@ -54,16 +55,54 @@ var (
 			},
 		},
 	}
+	// DevicesColumns holds the columns for the "devices" table.
+	DevicesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeBytes, Size: 64},
+		{Name: "device_active_session", Type: field.TypeBytes, Nullable: true, Size: 64},
+	}
+	// DevicesTable holds the schema information for the "devices" table.
+	DevicesTable = &schema.Table{
+		Name:       "devices",
+		Columns:    DevicesColumns,
+		PrimaryKey: []*schema.Column{DevicesColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "devices_sessions_active_session",
+				Columns:    []*schema.Column{DevicesColumns[1]},
+				RefColumns: []*schema.Column{SessionsColumns[0]},
+				OnDelete:   schema.SetNull,
+			},
+		},
+	}
+	// DocsColumns holds the columns for the "docs" table.
+	DocsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString, Unique: true, Size: 36},
+		{Name: "text", Type: field.TypeString, Nullable: true},
+		{Name: "doc_children", Type: field.TypeString, Nullable: true, Size: 36},
+	}
+	// DocsTable holds the schema information for the "docs" table.
+	DocsTable = &schema.Table{
+		Name:       "docs",
+		Columns:    DocsColumns,
+		PrimaryKey: []*schema.Column{DocsColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "docs_docs_children",
+				Columns:    []*schema.Column{DocsColumns[2]},
+				RefColumns: []*schema.Column{DocsColumns[0]},
+				OnDelete:   schema.SetNull,
+			},
+		},
+	}
 	// GroupsColumns holds the columns for the "groups" table.
 	GroupsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt, Increment: true},
 	}
 	// GroupsTable holds the schema information for the "groups" table.
 	GroupsTable = &schema.Table{
-		Name:        "groups",
-		Columns:     GroupsColumns,
-		PrimaryKey:  []*schema.Column{GroupsColumns[0]},
-		ForeignKeys: []*schema.ForeignKey{},
+		Name:       "groups",
+		Columns:    GroupsColumns,
+		PrimaryKey: []*schema.Column{GroupsColumns[0]},
 	}
 	// MixinIdsColumns holds the columns for the "mixin_ids" table.
 	MixinIdsColumns = []*schema.Column{
@@ -73,10 +112,9 @@ var (
 	}
 	// MixinIdsTable holds the schema information for the "mixin_ids" table.
 	MixinIdsTable = &schema.Table{
-		Name:        "mixin_ids",
-		Columns:     MixinIdsColumns,
-		PrimaryKey:  []*schema.Column{MixinIdsColumns[0]},
-		ForeignKeys: []*schema.ForeignKey{},
+		Name:       "mixin_ids",
+		Columns:    MixinIdsColumns,
+		PrimaryKey: []*schema.Column{MixinIdsColumns[0]},
 		Indexes: []*schema.Index{
 			{
 				Name:    "mixinid_id",
@@ -97,6 +135,26 @@ var (
 				Name:    "mixinid_id_mixin_field_some_field",
 				Unique:  false,
 				Columns: []*schema.Column{MixinIdsColumns[0], MixinIdsColumns[2], MixinIdsColumns[1]},
+			},
+		},
+	}
+	// NotesColumns holds the columns for the "notes" table.
+	NotesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeString, Unique: true, Size: 36},
+		{Name: "text", Type: field.TypeString, Nullable: true},
+		{Name: "note_children", Type: field.TypeString, Nullable: true, Size: 36},
+	}
+	// NotesTable holds the schema information for the "notes" table.
+	NotesTable = &schema.Table{
+		Name:       "notes",
+		Columns:    NotesColumns,
+		PrimaryKey: []*schema.Column{NotesColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "notes_notes_children",
+				Columns:    []*schema.Column{NotesColumns[2]},
+				RefColumns: []*schema.Column{NotesColumns[0]},
+				OnDelete:   schema.SetNull,
 			},
 		},
 	}
@@ -122,6 +180,25 @@ var (
 				Symbol:     "pets_users_pets",
 				Columns:    []*schema.Column{PetsColumns[2]},
 				RefColumns: []*schema.Column{UsersColumns[0]},
+				OnDelete:   schema.SetNull,
+			},
+		},
+	}
+	// SessionsColumns holds the columns for the "sessions" table.
+	SessionsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeBytes, Size: 64},
+		{Name: "device_sessions", Type: field.TypeBytes, Nullable: true, Size: 64},
+	}
+	// SessionsTable holds the schema information for the "sessions" table.
+	SessionsTable = &schema.Table{
+		Name:       "sessions",
+		Columns:    SessionsColumns,
+		PrimaryKey: []*schema.Column{SessionsColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "sessions_devices_sessions",
+				Columns:    []*schema.Column{SessionsColumns[1]},
+				RefColumns: []*schema.Column{DevicesColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
 		},
@@ -224,9 +301,13 @@ var (
 	Tables = []*schema.Table{
 		BlobsTable,
 		CarsTable,
+		DevicesTable,
+		DocsTable,
 		GroupsTable,
 		MixinIdsTable,
+		NotesTable,
 		PetsTable,
+		SessionsTable,
 		UsersTable,
 		BlobLinksTable,
 		GroupUsersTable,
@@ -237,8 +318,12 @@ var (
 func init() {
 	BlobsTable.ForeignKeys[0].RefTable = BlobsTable
 	CarsTable.ForeignKeys[0].RefTable = PetsTable
+	DevicesTable.ForeignKeys[0].RefTable = SessionsTable
+	DocsTable.ForeignKeys[0].RefTable = DocsTable
+	NotesTable.ForeignKeys[0].RefTable = NotesTable
 	PetsTable.ForeignKeys[0].RefTable = PetsTable
 	PetsTable.ForeignKeys[1].RefTable = UsersTable
+	SessionsTable.ForeignKeys[0].RefTable = DevicesTable
 	UsersTable.ForeignKeys[0].RefTable = UsersTable
 	BlobLinksTable.ForeignKeys[0].RefTable = BlobsTable
 	BlobLinksTable.ForeignKeys[1].RefTable = BlobsTable

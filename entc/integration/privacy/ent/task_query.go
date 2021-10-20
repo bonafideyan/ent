@@ -366,8 +366,8 @@ func (tq *TaskQuery) GroupBy(field string, fields ...string) *TaskGroupBy {
 //		Select(task.FieldTitle).
 //		Scan(ctx, &v)
 //
-func (tq *TaskQuery) Select(field string, fields ...string) *TaskSelect {
-	tq.fields = append([]string{field}, fields...)
+func (tq *TaskQuery) Select(fields ...string) *TaskSelect {
+	tq.fields = append(tq.fields, fields...)
 	return &TaskSelect{TaskQuery: tq}
 }
 
@@ -451,7 +451,7 @@ func (tq *TaskQuery) sqlAll(ctx context.Context) ([]*Task, error) {
 				s.Where(sql.InValues(task.TeamsPrimaryKey[0], fks...))
 			},
 			ScanValues: func() [2]interface{} {
-				return [2]interface{}{&sql.NullInt64{}, &sql.NullInt64{}}
+				return [2]interface{}{new(sql.NullInt64), new(sql.NullInt64)}
 			},
 			Assign: func(out, in interface{}) error {
 				eout, ok := out.(*sql.NullInt64)
@@ -528,6 +528,10 @@ func (tq *TaskQuery) sqlAll(ctx context.Context) ([]*Task, error) {
 
 func (tq *TaskQuery) sqlCount(ctx context.Context) (int, error) {
 	_spec := tq.querySpec()
+	_spec.Node.Columns = tq.fields
+	if len(tq.fields) > 0 {
+		_spec.Unique = tq.unique != nil && *tq.unique
+	}
 	return sqlgraph.CountNodes(ctx, tq.driver, _spec)
 }
 
@@ -580,7 +584,7 @@ func (tq *TaskQuery) querySpec() *sqlgraph.QuerySpec {
 	if ps := tq.order; len(ps) > 0 {
 		_spec.Order = func(selector *sql.Selector) {
 			for i := range ps {
-				ps[i](selector, task.ValidColumn)
+				ps[i](selector)
 			}
 		}
 	}
@@ -590,16 +594,23 @@ func (tq *TaskQuery) querySpec() *sqlgraph.QuerySpec {
 func (tq *TaskQuery) sqlQuery(ctx context.Context) *sql.Selector {
 	builder := sql.Dialect(tq.driver.Dialect())
 	t1 := builder.Table(task.Table)
-	selector := builder.Select(t1.Columns(task.Columns...)...).From(t1)
+	columns := tq.fields
+	if len(columns) == 0 {
+		columns = task.Columns
+	}
+	selector := builder.Select(t1.Columns(columns...)...).From(t1)
 	if tq.sql != nil {
 		selector = tq.sql
-		selector.Select(selector.Columns(task.Columns...)...)
+		selector.Select(selector.Columns(columns...)...)
+	}
+	if tq.unique != nil && *tq.unique {
+		selector.Distinct()
 	}
 	for _, p := range tq.predicates {
 		p(selector)
 	}
 	for _, p := range tq.order {
-		p(selector, task.ValidColumn)
+		p(selector)
 	}
 	if offset := tq.offset; offset != nil {
 		// limit is mandatory for offset clause. We start
@@ -861,13 +872,24 @@ func (tgb *TaskGroupBy) sqlScan(ctx context.Context, v interface{}) error {
 }
 
 func (tgb *TaskGroupBy) sqlQuery() *sql.Selector {
-	selector := tgb.sql
-	columns := make([]string, 0, len(tgb.fields)+len(tgb.fns))
-	columns = append(columns, tgb.fields...)
+	selector := tgb.sql.Select()
+	aggregation := make([]string, 0, len(tgb.fns))
 	for _, fn := range tgb.fns {
-		columns = append(columns, fn(selector, task.ValidColumn))
+		aggregation = append(aggregation, fn(selector))
 	}
-	return selector.Select(columns...).GroupBy(tgb.fields...)
+	// If no columns were selected in a custom aggregation function, the default
+	// selection is the fields used for "group-by", and the aggregation functions.
+	if len(selector.SelectedColumns()) == 0 {
+		columns := make([]string, 0, len(tgb.fields)+len(tgb.fns))
+		for _, f := range tgb.fields {
+			columns = append(columns, selector.C(f))
+		}
+		for _, c := range aggregation {
+			columns = append(columns, c)
+		}
+		selector.Select(columns...)
+	}
+	return selector.GroupBy(selector.Columns(tgb.fields...)...)
 }
 
 // TaskSelect is the builder for selecting fields of Task entities.
@@ -1083,16 +1105,10 @@ func (ts *TaskSelect) BoolX(ctx context.Context) bool {
 
 func (ts *TaskSelect) sqlScan(ctx context.Context, v interface{}) error {
 	rows := &sql.Rows{}
-	query, args := ts.sqlQuery().Query()
+	query, args := ts.sql.Query()
 	if err := ts.driver.Query(ctx, query, args, rows); err != nil {
 		return err
 	}
 	defer rows.Close()
 	return sql.ScanSlice(rows, v)
-}
-
-func (ts *TaskSelect) sqlQuery() sql.Querier {
-	selector := ts.sql
-	selector.Select(selector.Columns(ts.fields...)...)
-	return selector
 }

@@ -365,8 +365,8 @@ func (tq *TeamQuery) GroupBy(field string, fields ...string) *TeamGroupBy {
 //		Select(team.FieldName).
 //		Scan(ctx, &v)
 //
-func (tq *TeamQuery) Select(field string, fields ...string) *TeamSelect {
-	tq.fields = append([]string{field}, fields...)
+func (tq *TeamQuery) Select(fields ...string) *TeamSelect {
+	tq.fields = append(tq.fields, fields...)
 	return &TeamSelect{TeamQuery: tq}
 }
 
@@ -443,7 +443,7 @@ func (tq *TeamQuery) sqlAll(ctx context.Context) ([]*Team, error) {
 				s.Where(sql.InValues(team.TasksPrimaryKey[1], fks...))
 			},
 			ScanValues: func() [2]interface{} {
-				return [2]interface{}{&sql.NullInt64{}, &sql.NullInt64{}}
+				return [2]interface{}{new(sql.NullInt64), new(sql.NullInt64)}
 			},
 			Assign: func(out, in interface{}) error {
 				eout, ok := out.(*sql.NullInt64)
@@ -508,7 +508,7 @@ func (tq *TeamQuery) sqlAll(ctx context.Context) ([]*Team, error) {
 				s.Where(sql.InValues(team.UsersPrimaryKey[1], fks...))
 			},
 			ScanValues: func() [2]interface{} {
-				return [2]interface{}{&sql.NullInt64{}, &sql.NullInt64{}}
+				return [2]interface{}{new(sql.NullInt64), new(sql.NullInt64)}
 			},
 			Assign: func(out, in interface{}) error {
 				eout, ok := out.(*sql.NullInt64)
@@ -556,6 +556,10 @@ func (tq *TeamQuery) sqlAll(ctx context.Context) ([]*Team, error) {
 
 func (tq *TeamQuery) sqlCount(ctx context.Context) (int, error) {
 	_spec := tq.querySpec()
+	_spec.Node.Columns = tq.fields
+	if len(tq.fields) > 0 {
+		_spec.Unique = tq.unique != nil && *tq.unique
+	}
 	return sqlgraph.CountNodes(ctx, tq.driver, _spec)
 }
 
@@ -608,7 +612,7 @@ func (tq *TeamQuery) querySpec() *sqlgraph.QuerySpec {
 	if ps := tq.order; len(ps) > 0 {
 		_spec.Order = func(selector *sql.Selector) {
 			for i := range ps {
-				ps[i](selector, team.ValidColumn)
+				ps[i](selector)
 			}
 		}
 	}
@@ -618,16 +622,23 @@ func (tq *TeamQuery) querySpec() *sqlgraph.QuerySpec {
 func (tq *TeamQuery) sqlQuery(ctx context.Context) *sql.Selector {
 	builder := sql.Dialect(tq.driver.Dialect())
 	t1 := builder.Table(team.Table)
-	selector := builder.Select(t1.Columns(team.Columns...)...).From(t1)
+	columns := tq.fields
+	if len(columns) == 0 {
+		columns = team.Columns
+	}
+	selector := builder.Select(t1.Columns(columns...)...).From(t1)
 	if tq.sql != nil {
 		selector = tq.sql
-		selector.Select(selector.Columns(team.Columns...)...)
+		selector.Select(selector.Columns(columns...)...)
+	}
+	if tq.unique != nil && *tq.unique {
+		selector.Distinct()
 	}
 	for _, p := range tq.predicates {
 		p(selector)
 	}
 	for _, p := range tq.order {
-		p(selector, team.ValidColumn)
+		p(selector)
 	}
 	if offset := tq.offset; offset != nil {
 		// limit is mandatory for offset clause. We start
@@ -889,13 +900,24 @@ func (tgb *TeamGroupBy) sqlScan(ctx context.Context, v interface{}) error {
 }
 
 func (tgb *TeamGroupBy) sqlQuery() *sql.Selector {
-	selector := tgb.sql
-	columns := make([]string, 0, len(tgb.fields)+len(tgb.fns))
-	columns = append(columns, tgb.fields...)
+	selector := tgb.sql.Select()
+	aggregation := make([]string, 0, len(tgb.fns))
 	for _, fn := range tgb.fns {
-		columns = append(columns, fn(selector, team.ValidColumn))
+		aggregation = append(aggregation, fn(selector))
 	}
-	return selector.Select(columns...).GroupBy(tgb.fields...)
+	// If no columns were selected in a custom aggregation function, the default
+	// selection is the fields used for "group-by", and the aggregation functions.
+	if len(selector.SelectedColumns()) == 0 {
+		columns := make([]string, 0, len(tgb.fields)+len(tgb.fns))
+		for _, f := range tgb.fields {
+			columns = append(columns, selector.C(f))
+		}
+		for _, c := range aggregation {
+			columns = append(columns, c)
+		}
+		selector.Select(columns...)
+	}
+	return selector.GroupBy(selector.Columns(tgb.fields...)...)
 }
 
 // TeamSelect is the builder for selecting fields of Team entities.
@@ -1111,16 +1133,10 @@ func (ts *TeamSelect) BoolX(ctx context.Context) bool {
 
 func (ts *TeamSelect) sqlScan(ctx context.Context, v interface{}) error {
 	rows := &sql.Rows{}
-	query, args := ts.sqlQuery().Query()
+	query, args := ts.sql.Query()
 	if err := ts.driver.Query(ctx, query, args, rows); err != nil {
 		return err
 	}
 	defer rows.Close()
 	return sql.ScanSlice(rows, v)
-}
-
-func (ts *TeamSelect) sqlQuery() sql.Querier {
-	selector := ts.sql
-	selector.Select(selector.Columns(ts.fields...)...)
-	return selector
 }

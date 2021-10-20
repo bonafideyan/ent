@@ -8,6 +8,7 @@ package ent
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"entgo.io/ent/dialect/sql"
@@ -17,6 +18,7 @@ import (
 	"entgo.io/ent/entc/integration/edgefield/ent/metadata"
 	"entgo.io/ent/entc/integration/edgefield/ent/pet"
 	"entgo.io/ent/entc/integration/edgefield/ent/predicate"
+	"entgo.io/ent/entc/integration/edgefield/ent/rental"
 	"entgo.io/ent/entc/integration/edgefield/ent/user"
 	"entgo.io/ent/schema/field"
 )
@@ -28,15 +30,14 @@ type UserUpdate struct {
 	mutation *UserMutation
 }
 
-// Where adds a new predicate for the UserUpdate builder.
+// Where appends a list predicates to the UserUpdate builder.
 func (uu *UserUpdate) Where(ps ...predicate.User) *UserUpdate {
-	uu.mutation.predicates = append(uu.mutation.predicates, ps...)
+	uu.mutation.Where(ps...)
 	return uu
 }
 
 // SetParentID sets the "parent_id" field.
 func (uu *UserUpdate) SetParentID(i int) *UserUpdate {
-	uu.mutation.ResetParentID()
 	uu.mutation.SetParentID(i)
 	return uu
 }
@@ -57,7 +58,6 @@ func (uu *UserUpdate) ClearParentID() *UserUpdate {
 
 // SetSpouseID sets the "spouse_id" field.
 func (uu *UserUpdate) SetSpouseID(i int) *UserUpdate {
-	uu.mutation.ResetSpouseID()
 	uu.mutation.SetSpouseID(i)
 	return uu
 }
@@ -169,6 +169,21 @@ func (uu *UserUpdate) AddInfo(i ...*Info) *UserUpdate {
 	return uu.AddInfoIDs(ids...)
 }
 
+// AddRentalIDs adds the "rentals" edge to the Rental entity by IDs.
+func (uu *UserUpdate) AddRentalIDs(ids ...int) *UserUpdate {
+	uu.mutation.AddRentalIDs(ids...)
+	return uu
+}
+
+// AddRentals adds the "rentals" edges to the Rental entity.
+func (uu *UserUpdate) AddRentals(r ...*Rental) *UserUpdate {
+	ids := make([]int, len(r))
+	for i := range r {
+		ids[i] = r[i].ID
+	}
+	return uu.AddRentalIDs(ids...)
+}
+
 // Mutation returns the UserMutation object of the builder.
 func (uu *UserUpdate) Mutation() *UserMutation {
 	return uu.mutation
@@ -261,6 +276,27 @@ func (uu *UserUpdate) RemoveInfo(i ...*Info) *UserUpdate {
 	return uu.RemoveInfoIDs(ids...)
 }
 
+// ClearRentals clears all "rentals" edges to the Rental entity.
+func (uu *UserUpdate) ClearRentals() *UserUpdate {
+	uu.mutation.ClearRentals()
+	return uu
+}
+
+// RemoveRentalIDs removes the "rentals" edge to Rental entities by IDs.
+func (uu *UserUpdate) RemoveRentalIDs(ids ...int) *UserUpdate {
+	uu.mutation.RemoveRentalIDs(ids...)
+	return uu
+}
+
+// RemoveRentals removes "rentals" edges to Rental entities.
+func (uu *UserUpdate) RemoveRentals(r ...*Rental) *UserUpdate {
+	ids := make([]int, len(r))
+	for i := range r {
+		ids[i] = r[i].ID
+	}
+	return uu.RemoveRentalIDs(ids...)
+}
+
 // Save executes the query and returns the number of nodes affected by the update operation.
 func (uu *UserUpdate) Save(ctx context.Context) (int, error) {
 	var (
@@ -281,6 +317,9 @@ func (uu *UserUpdate) Save(ctx context.Context) (int, error) {
 			return affected, err
 		})
 		for i := len(uu.hooks) - 1; i >= 0; i-- {
+			if uu.hooks[i] == nil {
+				return 0, fmt.Errorf("ent: uninitialized hook (forgotten import ent/runtime?)")
+			}
 			mut = uu.hooks[i](mut)
 		}
 		if _, err := mut.Mutate(ctx, uu.mutation); err != nil {
@@ -632,11 +671,65 @@ func (uu *UserUpdate) sqlSave(ctx context.Context) (n int, err error) {
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	if uu.mutation.RentalsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.RentalsTable,
+			Columns: []string{user.RentalsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: &sqlgraph.FieldSpec{
+					Type:   field.TypeInt,
+					Column: rental.FieldID,
+				},
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := uu.mutation.RemovedRentalsIDs(); len(nodes) > 0 && !uu.mutation.RentalsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.RentalsTable,
+			Columns: []string{user.RentalsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: &sqlgraph.FieldSpec{
+					Type:   field.TypeInt,
+					Column: rental.FieldID,
+				},
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := uu.mutation.RentalsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.RentalsTable,
+			Columns: []string{user.RentalsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: &sqlgraph.FieldSpec{
+					Type:   field.TypeInt,
+					Column: rental.FieldID,
+				},
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
 	if n, err = sqlgraph.UpdateNodes(ctx, uu.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{user.Label}
-		} else if cerr, ok := isSQLConstraintError(err); ok {
-			err = cerr
+		} else if sqlgraph.IsConstraintError(err) {
+			err = &ConstraintError{err.Error(), err}
 		}
 		return 0, err
 	}
@@ -653,7 +746,6 @@ type UserUpdateOne struct {
 
 // SetParentID sets the "parent_id" field.
 func (uuo *UserUpdateOne) SetParentID(i int) *UserUpdateOne {
-	uuo.mutation.ResetParentID()
 	uuo.mutation.SetParentID(i)
 	return uuo
 }
@@ -674,7 +766,6 @@ func (uuo *UserUpdateOne) ClearParentID() *UserUpdateOne {
 
 // SetSpouseID sets the "spouse_id" field.
 func (uuo *UserUpdateOne) SetSpouseID(i int) *UserUpdateOne {
-	uuo.mutation.ResetSpouseID()
 	uuo.mutation.SetSpouseID(i)
 	return uuo
 }
@@ -786,6 +877,21 @@ func (uuo *UserUpdateOne) AddInfo(i ...*Info) *UserUpdateOne {
 	return uuo.AddInfoIDs(ids...)
 }
 
+// AddRentalIDs adds the "rentals" edge to the Rental entity by IDs.
+func (uuo *UserUpdateOne) AddRentalIDs(ids ...int) *UserUpdateOne {
+	uuo.mutation.AddRentalIDs(ids...)
+	return uuo
+}
+
+// AddRentals adds the "rentals" edges to the Rental entity.
+func (uuo *UserUpdateOne) AddRentals(r ...*Rental) *UserUpdateOne {
+	ids := make([]int, len(r))
+	for i := range r {
+		ids[i] = r[i].ID
+	}
+	return uuo.AddRentalIDs(ids...)
+}
+
 // Mutation returns the UserMutation object of the builder.
 func (uuo *UserUpdateOne) Mutation() *UserMutation {
 	return uuo.mutation
@@ -878,6 +984,27 @@ func (uuo *UserUpdateOne) RemoveInfo(i ...*Info) *UserUpdateOne {
 	return uuo.RemoveInfoIDs(ids...)
 }
 
+// ClearRentals clears all "rentals" edges to the Rental entity.
+func (uuo *UserUpdateOne) ClearRentals() *UserUpdateOne {
+	uuo.mutation.ClearRentals()
+	return uuo
+}
+
+// RemoveRentalIDs removes the "rentals" edge to Rental entities by IDs.
+func (uuo *UserUpdateOne) RemoveRentalIDs(ids ...int) *UserUpdateOne {
+	uuo.mutation.RemoveRentalIDs(ids...)
+	return uuo
+}
+
+// RemoveRentals removes "rentals" edges to Rental entities.
+func (uuo *UserUpdateOne) RemoveRentals(r ...*Rental) *UserUpdateOne {
+	ids := make([]int, len(r))
+	for i := range r {
+		ids[i] = r[i].ID
+	}
+	return uuo.RemoveRentalIDs(ids...)
+}
+
 // Select allows selecting one or more fields (columns) of the returned entity.
 // The default is selecting all fields defined in the entity schema.
 func (uuo *UserUpdateOne) Select(field string, fields ...string) *UserUpdateOne {
@@ -905,6 +1032,9 @@ func (uuo *UserUpdateOne) Save(ctx context.Context) (*User, error) {
 			return node, err
 		})
 		for i := len(uuo.hooks) - 1; i >= 0; i-- {
+			if uuo.hooks[i] == nil {
+				return nil, fmt.Errorf("ent: uninitialized hook (forgotten import ent/runtime?)")
+			}
 			mut = uuo.hooks[i](mut)
 		}
 		if _, err := mut.Mutate(ctx, uuo.mutation); err != nil {
@@ -949,7 +1079,7 @@ func (uuo *UserUpdateOne) sqlSave(ctx context.Context) (_node *User, err error) 
 	}
 	id, ok := uuo.mutation.ID()
 	if !ok {
-		return nil, &ValidationError{Name: "ID", err: fmt.Errorf("missing User.ID for update")}
+		return nil, &ValidationError{Name: "id", err: errors.New(`ent: missing "User.id" for update`)}
 	}
 	_spec.Node.ID.Value = id
 	if fields := uuo.fields; len(fields) > 0 {
@@ -1273,14 +1403,68 @@ func (uuo *UserUpdateOne) sqlSave(ctx context.Context) (_node *User, err error) 
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	if uuo.mutation.RentalsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.RentalsTable,
+			Columns: []string{user.RentalsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: &sqlgraph.FieldSpec{
+					Type:   field.TypeInt,
+					Column: rental.FieldID,
+				},
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := uuo.mutation.RemovedRentalsIDs(); len(nodes) > 0 && !uuo.mutation.RentalsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.RentalsTable,
+			Columns: []string{user.RentalsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: &sqlgraph.FieldSpec{
+					Type:   field.TypeInt,
+					Column: rental.FieldID,
+				},
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := uuo.mutation.RentalsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.RentalsTable,
+			Columns: []string{user.RentalsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: &sqlgraph.FieldSpec{
+					Type:   field.TypeInt,
+					Column: rental.FieldID,
+				},
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
 	_node = &User{config: uuo.config}
 	_spec.Assign = _node.assignValues
 	_spec.ScanValues = _node.scanValues
 	if err = sqlgraph.UpdateNode(ctx, uuo.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{user.Label}
-		} else if cerr, ok := isSQLConstraintError(err); ok {
-			err = cerr
+		} else if sqlgraph.IsConstraintError(err) {
+			err = &ConstraintError{err.Error(), err}
 		}
 		return nil, err
 	}

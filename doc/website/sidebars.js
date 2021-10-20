@@ -52,11 +52,17 @@ module.exports = {
       label: 'Misc',
       items: [
         'templates',
+        'extensions',
         'graphql',
         'sql-integration',
         'testing',
         'faq',
+        'generating-ent-schemas',
         'feature-flags',
+        'translations',
+        'contributors',
+        'writing-docs',
+        'slack'
       ],
       collapsed: false,
     },
@@ -80,8 +86,24 @@ module.exports = {
         'tutorial-todo-gql-paginate',
         'tutorial-todo-gql-field-collection',
         'tutorial-todo-gql-tx-mutation',
+        'tutorial-todo-gql-mutation-input',
+        'tutorial-todo-gql-filter-input',
       ],
       collapsed: false,
     },
+    {
+      type: 'category',
+      collapsed: false,
+      label: 'gRPC',
+      items: [
+          'grpc-intro',
+          'grpc-setting-up',
+          'grpc-generating-proto',
+          'grpc-generating-a-service',
+          'grpc-server-and-client',
+          'grpc-edges',
+          'grpc-optional-fields',
+      ]
+    }
   ]
 }

@@ -8,6 +8,7 @@ package ent
 
 import (
 	"net"
+	"net/http"
 	"time"
 
 	"entgo.io/ent/dialect/sql"
@@ -16,6 +17,8 @@ import (
 	"entgo.io/ent/entc/integration/ent/file"
 	"entgo.io/ent/entc/integration/ent/group"
 	"entgo.io/ent/entc/integration/ent/groupinfo"
+	"entgo.io/ent/entc/integration/ent/item"
+	"entgo.io/ent/entc/integration/ent/pet"
 	"entgo.io/ent/entc/integration/ent/schema"
 	"entgo.io/ent/entc/integration/ent/task"
 	"entgo.io/ent/entc/integration/ent/user"
@@ -54,34 +57,78 @@ func init() {
 	card.NameValidator = cardDescName.Validators[0].(func(string) error)
 	fieldtypeFields := schema.FieldType{}.Fields()
 	_ = fieldtypeFields
+	// fieldtypeDescInt64 is the schema descriptor for int64 field.
+	fieldtypeDescInt64 := fieldtypeFields[4].Descriptor()
+	// fieldtype.UpdateDefaultInt64 holds the default value on update for the int64 field.
+	fieldtype.UpdateDefaultInt64 = fieldtypeDescInt64.UpdateDefault.(func() int64)
 	// fieldtypeDescValidateOptionalInt32 is the schema descriptor for validate_optional_int32 field.
 	fieldtypeDescValidateOptionalInt32 := fieldtypeFields[15].Descriptor()
 	// fieldtype.ValidateOptionalInt32Validator is a validator for the "validate_optional_int32" field. It is called by the builders before save.
 	fieldtype.ValidateOptionalInt32Validator = fieldtypeDescValidateOptionalInt32.Validators[0].(func(int32) error)
+	// fieldtypeDescMAC is the schema descriptor for mac field.
+	fieldtypeDescMAC := fieldtypeFields[27].Descriptor()
+	// fieldtype.MACValidator is a validator for the "mac" field. It is called by the builders before save.
+	fieldtype.MACValidator = fieldtypeDescMAC.Validators[0].(func(string) error)
+	// fieldtypeDescDuration is the schema descriptor for duration field.
+	fieldtypeDescDuration := fieldtypeFields[31].Descriptor()
+	// fieldtype.UpdateDefaultDuration holds the default value on update for the duration field.
+	fieldtype.UpdateDefaultDuration = fieldtypeDescDuration.UpdateDefault.(func() time.Duration)
+	// fieldtypeDescDir is the schema descriptor for dir field.
+	fieldtypeDescDir := fieldtypeFields[32].Descriptor()
+	// fieldtype.DefaultDir holds the default value on creation for the dir field.
+	fieldtype.DefaultDir = fieldtypeDescDir.Default.(func() http.Dir)
 	// fieldtypeDescNdir is the schema descriptor for ndir field.
-	fieldtypeDescNdir := fieldtypeFields[28].Descriptor()
+	fieldtypeDescNdir := fieldtypeFields[33].Descriptor()
 	// fieldtype.NdirValidator is a validator for the "ndir" field. It is called by the builders before save.
 	fieldtype.NdirValidator = fieldtypeDescNdir.Validators[0].(func(string) error)
 	// fieldtypeDescStr is the schema descriptor for str field.
-	fieldtypeDescStr := fieldtypeFields[29].Descriptor()
+	fieldtypeDescStr := fieldtypeFields[34].Descriptor()
 	// fieldtype.DefaultStr holds the default value on creation for the str field.
 	fieldtype.DefaultStr = fieldtypeDescStr.Default.(func() sql.NullString)
 	// fieldtypeDescNullStr is the schema descriptor for null_str field.
-	fieldtypeDescNullStr := fieldtypeFields[30].Descriptor()
+	fieldtypeDescNullStr := fieldtypeFields[35].Descriptor()
 	// fieldtype.DefaultNullStr holds the default value on creation for the null_str field.
-	fieldtype.DefaultNullStr = fieldtypeDescNullStr.Default.(func() sql.NullString)
+	fieldtype.DefaultNullStr = fieldtypeDescNullStr.Default.(func() *sql.NullString)
 	// fieldtypeDescLink is the schema descriptor for link field.
-	fieldtypeDescLink := fieldtypeFields[31].Descriptor()
+	fieldtypeDescLink := fieldtypeFields[36].Descriptor()
 	// fieldtype.LinkValidator is a validator for the "link" field. It is called by the builders before save.
 	fieldtype.LinkValidator = fieldtypeDescLink.Validators[0].(func(string) error)
+	// fieldtypeDescRawData is the schema descriptor for raw_data field.
+	fieldtypeDescRawData := fieldtypeFields[42].Descriptor()
+	// fieldtype.RawDataValidator is a validator for the "raw_data" field. It is called by the builders before save.
+	fieldtype.RawDataValidator = func() func([]byte) error {
+		validators := fieldtypeDescRawData.Validators
+		fns := [...]func([]byte) error{
+			validators[0].(func([]byte) error),
+			validators[1].(func([]byte) error),
+		}
+		return func(raw_data []byte) error {
+			for _, fn := range fns {
+				if err := fn(raw_data); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}()
 	// fieldtypeDescIP is the schema descriptor for ip field.
-	fieldtypeDescIP := fieldtypeFields[38].Descriptor()
+	fieldtypeDescIP := fieldtypeFields[44].Descriptor()
 	// fieldtype.DefaultIP holds the default value on creation for the ip field.
 	fieldtype.DefaultIP = fieldtypeDescIP.Default.(func() net.IP)
-	// fieldtypeDescMAC is the schema descriptor for mac field.
-	fieldtypeDescMAC := fieldtypeFields[47].Descriptor()
-	// fieldtype.MACValidator is a validator for the "mac" field. It is called by the builders before save.
-	fieldtype.MACValidator = fieldtypeDescMAC.Validators[0].(func(string) error)
+	// fieldtype.IPValidator is a validator for the "ip" field. It is called by the builders before save.
+	fieldtype.IPValidator = fieldtypeDescIP.Validators[0].(func([]byte) error)
+	// fieldtypeDescPair is the schema descriptor for pair field.
+	fieldtypeDescPair := fieldtypeFields[57].Descriptor()
+	// fieldtype.DefaultPair holds the default value on creation for the pair field.
+	fieldtype.DefaultPair = fieldtypeDescPair.Default.(func() schema.Pair)
+	// fieldtypeDescVstring is the schema descriptor for vstring field.
+	fieldtypeDescVstring := fieldtypeFields[59].Descriptor()
+	// fieldtype.DefaultVstring holds the default value on creation for the vstring field.
+	fieldtype.DefaultVstring = fieldtypeDescVstring.Default.(func() schema.VString)
+	// fieldtypeDescTriple is the schema descriptor for triple field.
+	fieldtypeDescTriple := fieldtypeFields[60].Descriptor()
+	// fieldtype.DefaultTriple holds the default value on creation for the triple field.
+	fieldtype.DefaultTriple = fieldtypeDescTriple.Default.(func() schema.Triple)
 	fileFields := schema.File{}.Fields()
 	_ = fileFields
 	// fileDescSize is the schema descriptor for size field.
@@ -146,6 +193,24 @@ func init() {
 	groupinfoDescMaxUsers := groupinfoFields[1].Descriptor()
 	// groupinfo.DefaultMaxUsers holds the default value on creation for the max_users field.
 	groupinfo.DefaultMaxUsers = groupinfoDescMaxUsers.Default.(int)
+	itemFields := schema.Item{}.Fields()
+	_ = itemFields
+	// itemDescText is the schema descriptor for text field.
+	itemDescText := itemFields[1].Descriptor()
+	// item.TextValidator is a validator for the "text" field. It is called by the builders before save.
+	item.TextValidator = itemDescText.Validators[0].(func(string) error)
+	// itemDescID is the schema descriptor for id field.
+	itemDescID := itemFields[0].Descriptor()
+	// item.DefaultID holds the default value on creation for the id field.
+	item.DefaultID = itemDescID.Default.(func() string)
+	// item.IDValidator is a validator for the "id" field. It is called by the builders before save.
+	item.IDValidator = itemDescID.Validators[0].(func(string) error)
+	petFields := schema.Pet{}.Fields()
+	_ = petFields
+	// petDescAge is the schema descriptor for age field.
+	petDescAge := petFields[0].Descriptor()
+	// pet.DefaultAge holds the default value on creation for the age field.
+	pet.DefaultAge = petDescAge.Default.(float64)
 	taskFields := schema.Task{}.Fields()
 	_ = taskFields
 	// taskDescPriority is the schema descriptor for priority field.

@@ -329,8 +329,8 @@ func (sq *StreetQuery) GroupBy(field string, fields ...string) *StreetGroupBy {
 //		Select(street.FieldName).
 //		Scan(ctx, &v)
 //
-func (sq *StreetQuery) Select(field string, fields ...string) *StreetSelect {
-	sq.fields = append([]string{field}, fields...)
+func (sq *StreetQuery) Select(fields ...string) *StreetSelect {
+	sq.fields = append(sq.fields, fields...)
 	return &StreetSelect{StreetQuery: sq}
 }
 
@@ -419,6 +419,10 @@ func (sq *StreetQuery) sqlAll(ctx context.Context) ([]*Street, error) {
 
 func (sq *StreetQuery) sqlCount(ctx context.Context) (int, error) {
 	_spec := sq.querySpec()
+	_spec.Node.Columns = sq.fields
+	if len(sq.fields) > 0 {
+		_spec.Unique = sq.unique != nil && *sq.unique
+	}
 	return sqlgraph.CountNodes(ctx, sq.driver, _spec)
 }
 
@@ -471,7 +475,7 @@ func (sq *StreetQuery) querySpec() *sqlgraph.QuerySpec {
 	if ps := sq.order; len(ps) > 0 {
 		_spec.Order = func(selector *sql.Selector) {
 			for i := range ps {
-				ps[i](selector, street.ValidColumn)
+				ps[i](selector)
 			}
 		}
 	}
@@ -481,16 +485,23 @@ func (sq *StreetQuery) querySpec() *sqlgraph.QuerySpec {
 func (sq *StreetQuery) sqlQuery(ctx context.Context) *sql.Selector {
 	builder := sql.Dialect(sq.driver.Dialect())
 	t1 := builder.Table(street.Table)
-	selector := builder.Select(t1.Columns(street.Columns...)...).From(t1)
+	columns := sq.fields
+	if len(columns) == 0 {
+		columns = street.Columns
+	}
+	selector := builder.Select(t1.Columns(columns...)...).From(t1)
 	if sq.sql != nil {
 		selector = sq.sql
-		selector.Select(selector.Columns(street.Columns...)...)
+		selector.Select(selector.Columns(columns...)...)
+	}
+	if sq.unique != nil && *sq.unique {
+		selector.Distinct()
 	}
 	for _, p := range sq.predicates {
 		p(selector)
 	}
 	for _, p := range sq.order {
-		p(selector, street.ValidColumn)
+		p(selector)
 	}
 	if offset := sq.offset; offset != nil {
 		// limit is mandatory for offset clause. We start
@@ -752,13 +763,24 @@ func (sgb *StreetGroupBy) sqlScan(ctx context.Context, v interface{}) error {
 }
 
 func (sgb *StreetGroupBy) sqlQuery() *sql.Selector {
-	selector := sgb.sql
-	columns := make([]string, 0, len(sgb.fields)+len(sgb.fns))
-	columns = append(columns, sgb.fields...)
+	selector := sgb.sql.Select()
+	aggregation := make([]string, 0, len(sgb.fns))
 	for _, fn := range sgb.fns {
-		columns = append(columns, fn(selector, street.ValidColumn))
+		aggregation = append(aggregation, fn(selector))
 	}
-	return selector.Select(columns...).GroupBy(sgb.fields...)
+	// If no columns were selected in a custom aggregation function, the default
+	// selection is the fields used for "group-by", and the aggregation functions.
+	if len(selector.SelectedColumns()) == 0 {
+		columns := make([]string, 0, len(sgb.fields)+len(sgb.fns))
+		for _, f := range sgb.fields {
+			columns = append(columns, selector.C(f))
+		}
+		for _, c := range aggregation {
+			columns = append(columns, c)
+		}
+		selector.Select(columns...)
+	}
+	return selector.GroupBy(selector.Columns(sgb.fields...)...)
 }
 
 // StreetSelect is the builder for selecting fields of Street entities.
@@ -974,16 +996,10 @@ func (ss *StreetSelect) BoolX(ctx context.Context) bool {
 
 func (ss *StreetSelect) sqlScan(ctx context.Context, v interface{}) error {
 	rows := &sql.Rows{}
-	query, args := ss.sqlQuery().Query()
+	query, args := ss.sql.Query()
 	if err := ss.driver.Query(ctx, query, args, rows); err != nil {
 		return err
 	}
 	defer rows.Close()
 	return sql.ScanSlice(rows, v)
-}
-
-func (ss *StreetSelect) sqlQuery() sql.Querier {
-	selector := ss.sql
-	selector.Select(selector.Columns(ss.fields...)...)
-	return selector
 }

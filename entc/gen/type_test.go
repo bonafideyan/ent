@@ -147,6 +147,7 @@ func TestField_EnumName(t *testing.T) {
 		{"MP4", "TypeMP4"},
 		{"unknown", "TypeUnknown"},
 		{"user_data", "TypeUserData"},
+		{"test user", "TypeTestUser"},
 	}
 	for _, tt := range tests {
 		require.Equal(t, tt.enum, Field{Name: "Type"}.EnumName(tt.name))
@@ -223,9 +224,6 @@ func TestType_AddIndex(t *testing.T) {
 
 	err = typ.AddIndex(&load.Index{Unique: true, Fields: []string{"id"}})
 	require.NoError(t, err, "valid index for ID field")
-
-	err = typ.AddIndex(&load.Index{Unique: true, Fields: []string{"text"}})
-	require.Error(t, err, "index size exceeded")
 
 	err = typ.AddIndex(&load.Index{Unique: true, Fields: []string{"name"}, Edges: []string{"parent"}})
 	require.Error(t, err, "missing edge")

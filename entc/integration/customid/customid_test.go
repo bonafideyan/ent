@@ -13,9 +13,13 @@ import (
 	"testing"
 
 	"entgo.io/ent/dialect"
+	"entgo.io/ent/dialect/sql/schema"
 	"entgo.io/ent/entc/integration/customid/ent"
+	"entgo.io/ent/entc/integration/customid/ent/blob"
+	"entgo.io/ent/entc/integration/customid/ent/doc"
 	"entgo.io/ent/entc/integration/customid/ent/pet"
 	"entgo.io/ent/entc/integration/customid/ent/user"
+	"entgo.io/ent/schema/field"
 	"github.com/go-sql-driver/mysql"
 
 	"github.com/google/uuid"
@@ -41,8 +45,8 @@ func TestMySQL(t *testing.T) {
 
 			cfg.DBName = "custom_id"
 			client, err := ent.Open("mysql", cfg.FormatDSN())
-			require.NoError(t, err, "connecting to json database")
-			err = client.Schema.Create(context.Background())
+			require.NoError(t, err, "connecting to custom_id database")
+			err = client.Schema.Create(context.Background(), schema.WithHooks(clearDefault, skipBytesID))
 			require.NoError(t, err)
 			CustomID(t, client)
 		})
@@ -61,11 +65,12 @@ func TestPostgres(t *testing.T) {
 			defer db.Exec("DROP DATABASE custom_id")
 
 			client, err := ent.Open(dialect.Postgres, dsn+" dbname=custom_id")
-			require.NoError(t, err, "connecting to json database")
+			require.NoError(t, err, "connecting to custom_id database")
 			defer client.Close()
 			err = client.Schema.Create(context.Background())
 			require.NoError(t, err)
 			CustomID(t, client)
+			BytesID(t, client)
 		})
 	}
 }
@@ -74,8 +79,9 @@ func TestSQLite(t *testing.T) {
 	client, err := ent.Open("sqlite3", "file:ent?mode=memory&cache=shared&_fk=1")
 	require.NoError(t, err)
 	defer client.Close()
-	require.NoError(t, client.Schema.Create(context.Background()))
+	require.NoError(t, client.Schema.Create(context.Background(), schema.WithHooks(clearDefault)))
 	CustomID(t, client)
+	BytesID(t, client)
 }
 
 func CustomID(t *testing.T, client *ent.Client) {
@@ -151,4 +157,75 @@ func CustomID(t *testing.T, client *ent.Client) {
 	).SaveX(ctx)
 	require.Equal(t, u1, blobs[0].ID)
 	require.Equal(t, u2, blobs[1].ID)
+
+	parent := client.Note.Create().SetText("parent").SaveX(ctx)
+	require.NotEmpty(t, parent.ID)
+	require.NotEmpty(t, parent.Text)
+	child := client.Note.Create().SetText("child").SetParent(parent).SaveX(ctx)
+	require.NotEmpty(t, child.QueryParent().OnlyIDX(ctx))
+
+	pdoc := client.Doc.Create().SetText("parent").SaveX(ctx)
+	require.NotEmpty(t, pdoc.ID)
+	require.NotEmpty(t, pdoc.Text)
+	cdoc := client.Doc.Create().SetText("child").SetParent(pdoc).SaveX(ctx)
+	require.NotEmpty(t, cdoc.QueryParent().OnlyIDX(ctx))
+
+	t.Run("Upsert", func(t *testing.T) {
+		id := uuid.New()
+		client.Blob.Create().
+			SetID(id).
+			OnConflictColumns(blob.FieldID).
+			UpdateNewValues().
+			ExecX(ctx)
+		require.Zero(t, client.Blob.GetX(ctx, id).Count)
+		client.Blob.Create().
+			SetID(id).
+			OnConflictColumns(blob.FieldID).
+			Update(func(set *ent.BlobUpsert) {
+				set.AddCount(1)
+			}).
+			ExecX(ctx)
+		require.Equal(t, 1, client.Blob.GetX(ctx, id).Count)
+
+		d := client.Doc.Create().SaveX(ctx)
+		client.Doc.Create().
+			SetID(d.ID).
+			OnConflictColumns(doc.FieldID).
+			SetText("Hello World").
+			UpdateNewValues().
+			ExecX(ctx)
+		require.Equal(t, "Hello World", client.Doc.GetX(ctx, d.ID).Text)
+	})
+}
+
+func BytesID(t *testing.T, client *ent.Client) {
+	ctx := context.Background()
+	s := client.Session.Create().SaveX(ctx)
+	require.NotEmpty(t, s.ID)
+	client.Device.Create().SetActiveSession(s).AddSessionIDs(s.ID).SaveX(ctx)
+	d := client.Device.Query().WithActiveSession().WithSessions().OnlyX(ctx)
+	require.Equal(t, s.ID, d.Edges.ActiveSession.ID)
+	require.Equal(t, s.ID, d.Edges.Sessions[0].ID)
+}
+
+// clearDefault clears the id's default for non-postgres dialects.
+func clearDefault(c schema.Creator) schema.Creator {
+	return schema.CreateFunc(func(ctx context.Context, tables ...*schema.Table) error {
+		tables[0].Columns[0].Default = nil
+		return c.Create(ctx, tables...)
+	})
+}
+
+// skipBytesID tables with blob ids from the migration.
+func skipBytesID(c schema.Creator) schema.Creator {
+	return schema.CreateFunc(func(ctx context.Context, tables ...*schema.Table) error {
+		t := make([]*schema.Table, 0, len(tables))
+		for i := range tables {
+			if tables[i].PrimaryKey[0].Type == field.TypeBytes {
+				continue
+			}
+			t = append(t, tables[i])
+		}
+		return c.Create(ctx, t...)
+	})
 }

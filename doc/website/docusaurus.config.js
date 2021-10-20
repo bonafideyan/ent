@@ -1,5 +1,27 @@
 module.exports={
   "title": "ent",
+  "i18n": {
+    "defaultLocale": 'en',
+    "locales": ['en', 'zh', 'ja', 'he'],
+    "localeConfigs": {
+      "en": {
+        "label": 'English',
+        "direction": 'ltr',
+      },
+      "zh": {
+        "label": 'Chinese',
+        "direction": 'ltr',
+      },
+      "ja": {
+        "label": 'Japanese',
+        "direction": 'ltr',
+      },
+      "he": {
+        "label": 'Hebrew',
+        "direction": 'rtl',
+      },
+    },
+  },
   "tagline": "An entity framework for Go",
   "url": "https://entgo.io",
   "baseUrl": "/",
@@ -21,7 +43,7 @@ module.exports={
         "pinned": true
       }
     ],
-    "slackChannel": "https://app.slack.com/client/T029RQSE6/C01FMSQDT53",
+    "slackChannel": "/docs/slack",
     "newsletter": "https://www.getrevue.co/profile/ent",
     "githubRepo": "https://github.com/ent/ent"
   },
@@ -38,7 +60,9 @@ module.exports={
           sidebarPath: require.resolve('./sidebars.js'),
         },
         "blog": {
-          "path": "blog"
+          "path": "blog",
+          "blogSidebarCount": 'ALL',
+          "blogSidebarTitle": 'All our posts',
         },
         "theme": {
           "customCss": ["../src/css/custom.css"],
@@ -49,7 +73,7 @@ module.exports={
   "plugins": [],
   "themeConfig": {
     prism: {
-      additionalLanguages: ['gotemplate'],
+      additionalLanguages: ['gotemplate', 'protobuf'],
     },
     algolia: {
       apiKey: "bfc8175da1bd5078f1c02e5c8a6fe782",
@@ -85,6 +109,18 @@ module.exports={
         },
         {to: 'blog', label: 'Blog', position: 'left'},
         {
+          href: '/docs/slack',
+          position: 'right',
+          className: 'header-slack-link',
+          'aria-label': 'Slack channel',
+        },
+        {
+          href: 'https://discord.gg/qZmPgTE6RX',
+          position: 'right',
+          className: 'header-discord-link',
+          'aria-label': 'Discord Server',
+        },
+        {
           href: 'https://www.getrevue.co/profile/ent',
           position: 'right',
           className: 'header-newsletter-link',
@@ -101,6 +137,16 @@ module.exports={
           position: 'right',
           className: 'header-github-link',
           'aria-label': 'GitHub repository',
+        },
+        {
+          type: 'localeDropdown',
+          position: 'right',
+          dropdownItemsAfter: [
+            {
+              to: '/docs/translations',
+              label: 'Help Us Translate',
+            },
+          ],
         },
       ]
     },
@@ -123,7 +169,8 @@ module.exports={
           "title": "Community",
           "items": [
             {"label": "GitHub", "to": "https://github.com/ent/ent"},
-            {"label": "Slack", "to": "https://app.slack.com/client/T029RQSE6/C01FMSQDT53"},
+            {"label": "Slack", "to": "/docs/slack"},
+            {"label": "Discord", "to": "https://discord.gg/qZmPgTE6RX"},
             {"label": "Newsletter", "to": "https://www.getrevue.co/profile/ent"},
             {"label": "Discussions", "to": "https://github.com/ent/ent/discussions"},
             {
@@ -169,7 +216,6 @@ module.exports={
       <br/>
       Design by Moriah Rich, illustration by Ariel Mashraki.
       `,
-
     },
     "algolia": {
       "apiKey": "bfc8175da1bd5078f1c02e5c8a6fe782",
@@ -177,6 +223,13 @@ module.exports={
     },
     "gtag": {
       "trackingID": "UA-189726777-1"
-    }
+    },
+    announcementBar: {
+      id: 'star-repo', // Identify this message.
+      content: '⭐️ If you like Ent, give it a star on <a target="_blank" rel="noopener noreferrer" href="https://github.com/ent/ent">GitHub</a>! ⭐',
+      backgroundColor: '#fafbfc',
+      textColor: '#091E42',
+      isCloseable: true,
+    },
   }
 }

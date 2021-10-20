@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"strings"
 
+	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/entc/integration/customid/ent/blob"
 	"github.com/google/uuid"
 )
@@ -21,6 +22,8 @@ type Blob struct {
 	ID uuid.UUID `json:"id,omitempty"`
 	// UUID holds the value of the "uuid" field.
 	UUID uuid.UUID `json:"uuid,omitempty"`
+	// Count holds the value of the "count" field.
+	Count int `json:"count,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the BlobQuery when eager-loading is set.
 	Edges       BlobEdges `json:"edges"`
@@ -66,10 +69,12 @@ func (*Blob) scanValues(columns []string) ([]interface{}, error) {
 	values := make([]interface{}, len(columns))
 	for i := range columns {
 		switch columns[i] {
+		case blob.FieldCount:
+			values[i] = new(sql.NullInt64)
 		case blob.FieldID, blob.FieldUUID:
-			values[i] = &uuid.UUID{}
+			values[i] = new(uuid.UUID)
 		case blob.ForeignKeys[0]: // blob_parent
-			values[i] = &uuid.UUID{}
+			values[i] = &sql.NullScanner{S: new(uuid.UUID)}
 		default:
 			return nil, fmt.Errorf("unexpected column %q for type Blob", columns[i])
 		}
@@ -97,11 +102,18 @@ func (b *Blob) assignValues(columns []string, values []interface{}) error {
 			} else if value != nil {
 				b.UUID = *value
 			}
+		case blob.FieldCount:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field count", values[i])
+			} else if value.Valid {
+				b.Count = int(value.Int64)
+			}
 		case blob.ForeignKeys[0]:
-			if value, ok := values[i].(*uuid.UUID); !ok {
+			if value, ok := values[i].(*sql.NullScanner); !ok {
 				return fmt.Errorf("unexpected type %T for field blob_parent", values[i])
-			} else if value != nil {
-				b.blob_parent = value
+			} else if value.Valid {
+				b.blob_parent = new(uuid.UUID)
+				*b.blob_parent = *value.S.(*uuid.UUID)
 			}
 		}
 	}
@@ -143,6 +155,8 @@ func (b *Blob) String() string {
 	builder.WriteString(fmt.Sprintf("id=%v", b.ID))
 	builder.WriteString(", uuid=")
 	builder.WriteString(fmt.Sprintf("%v", b.UUID))
+	builder.WriteString(", count=")
+	builder.WriteString(fmt.Sprintf("%v", b.Count))
 	builder.WriteByte(')')
 	return builder.String()
 }

@@ -10,6 +10,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	"entgo.io/ent/entc/integration/migrate/entv2/car"
 	"entgo.io/ent/entc/integration/migrate/entv2/conversion"
@@ -124,8 +125,8 @@ func (m CarMutation) Tx() (*Tx, error) {
 	return tx, nil
 }
 
-// ID returns the ID value in the mutation. Note that the ID
-// is only available if it was provided to the builder.
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
 func (m *CarMutation) ID() (id int, exists bool) {
 	if m.id == nil {
 		return
@@ -143,7 +144,7 @@ func (m *CarMutation) ClearOwner() {
 	m.clearedowner = true
 }
 
-// OwnerCleared returns if the "owner" edge to the User entity was cleared.
+// OwnerCleared reports if the "owner" edge to the User entity was cleared.
 func (m *CarMutation) OwnerCleared() bool {
 	return m.clearedowner
 }
@@ -170,6 +171,11 @@ func (m *CarMutation) OwnerIDs() (ids []int) {
 func (m *CarMutation) ResetOwner() {
 	m.owner = nil
 	m.clearedowner = false
+}
+
+// Where appends a list predicates to the CarMutation builder.
+func (m *CarMutation) Where(ps ...predicate.Car) {
+	m.predicates = append(m.predicates, ps...)
 }
 
 // Op returns the operation name.
@@ -425,8 +431,8 @@ func (m ConversionMutation) Tx() (*Tx, error) {
 	return tx, nil
 }
 
-// ID returns the ID value in the mutation. Note that the ID
-// is only available if it was provided to the builder.
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
 func (m *ConversionMutation) ID() (id int, exists bool) {
 	if m.id == nil {
 		return
@@ -875,6 +881,11 @@ func (m *ConversionMutation) ResetUint64ToString() {
 	delete(m.clearedFields, conversion.FieldUint64ToString)
 }
 
+// Where appends a list predicates to the ConversionMutation builder.
+func (m *ConversionMutation) Where(ps ...predicate.Conversion) {
+	m.predicates = append(m.predicates, ps...)
+}
+
 // Op returns the operation name.
 func (m *ConversionMutation) Op() Op {
 	return m.op
@@ -1310,8 +1321,8 @@ func (m CustomTypeMutation) Tx() (*Tx, error) {
 	return tx, nil
 }
 
-// ID returns the ID value in the mutation. Note that the ID
-// is only available if it was provided to the builder.
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
 func (m *CustomTypeMutation) ID() (id int, exists bool) {
 	if m.id == nil {
 		return
@@ -1366,6 +1377,11 @@ func (m *CustomTypeMutation) CustomCleared() bool {
 func (m *CustomTypeMutation) ResetCustom() {
 	m.custom = nil
 	delete(m.clearedFields, customtype.FieldCustom)
+}
+
+// Where appends a list predicates to the CustomTypeMutation builder.
+func (m *CustomTypeMutation) Where(ps ...predicate.CustomType) {
+	m.predicates = append(m.predicates, ps...)
 }
 
 // Op returns the operation name.
@@ -1618,13 +1634,18 @@ func (m GroupMutation) Tx() (*Tx, error) {
 	return tx, nil
 }
 
-// ID returns the ID value in the mutation. Note that the ID
-// is only available if it was provided to the builder.
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
 func (m *GroupMutation) ID() (id int, exists bool) {
 	if m.id == nil {
 		return
 	}
 	return *m.id, true
+}
+
+// Where appends a list predicates to the GroupMutation builder.
+func (m *GroupMutation) Where(ps ...predicate.Group) {
+	m.predicates = append(m.predicates, ps...)
 }
 
 // Op returns the operation name.
@@ -1769,6 +1790,7 @@ type MediaMutation struct {
 	id            *int
 	source        *string
 	source_uri    *string
+	text          *string
 	clearedFields map[string]struct{}
 	done          bool
 	oldValue      func(context.Context) (*Media, error)
@@ -1845,8 +1867,8 @@ func (m MediaMutation) Tx() (*Tx, error) {
 	return tx, nil
 }
 
-// ID returns the ID value in the mutation. Note that the ID
-// is only available if it was provided to the builder.
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
 func (m *MediaMutation) ID() (id int, exists bool) {
 	if m.id == nil {
 		return
@@ -1952,6 +1974,60 @@ func (m *MediaMutation) ResetSourceURI() {
 	delete(m.clearedFields, media.FieldSourceURI)
 }
 
+// SetText sets the "text" field.
+func (m *MediaMutation) SetText(s string) {
+	m.text = &s
+}
+
+// Text returns the value of the "text" field in the mutation.
+func (m *MediaMutation) Text() (r string, exists bool) {
+	v := m.text
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldText returns the old "text" field's value of the Media entity.
+// If the Media object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *MediaMutation) OldText(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, fmt.Errorf("OldText is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, fmt.Errorf("OldText requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldText: %w", err)
+	}
+	return oldValue.Text, nil
+}
+
+// ClearText clears the value of the "text" field.
+func (m *MediaMutation) ClearText() {
+	m.text = nil
+	m.clearedFields[media.FieldText] = struct{}{}
+}
+
+// TextCleared returns if the "text" field was cleared in this mutation.
+func (m *MediaMutation) TextCleared() bool {
+	_, ok := m.clearedFields[media.FieldText]
+	return ok
+}
+
+// ResetText resets all changes to the "text" field.
+func (m *MediaMutation) ResetText() {
+	m.text = nil
+	delete(m.clearedFields, media.FieldText)
+}
+
+// Where appends a list predicates to the MediaMutation builder.
+func (m *MediaMutation) Where(ps ...predicate.Media) {
+	m.predicates = append(m.predicates, ps...)
+}
+
 // Op returns the operation name.
 func (m *MediaMutation) Op() Op {
 	return m.op
@@ -1966,12 +2042,15 @@ func (m *MediaMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *MediaMutation) Fields() []string {
-	fields := make([]string, 0, 2)
+	fields := make([]string, 0, 3)
 	if m.source != nil {
 		fields = append(fields, media.FieldSource)
 	}
 	if m.source_uri != nil {
 		fields = append(fields, media.FieldSourceURI)
+	}
+	if m.text != nil {
+		fields = append(fields, media.FieldText)
 	}
 	return fields
 }
@@ -1985,6 +2064,8 @@ func (m *MediaMutation) Field(name string) (ent.Value, bool) {
 		return m.Source()
 	case media.FieldSourceURI:
 		return m.SourceURI()
+	case media.FieldText:
+		return m.Text()
 	}
 	return nil, false
 }
@@ -1998,6 +2079,8 @@ func (m *MediaMutation) OldField(ctx context.Context, name string) (ent.Value, e
 		return m.OldSource(ctx)
 	case media.FieldSourceURI:
 		return m.OldSourceURI(ctx)
+	case media.FieldText:
+		return m.OldText(ctx)
 	}
 	return nil, fmt.Errorf("unknown Media field %s", name)
 }
@@ -2020,6 +2103,13 @@ func (m *MediaMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetSourceURI(v)
+		return nil
+	case media.FieldText:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetText(v)
 		return nil
 	}
 	return fmt.Errorf("unknown Media field %s", name)
@@ -2057,6 +2147,9 @@ func (m *MediaMutation) ClearedFields() []string {
 	if m.FieldCleared(media.FieldSourceURI) {
 		fields = append(fields, media.FieldSourceURI)
 	}
+	if m.FieldCleared(media.FieldText) {
+		fields = append(fields, media.FieldText)
+	}
 	return fields
 }
 
@@ -2077,6 +2170,9 @@ func (m *MediaMutation) ClearField(name string) error {
 	case media.FieldSourceURI:
 		m.ClearSourceURI()
 		return nil
+	case media.FieldText:
+		m.ClearText()
+		return nil
 	}
 	return fmt.Errorf("unknown Media nullable field %s", name)
 }
@@ -2090,6 +2186,9 @@ func (m *MediaMutation) ResetField(name string) error {
 		return nil
 	case media.FieldSourceURI:
 		m.ResetSourceURI()
+		return nil
+	case media.FieldText:
+		m.ResetText()
 		return nil
 	}
 	return fmt.Errorf("unknown Media field %s", name)
@@ -2227,8 +2326,8 @@ func (m PetMutation) Tx() (*Tx, error) {
 	return tx, nil
 }
 
-// ID returns the ID value in the mutation. Note that the ID
-// is only available if it was provided to the builder.
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
 func (m *PetMutation) ID() (id int, exists bool) {
 	if m.id == nil {
 		return
@@ -2246,7 +2345,7 @@ func (m *PetMutation) ClearOwner() {
 	m.clearedowner = true
 }
 
-// OwnerCleared returns if the "owner" edge to the User entity was cleared.
+// OwnerCleared reports if the "owner" edge to the User entity was cleared.
 func (m *PetMutation) OwnerCleared() bool {
 	return m.clearedowner
 }
@@ -2273,6 +2372,11 @@ func (m *PetMutation) OwnerIDs() (ids []int) {
 func (m *PetMutation) ResetOwner() {
 	m.owner = nil
 	m.clearedowner = false
+}
+
+// Where appends a list predicates to the PetMutation builder.
+func (m *PetMutation) Where(ps ...predicate.Pet) {
+	m.predicates = append(m.predicates, ps...)
 }
 
 // Op returns the operation name.
@@ -2448,6 +2552,7 @@ type UserMutation struct {
 	age            *int
 	addage         *int
 	name           *string
+	description    *string
 	nickname       *string
 	phone          *string
 	buffer         *[]byte
@@ -2457,6 +2562,7 @@ type UserMutation struct {
 	state          *user.State
 	status         *user.Status
 	workplace      *string
+	created_at     *time.Time
 	clearedFields  map[string]struct{}
 	car            map[int]struct{}
 	removedcar     map[int]struct{}
@@ -2547,8 +2653,8 @@ func (m *UserMutation) SetID(id int) {
 	m.id = &id
 }
 
-// ID returns the ID value in the mutation. Note that the ID
-// is only available if it was provided to the builder.
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
 func (m *UserMutation) ID() (id int, exists bool) {
 	if m.id == nil {
 		return
@@ -2718,6 +2824,55 @@ func (m *UserMutation) OldName(ctx context.Context) (v string, err error) {
 // ResetName resets all changes to the "name" field.
 func (m *UserMutation) ResetName() {
 	m.name = nil
+}
+
+// SetDescription sets the "description" field.
+func (m *UserMutation) SetDescription(s string) {
+	m.description = &s
+}
+
+// Description returns the value of the "description" field in the mutation.
+func (m *UserMutation) Description() (r string, exists bool) {
+	v := m.description
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldDescription returns the old "description" field's value of the User entity.
+// If the User object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserMutation) OldDescription(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, fmt.Errorf("OldDescription is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, fmt.Errorf("OldDescription requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldDescription: %w", err)
+	}
+	return oldValue.Description, nil
+}
+
+// ClearDescription clears the value of the "description" field.
+func (m *UserMutation) ClearDescription() {
+	m.description = nil
+	m.clearedFields[user.FieldDescription] = struct{}{}
+}
+
+// DescriptionCleared returns if the "description" field was cleared in this mutation.
+func (m *UserMutation) DescriptionCleared() bool {
+	_, ok := m.clearedFields[user.FieldDescription]
+	return ok
+}
+
+// ResetDescription resets all changes to the "description" field.
+func (m *UserMutation) ResetDescription() {
+	m.description = nil
+	delete(m.clearedFields, user.FieldDescription)
 }
 
 // SetNickname sets the "nickname" field.
@@ -3122,6 +3277,42 @@ func (m *UserMutation) ResetWorkplace() {
 	delete(m.clearedFields, user.FieldWorkplace)
 }
 
+// SetCreatedAt sets the "created_at" field.
+func (m *UserMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *UserMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the User entity.
+// If the User object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, fmt.Errorf("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, fmt.Errorf("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *UserMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
 // AddCarIDs adds the "car" edge to the Car entity by ids.
 func (m *UserMutation) AddCarIDs(ids ...int) {
 	if m.car == nil {
@@ -3137,7 +3328,7 @@ func (m *UserMutation) ClearCar() {
 	m.clearedcar = true
 }
 
-// CarCleared returns if the "car" edge to the Car entity was cleared.
+// CarCleared reports if the "car" edge to the Car entity was cleared.
 func (m *UserMutation) CarCleared() bool {
 	return m.clearedcar
 }
@@ -3148,6 +3339,7 @@ func (m *UserMutation) RemoveCarIDs(ids ...int) {
 		m.removedcar = make(map[int]struct{})
 	}
 	for i := range ids {
+		delete(m.car, ids[i])
 		m.removedcar[ids[i]] = struct{}{}
 	}
 }
@@ -3185,7 +3377,7 @@ func (m *UserMutation) ClearPets() {
 	m.clearedpets = true
 }
 
-// PetsCleared returns if the "pets" edge to the Pet entity was cleared.
+// PetsCleared reports if the "pets" edge to the Pet entity was cleared.
 func (m *UserMutation) PetsCleared() bool {
 	return m.clearedpets
 }
@@ -3229,7 +3421,7 @@ func (m *UserMutation) ClearFriends() {
 	m.clearedfriends = true
 }
 
-// FriendsCleared returns if the "friends" edge to the User entity was cleared.
+// FriendsCleared reports if the "friends" edge to the User entity was cleared.
 func (m *UserMutation) FriendsCleared() bool {
 	return m.clearedfriends
 }
@@ -3240,6 +3432,7 @@ func (m *UserMutation) RemoveFriendIDs(ids ...int) {
 		m.removedfriends = make(map[int]struct{})
 	}
 	for i := range ids {
+		delete(m.friends, ids[i])
 		m.removedfriends[ids[i]] = struct{}{}
 	}
 }
@@ -3267,6 +3460,11 @@ func (m *UserMutation) ResetFriends() {
 	m.removedfriends = nil
 }
 
+// Where appends a list predicates to the UserMutation builder.
+func (m *UserMutation) Where(ps ...predicate.User) {
+	m.predicates = append(m.predicates, ps...)
+}
+
 // Op returns the operation name.
 func (m *UserMutation) Op() Op {
 	return m.op
@@ -3281,7 +3479,7 @@ func (m *UserMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *UserMutation) Fields() []string {
-	fields := make([]string, 0, 13)
+	fields := make([]string, 0, 15)
 	if m.mixed_string != nil {
 		fields = append(fields, user.FieldMixedString)
 	}
@@ -3293,6 +3491,9 @@ func (m *UserMutation) Fields() []string {
 	}
 	if m.name != nil {
 		fields = append(fields, user.FieldName)
+	}
+	if m.description != nil {
+		fields = append(fields, user.FieldDescription)
 	}
 	if m.nickname != nil {
 		fields = append(fields, user.FieldNickname)
@@ -3321,6 +3522,9 @@ func (m *UserMutation) Fields() []string {
 	if m.workplace != nil {
 		fields = append(fields, user.FieldWorkplace)
 	}
+	if m.created_at != nil {
+		fields = append(fields, user.FieldCreatedAt)
+	}
 	return fields
 }
 
@@ -3337,6 +3541,8 @@ func (m *UserMutation) Field(name string) (ent.Value, bool) {
 		return m.Age()
 	case user.FieldName:
 		return m.Name()
+	case user.FieldDescription:
+		return m.Description()
 	case user.FieldNickname:
 		return m.Nickname()
 	case user.FieldPhone:
@@ -3355,6 +3561,8 @@ func (m *UserMutation) Field(name string) (ent.Value, bool) {
 		return m.Status()
 	case user.FieldWorkplace:
 		return m.Workplace()
+	case user.FieldCreatedAt:
+		return m.CreatedAt()
 	}
 	return nil, false
 }
@@ -3372,6 +3580,8 @@ func (m *UserMutation) OldField(ctx context.Context, name string) (ent.Value, er
 		return m.OldAge(ctx)
 	case user.FieldName:
 		return m.OldName(ctx)
+	case user.FieldDescription:
+		return m.OldDescription(ctx)
 	case user.FieldNickname:
 		return m.OldNickname(ctx)
 	case user.FieldPhone:
@@ -3390,6 +3600,8 @@ func (m *UserMutation) OldField(ctx context.Context, name string) (ent.Value, er
 		return m.OldStatus(ctx)
 	case user.FieldWorkplace:
 		return m.OldWorkplace(ctx)
+	case user.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
 	}
 	return nil, fmt.Errorf("unknown User field %s", name)
 }
@@ -3426,6 +3638,13 @@ func (m *UserMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetName(v)
+		return nil
+	case user.FieldDescription:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetDescription(v)
 		return nil
 	case user.FieldNickname:
 		v, ok := value.(string)
@@ -3490,6 +3709,13 @@ func (m *UserMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetWorkplace(v)
 		return nil
+	case user.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
 	}
 	return fmt.Errorf("unknown User field %s", name)
 }
@@ -3535,6 +3761,9 @@ func (m *UserMutation) AddField(name string, value ent.Value) error {
 // mutation.
 func (m *UserMutation) ClearedFields() []string {
 	var fields []string
+	if m.FieldCleared(user.FieldDescription) {
+		fields = append(fields, user.FieldDescription)
+	}
 	if m.FieldCleared(user.FieldBuffer) {
 		fields = append(fields, user.FieldBuffer)
 	}
@@ -3567,6 +3796,9 @@ func (m *UserMutation) FieldCleared(name string) bool {
 // error if the field is not defined in the schema.
 func (m *UserMutation) ClearField(name string) error {
 	switch name {
+	case user.FieldDescription:
+		m.ClearDescription()
+		return nil
 	case user.FieldBuffer:
 		m.ClearBuffer()
 		return nil
@@ -3605,6 +3837,9 @@ func (m *UserMutation) ResetField(name string) error {
 	case user.FieldName:
 		m.ResetName()
 		return nil
+	case user.FieldDescription:
+		m.ResetDescription()
+		return nil
 	case user.FieldNickname:
 		m.ResetNickname()
 		return nil
@@ -3631,6 +3866,9 @@ func (m *UserMutation) ResetField(name string) error {
 		return nil
 	case user.FieldWorkplace:
 		m.ResetWorkplace()
+		return nil
+	case user.FieldCreatedAt:
+		m.ResetCreatedAt()
 		return nil
 	}
 	return fmt.Errorf("unknown User field %s", name)

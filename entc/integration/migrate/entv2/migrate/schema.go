@@ -7,6 +7,7 @@
 package migrate
 
 import (
+	"entgo.io/ent/dialect/entsql"
 	"entgo.io/ent/dialect/sql/schema"
 	"entgo.io/ent/schema/field"
 )
@@ -46,10 +47,9 @@ var (
 	}
 	// ConversionsTable holds the schema information for the "conversions" table.
 	ConversionsTable = &schema.Table{
-		Name:        "conversions",
-		Columns:     ConversionsColumns,
-		PrimaryKey:  []*schema.Column{ConversionsColumns[0]},
-		ForeignKeys: []*schema.ForeignKey{},
+		Name:       "conversions",
+		Columns:    ConversionsColumns,
+		PrimaryKey: []*schema.Column{ConversionsColumns[0]},
 	}
 	// CustomTypesColumns holds the columns for the "custom_types" table.
 	CustomTypesColumns = []*schema.Column{
@@ -58,10 +58,9 @@ var (
 	}
 	// CustomTypesTable holds the schema information for the "custom_types" table.
 	CustomTypesTable = &schema.Table{
-		Name:        "custom_types",
-		Columns:     CustomTypesColumns,
-		PrimaryKey:  []*schema.Column{CustomTypesColumns[0]},
-		ForeignKeys: []*schema.ForeignKey{},
+		Name:       "custom_types",
+		Columns:    CustomTypesColumns,
+		PrimaryKey: []*schema.Column{CustomTypesColumns[0]},
 	}
 	// GroupsColumns holds the columns for the "groups" table.
 	GroupsColumns = []*schema.Column{
@@ -69,28 +68,40 @@ var (
 	}
 	// GroupsTable holds the schema information for the "groups" table.
 	GroupsTable = &schema.Table{
-		Name:        "groups",
-		Columns:     GroupsColumns,
-		PrimaryKey:  []*schema.Column{GroupsColumns[0]},
-		ForeignKeys: []*schema.ForeignKey{},
+		Name:       "groups",
+		Columns:    GroupsColumns,
+		PrimaryKey: []*schema.Column{GroupsColumns[0]},
 	}
 	// MediaColumns holds the columns for the "media" table.
 	MediaColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt, Increment: true},
 		{Name: "source", Type: field.TypeString, Nullable: true},
 		{Name: "source_uri", Type: field.TypeString, Nullable: true},
+		{Name: "text", Type: field.TypeString, Nullable: true, Size: 2147483647},
 	}
 	// MediaTable holds the schema information for the "media" table.
 	MediaTable = &schema.Table{
-		Name:        "media",
-		Columns:     MediaColumns,
-		PrimaryKey:  []*schema.Column{MediaColumns[0]},
-		ForeignKeys: []*schema.ForeignKey{},
+		Name:       "media",
+		Columns:    MediaColumns,
+		PrimaryKey: []*schema.Column{MediaColumns[0]},
 		Indexes: []*schema.Index{
 			{
 				Name:    "media_source_source_uri",
 				Unique:  true,
 				Columns: []*schema.Column{MediaColumns[1], MediaColumns[2]},
+				Annotation: &entsql.IndexAnnotation{
+					PrefixColumns: map[string]uint{
+						MediaColumns[1].Name: 100,
+					},
+				},
+			},
+			{
+				Name:    "media_text",
+				Unique:  false,
+				Columns: []*schema.Column{MediaColumns[3]},
+				Annotation: &entsql.IndexAnnotation{
+					Prefix: 100,
+				},
 			},
 		},
 	}
@@ -106,7 +117,7 @@ var (
 		PrimaryKey: []*schema.Column{PetsColumns[0]},
 		ForeignKeys: []*schema.ForeignKey{
 			{
-				Symbol:     "pets_users_pets",
+				Symbol:     "user_pet_id",
 				Columns:    []*schema.Column{PetsColumns[1]},
 				RefColumns: []*schema.Column{UsersColumns[0]},
 				OnDelete:   schema.SetNull,
@@ -120,6 +131,7 @@ var (
 		{Name: "mixed_enum", Type: field.TypeEnum, Enums: []string{"on", "off"}, Default: "on"},
 		{Name: "age", Type: field.TypeInt},
 		{Name: "name", Type: field.TypeString, Size: 2147483647},
+		{Name: "description", Type: field.TypeString, Nullable: true, Size: 2147483647},
 		{Name: "nickname", Type: field.TypeString, Size: 255},
 		{Name: "phone", Type: field.TypeString, Default: "unknown"},
 		{Name: "buffer", Type: field.TypeBytes, Nullable: true},
@@ -129,18 +141,26 @@ var (
 		{Name: "state", Type: field.TypeEnum, Nullable: true, Enums: []string{"logged_in", "logged_out", "online"}},
 		{Name: "status", Type: field.TypeEnum, Nullable: true, Enums: []string{"done", "pending"}},
 		{Name: "workplace", Type: field.TypeString, Nullable: true},
+		{Name: "created_at", Type: field.TypeTime, Default: "CURRENT_TIMESTAMP"},
 	}
 	// UsersTable holds the schema information for the "users" table.
 	UsersTable = &schema.Table{
-		Name:        "users",
-		Columns:     UsersColumns,
-		PrimaryKey:  []*schema.Column{UsersColumns[0]},
-		ForeignKeys: []*schema.ForeignKey{},
+		Name:       "users",
+		Columns:    UsersColumns,
+		PrimaryKey: []*schema.Column{UsersColumns[0]},
 		Indexes: []*schema.Index{
+			{
+				Name:    "user_description",
+				Unique:  false,
+				Columns: []*schema.Column{UsersColumns[5]},
+				Annotation: &entsql.IndexAnnotation{
+					Prefix: 100,
+				},
+			},
 			{
 				Name:    "user_phone_age",
 				Unique:  true,
-				Columns: []*schema.Column{UsersColumns[6], UsersColumns[3]},
+				Columns: []*schema.Column{UsersColumns[7], UsersColumns[3]},
 			},
 		},
 	}
@@ -156,13 +176,13 @@ var (
 		PrimaryKey: []*schema.Column{FriendsColumns[0], FriendsColumns[1]},
 		ForeignKeys: []*schema.ForeignKey{
 			{
-				Symbol:     "friends_user",
+				Symbol:     "user_friend_id1",
 				Columns:    []*schema.Column{FriendsColumns[0]},
 				RefColumns: []*schema.Column{UsersColumns[0]},
 				OnDelete:   schema.Cascade,
 			},
 			{
-				Symbol:     "friends_friend",
+				Symbol:     "user_friend_id2",
 				Columns:    []*schema.Column{FriendsColumns[1]},
 				RefColumns: []*schema.Column{UsersColumns[0]},
 				OnDelete:   schema.Cascade,
@@ -184,6 +204,12 @@ var (
 
 func init() {
 	CarsTable.ForeignKeys[0].RefTable = UsersTable
+	MediaTable.Annotation = &entsql.Annotation{
+		Check: "text <> 'boring'",
+	}
+	MediaTable.Annotation.Checks = map[string]string{
+		"boring_check": "source_uri <> 'entgo.io'",
+	}
 	PetsTable.ForeignKeys[0].RefTable = UsersTable
 	FriendsTable.ForeignKeys[0].RefTable = UsersTable
 	FriendsTable.ForeignKeys[1].RefTable = UsersTable

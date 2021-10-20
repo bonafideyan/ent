@@ -117,8 +117,8 @@ func (m NodeMutation) Tx() (*Tx, error) {
 	return tx, nil
 }
 
-// ID returns the ID value in the mutation. Note that the ID
-// is only available if it was provided to the builder.
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
 func (m *NodeMutation) ID() (id int, exists bool) {
 	if m.id == nil {
 		return
@@ -192,7 +192,7 @@ func (m *NodeMutation) ClearPrev() {
 	m.clearedprev = true
 }
 
-// PrevCleared returns if the "prev" edge to the Node entity was cleared.
+// PrevCleared reports if the "prev" edge to the Node entity was cleared.
 func (m *NodeMutation) PrevCleared() bool {
 	return m.clearedprev
 }
@@ -231,7 +231,7 @@ func (m *NodeMutation) ClearNext() {
 	m.clearednext = true
 }
 
-// NextCleared returns if the "next" edge to the Node entity was cleared.
+// NextCleared reports if the "next" edge to the Node entity was cleared.
 func (m *NodeMutation) NextCleared() bool {
 	return m.clearednext
 }
@@ -258,6 +258,11 @@ func (m *NodeMutation) NextIDs() (ids []int) {
 func (m *NodeMutation) ResetNext() {
 	m.next = nil
 	m.clearednext = false
+}
+
+// Where appends a list predicates to the NodeMutation builder.
+func (m *NodeMutation) Where(ps ...predicate.Node) {
+	m.predicates = append(m.predicates, ps...)
 }
 
 // Op returns the operation name.

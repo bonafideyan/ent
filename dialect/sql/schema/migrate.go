@@ -143,6 +143,9 @@ func NewMigrate(d dialect.Driver, opts ...MigrateOption) (*Migrate, error) {
 // Note that SQLite dialect does not support (this moment) the "append-only" mode describe above,
 // since it's used only for testing.
 func (m *Migrate) Create(ctx context.Context, tables ...*Table) error {
+	for _, t := range tables {
+		m.setupTable(t)
+	}
 	var creator Creator = CreateFunc(m.create)
 	for i := len(m.hooks) - 1; i >= 0; i-- {
 		creator = m.hooks[i](creator)
@@ -172,7 +175,6 @@ func (m *Migrate) create(ctx context.Context, tables ...*Table) error {
 
 func (m *Migrate) txCreate(ctx context.Context, tx dialect.Tx, tables ...*Table) error {
 	for _, t := range tables {
-		m.setupTable(t)
 		switch exist, err := m.tableExist(ctx, tx, t.Name); {
 		case err != nil:
 			return err
@@ -189,7 +191,7 @@ func (m *Migrate) txCreate(ctx context.Context, tx dialect.Tx, tables ...*Table)
 			}
 			change, err := m.changeSet(curr, t)
 			if err != nil {
-				return err
+				return fmt.Errorf("creating changeset for %q: %w", t.Name, err)
 			}
 			if err := m.apply(ctx, tx, t.Name, change); err != nil {
 				return err
@@ -340,21 +342,32 @@ func (m *Migrate) changeSet(curr, new *Table) (*changes, error) {
 			return nil, fmt.Errorf("invalid type %q for column %q", c2.typ, c2.Name)
 		// Modify a non-unique column to unique.
 		case c1.Unique && !c2.Unique:
-			change.index.add.append(&Index{
-				Name:    c1.Name,
-				Unique:  true,
-				Columns: []*Column{c1},
-				columns: []string{c1.Name},
-			})
+			// Make sure the table does not have unique index for this column
+			// before adding it to the changeset, because there are 2 ways to
+			// configure uniqueness on ent.Field (using the Unique modifier or
+			// adding rule on the Indexes option).
+			if idx, ok := curr.index(c1.Name); !ok || !idx.Unique {
+				change.index.add.append(&Index{
+					Name:    c1.Name,
+					Unique:  true,
+					Columns: []*Column{c1},
+					columns: []string{c1.Name},
+				})
+			}
 		// Modify a unique column to non-unique.
 		case !c1.Unique && c2.Unique:
+			// If the uniqueness was defined on the Indexes option,
+			// or was moved from the Unique modifier to the Indexes.
+			if idx, ok := new.index(c1.Name); ok && idx.Unique {
+				continue
+			}
 			idx, ok := curr.index(c2.Name)
 			if !ok {
-				return nil, fmt.Errorf("missing index to drop for column %q", c2.Name)
+				return nil, fmt.Errorf("missing index to drop for unique column %q", c2.Name)
 			}
 			change.index.drop.append(idx)
 		// Extending column types.
-		case m.cType(c1) != m.cType(c2):
+		case m.needsConversion(c2, c1):
 			if !c2.ConvertibleTo(c1) {
 				return nil, fmt.Errorf("changing column type for %q is invalid (%s != %s)", c1.Name, m.cType(c1), m.cType(c2))
 			}
@@ -385,6 +398,13 @@ func (m *Migrate) changeSet(curr, new *Table) (*changes, error) {
 		case idx1.Unique != idx2.Unique:
 			change.index.drop.append(idx2)
 			change.index.add.append(idx1)
+		default:
+			im, ok := m.sqlDialect.(interface{ indexModified(old, new *Index) bool })
+			// If the dialect supports comparing indexes.
+			if ok && im.indexModified(idx2, idx1) {
+				change.index.drop.append(idx2)
+				change.index.add.append(idx1)
+			}
 		}
 	}
 
@@ -645,6 +665,7 @@ type sqlDialect interface {
 	tBuilder(*Table) *sql.TableBuilder
 	addIndex(*Index, string) *sql.IndexBuilder
 	alterColumns(table string, add, modify, drop []*Column) sql.Queries
+	needsConversion(*Column, *Column) bool
 }
 
 type preparer interface {

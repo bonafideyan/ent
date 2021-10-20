@@ -292,8 +292,8 @@ func (miq *MixinIDQuery) GroupBy(field string, fields ...string) *MixinIDGroupBy
 //		Select(mixinid.FieldSomeField).
 //		Scan(ctx, &v)
 //
-func (miq *MixinIDQuery) Select(field string, fields ...string) *MixinIDSelect {
-	miq.fields = append([]string{field}, fields...)
+func (miq *MixinIDQuery) Select(fields ...string) *MixinIDSelect {
+	miq.fields = append(miq.fields, fields...)
 	return &MixinIDSelect{MixinIDQuery: miq}
 }
 
@@ -341,6 +341,10 @@ func (miq *MixinIDQuery) sqlAll(ctx context.Context) ([]*MixinID, error) {
 
 func (miq *MixinIDQuery) sqlCount(ctx context.Context) (int, error) {
 	_spec := miq.querySpec()
+	_spec.Node.Columns = miq.fields
+	if len(miq.fields) > 0 {
+		_spec.Unique = miq.unique != nil && *miq.unique
+	}
 	return sqlgraph.CountNodes(ctx, miq.driver, _spec)
 }
 
@@ -393,7 +397,7 @@ func (miq *MixinIDQuery) querySpec() *sqlgraph.QuerySpec {
 	if ps := miq.order; len(ps) > 0 {
 		_spec.Order = func(selector *sql.Selector) {
 			for i := range ps {
-				ps[i](selector, mixinid.ValidColumn)
+				ps[i](selector)
 			}
 		}
 	}
@@ -403,16 +407,23 @@ func (miq *MixinIDQuery) querySpec() *sqlgraph.QuerySpec {
 func (miq *MixinIDQuery) sqlQuery(ctx context.Context) *sql.Selector {
 	builder := sql.Dialect(miq.driver.Dialect())
 	t1 := builder.Table(mixinid.Table)
-	selector := builder.Select(t1.Columns(mixinid.Columns...)...).From(t1)
+	columns := miq.fields
+	if len(columns) == 0 {
+		columns = mixinid.Columns
+	}
+	selector := builder.Select(t1.Columns(columns...)...).From(t1)
 	if miq.sql != nil {
 		selector = miq.sql
-		selector.Select(selector.Columns(mixinid.Columns...)...)
+		selector.Select(selector.Columns(columns...)...)
+	}
+	if miq.unique != nil && *miq.unique {
+		selector.Distinct()
 	}
 	for _, p := range miq.predicates {
 		p(selector)
 	}
 	for _, p := range miq.order {
-		p(selector, mixinid.ValidColumn)
+		p(selector)
 	}
 	if offset := miq.offset; offset != nil {
 		// limit is mandatory for offset clause. We start
@@ -674,13 +685,24 @@ func (migb *MixinIDGroupBy) sqlScan(ctx context.Context, v interface{}) error {
 }
 
 func (migb *MixinIDGroupBy) sqlQuery() *sql.Selector {
-	selector := migb.sql
-	columns := make([]string, 0, len(migb.fields)+len(migb.fns))
-	columns = append(columns, migb.fields...)
+	selector := migb.sql.Select()
+	aggregation := make([]string, 0, len(migb.fns))
 	for _, fn := range migb.fns {
-		columns = append(columns, fn(selector, mixinid.ValidColumn))
+		aggregation = append(aggregation, fn(selector))
 	}
-	return selector.Select(columns...).GroupBy(migb.fields...)
+	// If no columns were selected in a custom aggregation function, the default
+	// selection is the fields used for "group-by", and the aggregation functions.
+	if len(selector.SelectedColumns()) == 0 {
+		columns := make([]string, 0, len(migb.fields)+len(migb.fns))
+		for _, f := range migb.fields {
+			columns = append(columns, selector.C(f))
+		}
+		for _, c := range aggregation {
+			columns = append(columns, c)
+		}
+		selector.Select(columns...)
+	}
+	return selector.GroupBy(selector.Columns(migb.fields...)...)
 }
 
 // MixinIDSelect is the builder for selecting fields of MixinID entities.
@@ -896,16 +918,10 @@ func (mis *MixinIDSelect) BoolX(ctx context.Context) bool {
 
 func (mis *MixinIDSelect) sqlScan(ctx context.Context, v interface{}) error {
 	rows := &sql.Rows{}
-	query, args := mis.sqlQuery().Query()
+	query, args := mis.sql.Query()
 	if err := mis.driver.Query(ctx, query, args, rows); err != nil {
 		return err
 	}
 	defer rows.Close()
 	return sql.ScanSlice(rows, v)
-}
-
-func (mis *MixinIDSelect) sqlQuery() sql.Querier {
-	selector := mis.sql
-	selector.Select(selector.Columns(mis.fields...)...)
-	return selector
 }

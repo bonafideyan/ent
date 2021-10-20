@@ -8,6 +8,7 @@ package ent
 
 import (
 	"context"
+	"database/sql/driver"
 	"errors"
 	"fmt"
 	"math"
@@ -30,7 +31,9 @@ type MetadataQuery struct {
 	fields     []string
 	predicates []predicate.Metadata
 	// eager-loading edges.
-	withUser *UserQuery
+	withUser     *UserQuery
+	withChildren *MetadataQuery
+	withParent   *MetadataQuery
 	// intermediate query (i.e. traversal path).
 	sql  *sql.Selector
 	path func(context.Context) (*sql.Selector, error)
@@ -82,6 +85,50 @@ func (mq *MetadataQuery) QueryUser() *UserQuery {
 			sqlgraph.From(metadata.Table, metadata.FieldID, selector),
 			sqlgraph.To(user.Table, user.FieldID),
 			sqlgraph.Edge(sqlgraph.O2O, true, metadata.UserTable, metadata.UserColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(mq.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QueryChildren chains the current query on the "children" edge.
+func (mq *MetadataQuery) QueryChildren() *MetadataQuery {
+	query := &MetadataQuery{config: mq.config}
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := mq.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := mq.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(metadata.Table, metadata.FieldID, selector),
+			sqlgraph.To(metadata.Table, metadata.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, true, metadata.ChildrenTable, metadata.ChildrenColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(mq.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QueryParent chains the current query on the "parent" edge.
+func (mq *MetadataQuery) QueryParent() *MetadataQuery {
+	query := &MetadataQuery{config: mq.config}
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := mq.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := mq.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(metadata.Table, metadata.FieldID, selector),
+			sqlgraph.To(metadata.Table, metadata.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, false, metadata.ParentTable, metadata.ParentColumn),
 		)
 		fromU = sqlgraph.SetNeighbors(mq.driver.Dialect(), step)
 		return fromU, nil
@@ -265,12 +312,14 @@ func (mq *MetadataQuery) Clone() *MetadataQuery {
 		return nil
 	}
 	return &MetadataQuery{
-		config:     mq.config,
-		limit:      mq.limit,
-		offset:     mq.offset,
-		order:      append([]OrderFunc{}, mq.order...),
-		predicates: append([]predicate.Metadata{}, mq.predicates...),
-		withUser:   mq.withUser.Clone(),
+		config:       mq.config,
+		limit:        mq.limit,
+		offset:       mq.offset,
+		order:        append([]OrderFunc{}, mq.order...),
+		predicates:   append([]predicate.Metadata{}, mq.predicates...),
+		withUser:     mq.withUser.Clone(),
+		withChildren: mq.withChildren.Clone(),
+		withParent:   mq.withParent.Clone(),
 		// clone intermediate query.
 		sql:  mq.sql.Clone(),
 		path: mq.path,
@@ -285,6 +334,28 @@ func (mq *MetadataQuery) WithUser(opts ...func(*UserQuery)) *MetadataQuery {
 		opt(query)
 	}
 	mq.withUser = query
+	return mq
+}
+
+// WithChildren tells the query-builder to eager-load the nodes that are connected to
+// the "children" edge. The optional arguments are used to configure the query builder of the edge.
+func (mq *MetadataQuery) WithChildren(opts ...func(*MetadataQuery)) *MetadataQuery {
+	query := &MetadataQuery{config: mq.config}
+	for _, opt := range opts {
+		opt(query)
+	}
+	mq.withChildren = query
+	return mq
+}
+
+// WithParent tells the query-builder to eager-load the nodes that are connected to
+// the "parent" edge. The optional arguments are used to configure the query builder of the edge.
+func (mq *MetadataQuery) WithParent(opts ...func(*MetadataQuery)) *MetadataQuery {
+	query := &MetadataQuery{config: mq.config}
+	for _, opt := range opts {
+		opt(query)
+	}
+	mq.withParent = query
 	return mq
 }
 
@@ -328,8 +399,8 @@ func (mq *MetadataQuery) GroupBy(field string, fields ...string) *MetadataGroupB
 //		Select(metadata.FieldAge).
 //		Scan(ctx, &v)
 //
-func (mq *MetadataQuery) Select(field string, fields ...string) *MetadataSelect {
-	mq.fields = append([]string{field}, fields...)
+func (mq *MetadataQuery) Select(fields ...string) *MetadataSelect {
+	mq.fields = append(mq.fields, fields...)
 	return &MetadataSelect{MetadataQuery: mq}
 }
 
@@ -353,8 +424,10 @@ func (mq *MetadataQuery) sqlAll(ctx context.Context) ([]*Metadata, error) {
 	var (
 		nodes       = []*Metadata{}
 		_spec       = mq.querySpec()
-		loadedTypes = [1]bool{
+		loadedTypes = [3]bool{
 			mq.withUser != nil,
+			mq.withChildren != nil,
+			mq.withParent != nil,
 		}
 	)
 	_spec.ScanValues = func(columns []string) ([]interface{}, error) {
@@ -403,11 +476,66 @@ func (mq *MetadataQuery) sqlAll(ctx context.Context) ([]*Metadata, error) {
 		}
 	}
 
+	if query := mq.withChildren; query != nil {
+		fks := make([]driver.Value, 0, len(nodes))
+		nodeids := make(map[int]*Metadata)
+		for i := range nodes {
+			fks = append(fks, nodes[i].ID)
+			nodeids[nodes[i].ID] = nodes[i]
+			nodes[i].Edges.Children = []*Metadata{}
+		}
+		query.Where(predicate.Metadata(func(s *sql.Selector) {
+			s.Where(sql.InValues(metadata.ChildrenColumn, fks...))
+		}))
+		neighbors, err := query.All(ctx)
+		if err != nil {
+			return nil, err
+		}
+		for _, n := range neighbors {
+			fk := n.ParentID
+			node, ok := nodeids[fk]
+			if !ok {
+				return nil, fmt.Errorf(`unexpected foreign-key "parent_id" returned %v for node %v`, fk, n.ID)
+			}
+			node.Edges.Children = append(node.Edges.Children, n)
+		}
+	}
+
+	if query := mq.withParent; query != nil {
+		ids := make([]int, 0, len(nodes))
+		nodeids := make(map[int][]*Metadata)
+		for i := range nodes {
+			fk := nodes[i].ParentID
+			if _, ok := nodeids[fk]; !ok {
+				ids = append(ids, fk)
+			}
+			nodeids[fk] = append(nodeids[fk], nodes[i])
+		}
+		query.Where(metadata.IDIn(ids...))
+		neighbors, err := query.All(ctx)
+		if err != nil {
+			return nil, err
+		}
+		for _, n := range neighbors {
+			nodes, ok := nodeids[n.ID]
+			if !ok {
+				return nil, fmt.Errorf(`unexpected foreign-key "parent_id" returned %v`, n.ID)
+			}
+			for i := range nodes {
+				nodes[i].Edges.Parent = n
+			}
+		}
+	}
+
 	return nodes, nil
 }
 
 func (mq *MetadataQuery) sqlCount(ctx context.Context) (int, error) {
 	_spec := mq.querySpec()
+	_spec.Node.Columns = mq.fields
+	if len(mq.fields) > 0 {
+		_spec.Unique = mq.unique != nil && *mq.unique
+	}
 	return sqlgraph.CountNodes(ctx, mq.driver, _spec)
 }
 
@@ -460,7 +588,7 @@ func (mq *MetadataQuery) querySpec() *sqlgraph.QuerySpec {
 	if ps := mq.order; len(ps) > 0 {
 		_spec.Order = func(selector *sql.Selector) {
 			for i := range ps {
-				ps[i](selector, metadata.ValidColumn)
+				ps[i](selector)
 			}
 		}
 	}
@@ -470,16 +598,23 @@ func (mq *MetadataQuery) querySpec() *sqlgraph.QuerySpec {
 func (mq *MetadataQuery) sqlQuery(ctx context.Context) *sql.Selector {
 	builder := sql.Dialect(mq.driver.Dialect())
 	t1 := builder.Table(metadata.Table)
-	selector := builder.Select(t1.Columns(metadata.Columns...)...).From(t1)
+	columns := mq.fields
+	if len(columns) == 0 {
+		columns = metadata.Columns
+	}
+	selector := builder.Select(t1.Columns(columns...)...).From(t1)
 	if mq.sql != nil {
 		selector = mq.sql
-		selector.Select(selector.Columns(metadata.Columns...)...)
+		selector.Select(selector.Columns(columns...)...)
+	}
+	if mq.unique != nil && *mq.unique {
+		selector.Distinct()
 	}
 	for _, p := range mq.predicates {
 		p(selector)
 	}
 	for _, p := range mq.order {
-		p(selector, metadata.ValidColumn)
+		p(selector)
 	}
 	if offset := mq.offset; offset != nil {
 		// limit is mandatory for offset clause. We start
@@ -741,13 +876,24 @@ func (mgb *MetadataGroupBy) sqlScan(ctx context.Context, v interface{}) error {
 }
 
 func (mgb *MetadataGroupBy) sqlQuery() *sql.Selector {
-	selector := mgb.sql
-	columns := make([]string, 0, len(mgb.fields)+len(mgb.fns))
-	columns = append(columns, mgb.fields...)
+	selector := mgb.sql.Select()
+	aggregation := make([]string, 0, len(mgb.fns))
 	for _, fn := range mgb.fns {
-		columns = append(columns, fn(selector, metadata.ValidColumn))
+		aggregation = append(aggregation, fn(selector))
 	}
-	return selector.Select(columns...).GroupBy(mgb.fields...)
+	// If no columns were selected in a custom aggregation function, the default
+	// selection is the fields used for "group-by", and the aggregation functions.
+	if len(selector.SelectedColumns()) == 0 {
+		columns := make([]string, 0, len(mgb.fields)+len(mgb.fns))
+		for _, f := range mgb.fields {
+			columns = append(columns, selector.C(f))
+		}
+		for _, c := range aggregation {
+			columns = append(columns, c)
+		}
+		selector.Select(columns...)
+	}
+	return selector.GroupBy(selector.Columns(mgb.fields...)...)
 }
 
 // MetadataSelect is the builder for selecting fields of Metadata entities.
@@ -963,16 +1109,10 @@ func (ms *MetadataSelect) BoolX(ctx context.Context) bool {
 
 func (ms *MetadataSelect) sqlScan(ctx context.Context, v interface{}) error {
 	rows := &sql.Rows{}
-	query, args := ms.sqlQuery().Query()
+	query, args := ms.sql.Query()
 	if err := ms.driver.Query(ctx, query, args, rows); err != nil {
 		return err
 	}
 	defer rows.Close()
 	return sql.ScanSlice(rows, v)
-}
-
-func (ms *MetadataSelect) sqlQuery() sql.Querier {
-	selector := ms.sql
-	selector.Select(selector.Columns(ms.fields...)...)
-	return selector
 }

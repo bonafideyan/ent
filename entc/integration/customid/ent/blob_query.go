@@ -365,8 +365,8 @@ func (bq *BlobQuery) GroupBy(field string, fields ...string) *BlobGroupBy {
 //		Select(blob.FieldUUID).
 //		Scan(ctx, &v)
 //
-func (bq *BlobQuery) Select(field string, fields ...string) *BlobSelect {
-	bq.fields = append([]string{field}, fields...)
+func (bq *BlobQuery) Select(fields ...string) *BlobSelect {
+	bq.fields = append(bq.fields, fields...)
 	return &BlobSelect{BlobQuery: bq}
 }
 
@@ -473,7 +473,7 @@ func (bq *BlobQuery) sqlAll(ctx context.Context) ([]*Blob, error) {
 				s.Where(sql.InValues(blob.LinksPrimaryKey[0], fks...))
 			},
 			ScanValues: func() [2]interface{} {
-				return [2]interface{}{&uuid.UUID{}, &uuid.UUID{}}
+				return [2]interface{}{new(uuid.UUID), new(uuid.UUID)}
 			},
 			Assign: func(out, in interface{}) error {
 				eout, ok := out.(*uuid.UUID)
@@ -521,6 +521,10 @@ func (bq *BlobQuery) sqlAll(ctx context.Context) ([]*Blob, error) {
 
 func (bq *BlobQuery) sqlCount(ctx context.Context) (int, error) {
 	_spec := bq.querySpec()
+	_spec.Node.Columns = bq.fields
+	if len(bq.fields) > 0 {
+		_spec.Unique = bq.unique != nil && *bq.unique
+	}
 	return sqlgraph.CountNodes(ctx, bq.driver, _spec)
 }
 
@@ -573,7 +577,7 @@ func (bq *BlobQuery) querySpec() *sqlgraph.QuerySpec {
 	if ps := bq.order; len(ps) > 0 {
 		_spec.Order = func(selector *sql.Selector) {
 			for i := range ps {
-				ps[i](selector, blob.ValidColumn)
+				ps[i](selector)
 			}
 		}
 	}
@@ -583,16 +587,23 @@ func (bq *BlobQuery) querySpec() *sqlgraph.QuerySpec {
 func (bq *BlobQuery) sqlQuery(ctx context.Context) *sql.Selector {
 	builder := sql.Dialect(bq.driver.Dialect())
 	t1 := builder.Table(blob.Table)
-	selector := builder.Select(t1.Columns(blob.Columns...)...).From(t1)
+	columns := bq.fields
+	if len(columns) == 0 {
+		columns = blob.Columns
+	}
+	selector := builder.Select(t1.Columns(columns...)...).From(t1)
 	if bq.sql != nil {
 		selector = bq.sql
-		selector.Select(selector.Columns(blob.Columns...)...)
+		selector.Select(selector.Columns(columns...)...)
+	}
+	if bq.unique != nil && *bq.unique {
+		selector.Distinct()
 	}
 	for _, p := range bq.predicates {
 		p(selector)
 	}
 	for _, p := range bq.order {
-		p(selector, blob.ValidColumn)
+		p(selector)
 	}
 	if offset := bq.offset; offset != nil {
 		// limit is mandatory for offset clause. We start
@@ -854,13 +865,24 @@ func (bgb *BlobGroupBy) sqlScan(ctx context.Context, v interface{}) error {
 }
 
 func (bgb *BlobGroupBy) sqlQuery() *sql.Selector {
-	selector := bgb.sql
-	columns := make([]string, 0, len(bgb.fields)+len(bgb.fns))
-	columns = append(columns, bgb.fields...)
+	selector := bgb.sql.Select()
+	aggregation := make([]string, 0, len(bgb.fns))
 	for _, fn := range bgb.fns {
-		columns = append(columns, fn(selector, blob.ValidColumn))
+		aggregation = append(aggregation, fn(selector))
 	}
-	return selector.Select(columns...).GroupBy(bgb.fields...)
+	// If no columns were selected in a custom aggregation function, the default
+	// selection is the fields used for "group-by", and the aggregation functions.
+	if len(selector.SelectedColumns()) == 0 {
+		columns := make([]string, 0, len(bgb.fields)+len(bgb.fns))
+		for _, f := range bgb.fields {
+			columns = append(columns, selector.C(f))
+		}
+		for _, c := range aggregation {
+			columns = append(columns, c)
+		}
+		selector.Select(columns...)
+	}
+	return selector.GroupBy(selector.Columns(bgb.fields...)...)
 }
 
 // BlobSelect is the builder for selecting fields of Blob entities.
@@ -1076,16 +1098,10 @@ func (bs *BlobSelect) BoolX(ctx context.Context) bool {
 
 func (bs *BlobSelect) sqlScan(ctx context.Context, v interface{}) error {
 	rows := &sql.Rows{}
-	query, args := bs.sqlQuery().Query()
+	query, args := bs.sql.Query()
 	if err := bs.driver.Query(ctx, query, args, rows); err != nil {
 		return err
 	}
 	defer rows.Close()
 	return sql.ScanSlice(rows, v)
-}
-
-func (bs *BlobSelect) sqlQuery() sql.Querier {
-	selector := bs.sql
-	selector.Select(selector.Columns(bs.fields...)...)
-	return selector
 }

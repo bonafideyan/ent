@@ -5,7 +5,10 @@
 package schema
 
 import (
+	"time"
+
 	"entgo.io/ent"
+	"entgo.io/ent/dialect/entsql"
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
 	"entgo.io/ent/schema/index"
@@ -46,6 +49,9 @@ func (User) Fields() []ent.Field {
 		field.Int("age"),
 		// extending name field to longtext.
 		field.Text("name"),
+		// extending the index prefix below (on MySQL).
+		field.Text("description").
+			Optional(),
 		// changing nickname from unique no non-unique.
 		field.String("nickname").
 			MaxLen(255),
@@ -80,6 +86,12 @@ func (User) Fields() []ent.Field {
 		// remove the max-length constraint from varchar.
 		field.String("workplace").
 			Optional(),
+		// add a new column with generated values by the database.
+		field.Time("created_at").
+			Default(time.Now).
+			Annotations(&entsql.Annotation{
+				Default: "CURRENT_TIMESTAMP",
+			}),
 		// deleting the `address` column.
 	}
 }
@@ -91,15 +103,23 @@ func (User) Edges() []ent.Edge {
 		edge.To("car", Car.Type),
 		// New edges to added.
 		edge.To("pets", Pet.Type).
-			StorageKey(edge.Column("owner_id")).
+			StorageKey(edge.Column("owner_id"), edge.Symbol("user_pet_id")).
 			Unique(),
 		edge.To("friends", User.Type).
-			StorageKey(edge.Table("friends"), edge.Columns("user", "friend")),
+			StorageKey(
+				edge.Table("friends"),
+				edge.Columns("user", "friend"),
+				edge.Symbols("user_friend_id1", "user_friend_id2"),
+			),
 	}
 }
 
 func (User) Indexes() []ent.Index {
 	return []ent.Index{
+		// Extend the column prefix by drop and create
+		// this index on MySQL.
+		index.Fields("description").
+			Annotations(entsql.Prefix(100)),
 		// deleting old indexes (name, address),
 		// and defining a new one.
 		index.Fields("phone", "age").
@@ -113,7 +133,6 @@ type Car struct {
 
 func (Car) Edges() []ent.Edge {
 	return []ent.Edge{
-		// Car now can have more than 1 owner (not unique anymore).
 		edge.From("owner", User.Type).
 			Ref("car").
 			Unique(),

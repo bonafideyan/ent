@@ -4,6 +4,8 @@ This source code is licensed under the Apache 2.0 license found
 in the LICENSE file in the root directory of this source tree.
 */}}
 
+{{/* gotype: entgo.io/ent/entc/gen.Graph */}}
+
 {{ define "dialect/sql/txoptions" }}
 // BeginTx returns a transactional client with specified options.
 func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) {
@@ -20,9 +22,9 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 	cfg.driver = &txDriver{tx: tx, drv: c.driver}
 	return &Tx{
 		config: cfg,
-		{{ range $_, $n := $.Nodes -}}
+		{{- range $n := $.Nodes }}
 			{{ $n.Name }}: New{{ $n.Name }}Client(cfg),
-		{{ end -}}
+		{{- end }}
 	}, nil
 }
 {{ end }}
