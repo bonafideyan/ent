@@ -7,10 +7,11 @@ package schema
 import (
 	"context"
 	"crypto/md5"
+	"errors"
 	"fmt"
 	"math"
-	"sort"
 
+	"ariga.io/atlas/sql/migrate"
 	"entgo.io/ent/dialect"
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/schema/field"
@@ -105,18 +106,19 @@ func (f CreateFunc) Create(ctx context.Context, tables ...*Table) error {
 // Migrate runs the migrations logic for the SQL dialects.
 type Migrate struct {
 	sqlDialect
-	universalID     bool     // global unique ids.
-	dropColumns     bool     // drop deleted columns.
-	dropIndexes     bool     // drop deleted indexes.
-	withFixture     bool     // with fks rename fixture.
-	withForeignKeys bool     // with foreign keys
-	typeRanges      []string // types order by their range.
-	hooks           []Hook   // hooks to apply before creation
+	universalID     bool          // global unique ids.
+	dropColumns     bool          // drop deleted columns.
+	dropIndexes     bool          // drop deleted indexes.
+	withFixture     bool          // with fks rename fixture.
+	withForeignKeys bool          // with foreign keys
+	atlas           *atlasOptions // migrate with atlas.
+	typeRanges      []string      // types order by their range.
+	hooks           []Hook        // hooks to apply before creation
 }
 
 // NewMigrate create a migration structure for the given SQL driver.
 func NewMigrate(d dialect.Driver, opts ...MigrateOption) (*Migrate, error) {
-	m := &Migrate{withForeignKeys: true}
+	m := &Migrate{withForeignKeys: true, atlas: &atlasOptions{}}
 	for _, opt := range opts {
 		opt(m)
 	}
@@ -130,11 +132,14 @@ func NewMigrate(d dialect.Driver, opts ...MigrateOption) (*Migrate, error) {
 	default:
 		return nil, fmt.Errorf("sql/schema: unsupported dialect %q", d.Dialect())
 	}
+	if err := m.setupAtlas(); err != nil {
+		return nil, err
+	}
 	return m, nil
 }
 
 // Create creates all schema resources in the database. It works in an "append-only"
-// mode, which means, it only create tables, append column to tables or modifying column type.
+// mode, which means, it only creates tables, appends columns to tables or modifies column types.
 //
 // Column can be modified by turning into a NULL from NOT NULL, or having a type conversion not
 // resulting data altering. From example, changing varchar(255) to varchar(120) is invalid, but
@@ -147,11 +152,50 @@ func (m *Migrate) Create(ctx context.Context, tables ...*Table) error {
 		m.setupTable(t)
 	}
 	var creator Creator = CreateFunc(m.create)
+	if m.atlas.enabled {
+		creator = CreateFunc(m.atCreate)
+	}
 	for i := len(m.hooks) - 1; i >= 0; i-- {
 		creator = m.hooks[i](creator)
 	}
-
 	return creator.Create(ctx, tables...)
+}
+
+// Diff compares the state read from the StateReader with the state defined by Ent.
+// Changes will be written to migration files by the configures Planner.
+func (m *Migrate) Diff(ctx context.Context, tables ...*Table) error {
+	return m.NamedDiff(ctx, "changes", tables...)
+}
+
+// NamedDiff compares the state read from the StateReader with the state defined by Ent.
+// Changes will be written to migration files by the configures Planner.
+func (m *Migrate) NamedDiff(ctx context.Context, name string, tables ...*Table) error {
+	if m.atlas.dir == nil {
+		return errors.New("no migration directory given")
+	}
+	if err := m.init(ctx, m); err != nil {
+		return err
+	}
+	plan, err := m.atDiff(ctx, m, name, tables...)
+	if err != nil {
+		return err
+	}
+	// Skip if the plan has no changes.
+	if len(plan.Changes) == 0 {
+		return nil
+	}
+	opts := []migrate.PlannerOption{
+		migrate.WithFormatter(m.atlas.fmt),
+	}
+	if m.atlas.genSum {
+		// Validate the migration directory before proceeding.
+		if err := migrate.Validate(m.atlas.dir); err != nil {
+			return fmt.Errorf("validating migration directory: %w", err)
+		}
+	} else {
+		opts = append(opts, migrate.DisableChecksum())
+	}
+	return migrate.NewPlanner(nil, m.atlas.dir, opts...).WritePlan(plan)
 }
 
 func (m *Migrate) create(ctx context.Context, tables ...*Table) error {
@@ -322,8 +366,6 @@ func (m *Migrate) changeSet(curr, new *Table) (*changes, error) {
 	if len(curr.PrimaryKey) != len(new.PrimaryKey) {
 		return nil, fmt.Errorf("cannot change primary key for table: %q", curr.Name)
 	}
-	sort.Slice(new.PrimaryKey, func(i, j int) bool { return new.PrimaryKey[i].Name < new.PrimaryKey[j].Name })
-	sort.Slice(curr.PrimaryKey, func(i, j int) bool { return curr.PrimaryKey[i].Name < curr.PrimaryKey[j].Name })
 	for i := range curr.PrimaryKey {
 		if curr.PrimaryKey[i].Name != new.PrimaryKey[i].Name {
 			return nil, fmt.Errorf("cannot change primary key for table: %q", curr.Name)
@@ -375,9 +417,11 @@ func (m *Migrate) changeSet(curr, new *Table) (*changes, error) {
 		// Change nullability of a column.
 		case c1.Nullable != c2.Nullable:
 			change.column.modify = append(change.column.modify, c1)
+		// Change default value.
+		case c1.Default != nil && c2.Default == nil:
+			change.column.modify = append(change.column.modify, c1)
 		}
 	}
-
 	// Drop columns.
 	for _, c1 := range curr.Columns {
 		// If a column was dropped, multi-columns indexes that are associated with this column will
@@ -388,7 +432,6 @@ func (m *Migrate) changeSet(curr, new *Table) (*changes, error) {
 			change.column.drop = append(change.column.drop, c1)
 		}
 	}
-
 	// Add or modify indexes.
 	for _, idx1 := range new.Indexes {
 		switch idx2, ok := curr.index(idx1.Name); {
@@ -407,7 +450,6 @@ func (m *Migrate) changeSet(curr, new *Table) (*changes, error) {
 			}
 		}
 	}
-
 	// Drop indexes.
 	for _, idx := range curr.Indexes {
 		if _, isFK := new.fk(idx.Name); !isFK && !new.hasIndex(idx.Name, idx.realname) {
@@ -502,12 +544,12 @@ func (m *Migrate) verify(ctx context.Context, tx dialect.Tx, t *Table) error {
 	if id == -1 {
 		return nil
 	}
-	return vr.verifyRange(ctx, tx, t, id<<32)
+	return vr.verifyRange(ctx, tx, t, int64(id<<32))
 }
 
 // types loads the type list from the database.
 // If the table does not create, it will create one.
-func (m *Migrate) types(ctx context.Context, tx dialect.Tx) error {
+func (m *Migrate) types(ctx context.Context, tx dialect.ExecQuerier) error {
 	exists, err := m.tableExist(ctx, tx, TypeTable)
 	if err != nil {
 		return err
@@ -532,24 +574,31 @@ func (m *Migrate) types(ctx context.Context, tx dialect.Tx) error {
 	return sql.ScanSlice(rows, &m.typeRanges)
 }
 
-func (m *Migrate) allocPKRange(ctx context.Context, tx dialect.Tx, t *Table) error {
+func (m *Migrate) allocPKRange(ctx context.Context, conn dialect.ExecQuerier, t *Table) error {
+	r, err := m.pkRange(ctx, conn, t)
+	if err != nil {
+		return err
+	}
+	return m.setRange(ctx, conn, t, r)
+}
+
+func (m *Migrate) pkRange(ctx context.Context, conn dialect.ExecQuerier, t *Table) (int64, error) {
 	id := indexOf(m.typeRanges, t.Name)
 	// If the table re-created, re-use its range from
-	// the past. otherwise, allocate a new id-range.
+	// the past. Otherwise, allocate a new id-range.
 	if id == -1 {
 		if len(m.typeRanges) > MaxTypes {
-			return fmt.Errorf("max number of types exceeded: %d", MaxTypes)
+			return 0, fmt.Errorf("max number of types exceeded: %d", MaxTypes)
 		}
 		query, args := sql.Dialect(m.Dialect()).
 			Insert(TypeTable).Columns("type").Values(t.Name).Query()
-		if err := tx.Exec(ctx, query, args, nil); err != nil {
-			return fmt.Errorf("insert into type: %w", err)
+		if err := conn.Exec(ctx, query, args, nil); err != nil {
+			return 0, fmt.Errorf("insert into ent_types: %w", err)
 		}
 		id = len(m.typeRanges)
 		m.typeRanges = append(m.typeRanges, t.Name)
 	}
-	// Set the id offset for table.
-	return m.setRange(ctx, tx, t, id<<32)
+	return int64(id << 32), nil
 }
 
 // fkColumn returns the column name of a foreign-key.
@@ -630,9 +679,9 @@ func rollback(tx dialect.Tx, err error) error {
 }
 
 // exist checks if the given COUNT query returns a value >= 1.
-func exist(ctx context.Context, tx dialect.Tx, query string, args ...interface{}) (bool, error) {
+func exist(ctx context.Context, conn dialect.ExecQuerier, query string, args ...interface{}) (bool, error) {
 	rows := &sql.Rows{}
-	if err := tx.Query(ctx, query, args, rows); err != nil {
+	if err := conn.Query(ctx, query, args, rows); err != nil {
 		return false, fmt.Errorf("reading schema information %w", err)
 	}
 	defer rows.Close()
@@ -653,12 +702,13 @@ func indexOf(a []string, s string) int {
 }
 
 type sqlDialect interface {
+	atBuilder
 	dialect.Driver
-	init(context.Context, dialect.Tx) error
+	init(context.Context, dialect.ExecQuerier) error
 	table(context.Context, dialect.Tx, string) (*Table, error)
-	tableExist(context.Context, dialect.Tx, string) (bool, error)
+	tableExist(context.Context, dialect.ExecQuerier, string) (bool, error)
 	fkExist(context.Context, dialect.Tx, string) (bool, error)
-	setRange(context.Context, dialect.Tx, *Table, int) error
+	setRange(context.Context, dialect.ExecQuerier, *Table, int64) error
 	dropIndex(context.Context, dialect.Tx, *Index, string) error
 	// table, column and index builder per dialect.
 	cType(*Column) string
@@ -683,5 +733,5 @@ type fkRenamer interface {
 
 // verifyRanger wraps the method for verifying global-id range correctness.
 type verifyRanger interface {
-	verifyRange(context.Context, dialect.Tx, *Table, int) error
+	verifyRange(context.Context, dialect.Tx, *Table, int64) error
 }

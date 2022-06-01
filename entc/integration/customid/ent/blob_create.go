@@ -33,6 +33,14 @@ func (bc *BlobCreate) SetUUID(u uuid.UUID) *BlobCreate {
 	return bc
 }
 
+// SetNillableUUID sets the "uuid" field if the given value is not nil.
+func (bc *BlobCreate) SetNillableUUID(u *uuid.UUID) *BlobCreate {
+	if u != nil {
+		bc.SetUUID(*u)
+	}
+	return bc
+}
+
 // SetCount sets the "count" field.
 func (bc *BlobCreate) SetCount(i int) *BlobCreate {
 	bc.mutation.SetCount(i)
@@ -50,6 +58,14 @@ func (bc *BlobCreate) SetNillableCount(i *int) *BlobCreate {
 // SetID sets the "id" field.
 func (bc *BlobCreate) SetID(u uuid.UUID) *BlobCreate {
 	bc.mutation.SetID(u)
+	return bc
+}
+
+// SetNillableID sets the "id" field if the given value is not nil.
+func (bc *BlobCreate) SetNillableID(u *uuid.UUID) *BlobCreate {
+	if u != nil {
+		bc.SetID(*u)
+	}
 	return bc
 }
 
@@ -127,9 +143,15 @@ func (bc *BlobCreate) Save(ctx context.Context) (*Blob, error) {
 			}
 			mut = bc.hooks[i](mut)
 		}
-		if _, err := mut.Mutate(ctx, bc.mutation); err != nil {
+		v, err := mut.Mutate(ctx, bc.mutation)
+		if err != nil {
 			return nil, err
 		}
+		nv, ok := v.(*Blob)
+		if !ok {
+			return nil, fmt.Errorf("unexpected node type %T returned from BlobMutation", v)
+		}
+		node = nv
 	}
 	return node, err
 }
@@ -192,7 +214,11 @@ func (bc *BlobCreate) sqlSave(ctx context.Context) (*Blob, error) {
 		return nil, err
 	}
 	if _spec.ID.Value != nil {
-		_node.ID = *_spec.ID.Value.(*uuid.UUID)
+		if id, ok := _spec.ID.Value.(*uuid.UUID); ok {
+			_node.ID = *id
+		} else if err := _node.ID.Scan(_spec.ID.Value); err != nil {
+			return nil, err
+		}
 	}
 	return _node, nil
 }

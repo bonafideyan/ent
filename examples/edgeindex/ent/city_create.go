@@ -84,9 +84,15 @@ func (cc *CityCreate) Save(ctx context.Context) (*City, error) {
 			}
 			mut = cc.hooks[i](mut)
 		}
-		if _, err := mut.Mutate(ctx, cc.mutation); err != nil {
+		v, err := mut.Mutate(ctx, cc.mutation)
+		if err != nil {
 			return nil, err
 		}
+		nv, ok := v.(*City)
+		if !ok {
+			return nil, fmt.Errorf("unexpected node type %T returned from CityMutation", v)
+		}
+		node = nv
 	}
 	return node, err
 }
@@ -215,11 +221,11 @@ func (ccb *CityCreateBulk) Save(ctx context.Context) ([]*City, error) {
 					return nil, err
 				}
 				mutation.id = &nodes[i].ID
-				mutation.done = true
 				if specs[i].ID.Value != nil {
 					id := specs[i].ID.Value.(int64)
 					nodes[i].ID = int(id)
 				}
+				mutation.done = true
 				return nodes[i], nil
 			})
 			for i := len(builder.hooks) - 1; i >= 0; i-- {

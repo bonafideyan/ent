@@ -6,6 +6,10 @@
 
 package user
 
+import (
+	"net/http"
+)
+
 const (
 	// Label holds the string label denoting the user type in the database.
 	Label = "user"
@@ -25,6 +29,8 @@ const (
 	FieldFloats = "floats"
 	// FieldStrings holds the string denoting the strings field in the database.
 	FieldStrings = "strings"
+	// FieldAddr holds the string denoting the addr field in the database.
+	FieldAddr = "addr"
 	// Table holds the table name of the user in the database.
 	Table = "users"
 )
@@ -39,6 +45,7 @@ var Columns = []string{
 	FieldInts,
 	FieldFloats,
 	FieldStrings,
+	FieldAddr,
 }
 
 // ValidColumn reports if the column name is valid (part of the table columns).
@@ -50,3 +57,10 @@ func ValidColumn(column string) bool {
 	}
 	return false
 }
+
+var (
+	// DefaultDirs holds the default value on creation for the "dirs" field.
+	DefaultDirs func() []http.Dir
+	// DefaultInts holds the default value on creation for the "ints" field.
+	DefaultInts []int
+)

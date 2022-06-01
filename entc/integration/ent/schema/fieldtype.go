@@ -94,6 +94,11 @@ func (FieldType) Fields() []ent.Field { //nolint:funlen
 		// ----------------------------------------------------------------------------
 		// Dialect-specific types
 
+		field.Text("text").
+			Optional().
+			SchemaType(map[string]string{
+				dialect.MySQL: "mediumtext",
+			}),
 		field.Time("datetime").
 			Optional().
 			SchemaType(map[string]string{
@@ -112,7 +117,16 @@ func (FieldType) Fields() []ent.Field { //nolint:funlen
 				dialect.MySQL:    "varchar(255)",
 				dialect.SQLite:   "varchar(255)",
 			}).
-			Optional(),
+			Optional().
+			Default(DefaultLink()),
+		field.Other("link_other_func", &Link{}).
+			SchemaType(map[string]string{
+				dialect.Postgres: "varchar",
+				dialect.MySQL:    "varchar(255)",
+				dialect.SQLite:   "varchar(255)",
+			}).
+			Optional().
+			Default(DefaultLink),
 		field.String("mac").
 			Optional().
 			GoType(MAC{}).
@@ -194,7 +208,13 @@ func (FieldType) Fields() []ent.Field { //nolint:funlen
 			GoType(&sql.NullBool{}),
 		field.Time("deleted_at").
 			Optional().
-			GoType(&sql.NullTime{}),
+			GoType(&sql.NullTime{}).
+			Default(func() *sql.NullTime {
+				return &sql.NullTime{Time: time.Now(), Valid: true}
+			}).
+			UpdateDefault(func() *sql.NullTime {
+				return &sql.NullTime{Time: time.Now(), Valid: true}
+			}),
 		field.Bytes("raw_data").
 			Optional().
 			MaxLen(20).
@@ -241,7 +261,7 @@ func (FieldType) Fields() []ent.Field { //nolint:funlen
 		field.Enum("priority").
 			Optional().
 			GoType(role.Priority(0)),
-		field.UUID("uuid", uuid.UUID{}).
+		field.UUID("optional_uuid", uuid.UUID{}).
 			Optional(),
 		field.UUID("nillable_uuid", uuid.UUID{}).
 			Optional().
@@ -412,6 +432,11 @@ type (
 
 type Link struct {
 	*url.URL
+}
+
+func DefaultLink() *Link {
+	u, _ := url.Parse("127.0.0.1")
+	return &Link{URL: u}
 }
 
 // Scan implements the Scanner interface.

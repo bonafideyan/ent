@@ -417,7 +417,7 @@ func (ftu *FieldTypeUpdate) SetNillableOptionalUint(u *uint) *FieldTypeUpdate {
 }
 
 // AddOptionalUint adds u to the "optional_uint" field.
-func (ftu *FieldTypeUpdate) AddOptionalUint(u uint) *FieldTypeUpdate {
+func (ftu *FieldTypeUpdate) AddOptionalUint(u int) *FieldTypeUpdate {
 	ftu.mutation.AddOptionalUint(u)
 	return ftu
 }
@@ -444,7 +444,7 @@ func (ftu *FieldTypeUpdate) SetNillableOptionalUint8(u *uint8) *FieldTypeUpdate 
 }
 
 // AddOptionalUint8 adds u to the "optional_uint8" field.
-func (ftu *FieldTypeUpdate) AddOptionalUint8(u uint8) *FieldTypeUpdate {
+func (ftu *FieldTypeUpdate) AddOptionalUint8(u int8) *FieldTypeUpdate {
 	ftu.mutation.AddOptionalUint8(u)
 	return ftu
 }
@@ -471,7 +471,7 @@ func (ftu *FieldTypeUpdate) SetNillableOptionalUint16(u *uint16) *FieldTypeUpdat
 }
 
 // AddOptionalUint16 adds u to the "optional_uint16" field.
-func (ftu *FieldTypeUpdate) AddOptionalUint16(u uint16) *FieldTypeUpdate {
+func (ftu *FieldTypeUpdate) AddOptionalUint16(u int16) *FieldTypeUpdate {
 	ftu.mutation.AddOptionalUint16(u)
 	return ftu
 }
@@ -498,7 +498,7 @@ func (ftu *FieldTypeUpdate) SetNillableOptionalUint32(u *uint32) *FieldTypeUpdat
 }
 
 // AddOptionalUint32 adds u to the "optional_uint32" field.
-func (ftu *FieldTypeUpdate) AddOptionalUint32(u uint32) *FieldTypeUpdate {
+func (ftu *FieldTypeUpdate) AddOptionalUint32(u int32) *FieldTypeUpdate {
 	ftu.mutation.AddOptionalUint32(u)
 	return ftu
 }
@@ -525,7 +525,7 @@ func (ftu *FieldTypeUpdate) SetNillableOptionalUint64(u *uint64) *FieldTypeUpdat
 }
 
 // AddOptionalUint64 adds u to the "optional_uint64" field.
-func (ftu *FieldTypeUpdate) AddOptionalUint64(u uint64) *FieldTypeUpdate {
+func (ftu *FieldTypeUpdate) AddOptionalUint64(u int64) *FieldTypeUpdate {
 	ftu.mutation.AddOptionalUint64(u)
 	return ftu
 }
@@ -610,6 +610,26 @@ func (ftu *FieldTypeUpdate) ClearOptionalFloat32() *FieldTypeUpdate {
 	return ftu
 }
 
+// SetText sets the "text" field.
+func (ftu *FieldTypeUpdate) SetText(s string) *FieldTypeUpdate {
+	ftu.mutation.SetText(s)
+	return ftu
+}
+
+// SetNillableText sets the "text" field if the given value is not nil.
+func (ftu *FieldTypeUpdate) SetNillableText(s *string) *FieldTypeUpdate {
+	if s != nil {
+		ftu.SetText(*s)
+	}
+	return ftu
+}
+
+// ClearText clears the value of the "text" field.
+func (ftu *FieldTypeUpdate) ClearText() *FieldTypeUpdate {
+	ftu.mutation.ClearText()
+	return ftu
+}
+
 // SetDatetime sets the "datetime" field.
 func (ftu *FieldTypeUpdate) SetDatetime(t time.Time) *FieldTypeUpdate {
 	ftu.mutation.SetDatetime(t)
@@ -666,6 +686,18 @@ func (ftu *FieldTypeUpdate) SetLinkOther(s *schema.Link) *FieldTypeUpdate {
 // ClearLinkOther clears the value of the "link_other" field.
 func (ftu *FieldTypeUpdate) ClearLinkOther() *FieldTypeUpdate {
 	ftu.mutation.ClearLinkOther()
+	return ftu
+}
+
+// SetLinkOtherFunc sets the "link_other_func" field.
+func (ftu *FieldTypeUpdate) SetLinkOtherFunc(s *schema.Link) *FieldTypeUpdate {
+	ftu.mutation.SetLinkOtherFunc(s)
+	return ftu
+}
+
+// ClearLinkOtherFunc clears the value of the "link_other_func" field.
+func (ftu *FieldTypeUpdate) ClearLinkOtherFunc() *FieldTypeUpdate {
+	ftu.mutation.ClearLinkOtherFunc()
 	return ftu
 }
 
@@ -1151,21 +1183,37 @@ func (ftu *FieldTypeUpdate) ClearPriority() *FieldTypeUpdate {
 	return ftu
 }
 
-// SetUUID sets the "uuid" field.
-func (ftu *FieldTypeUpdate) SetUUID(u uuid.UUID) *FieldTypeUpdate {
-	ftu.mutation.SetUUID(u)
+// SetOptionalUUID sets the "optional_uuid" field.
+func (ftu *FieldTypeUpdate) SetOptionalUUID(u uuid.UUID) *FieldTypeUpdate {
+	ftu.mutation.SetOptionalUUID(u)
 	return ftu
 }
 
-// ClearUUID clears the value of the "uuid" field.
-func (ftu *FieldTypeUpdate) ClearUUID() *FieldTypeUpdate {
-	ftu.mutation.ClearUUID()
+// SetNillableOptionalUUID sets the "optional_uuid" field if the given value is not nil.
+func (ftu *FieldTypeUpdate) SetNillableOptionalUUID(u *uuid.UUID) *FieldTypeUpdate {
+	if u != nil {
+		ftu.SetOptionalUUID(*u)
+	}
+	return ftu
+}
+
+// ClearOptionalUUID clears the value of the "optional_uuid" field.
+func (ftu *FieldTypeUpdate) ClearOptionalUUID() *FieldTypeUpdate {
+	ftu.mutation.ClearOptionalUUID()
 	return ftu
 }
 
 // SetNillableUUID sets the "nillable_uuid" field.
 func (ftu *FieldTypeUpdate) SetNillableUUID(u uuid.UUID) *FieldTypeUpdate {
 	ftu.mutation.SetNillableUUID(u)
+	return ftu
+}
+
+// SetNillableNillableUUID sets the "nillable_uuid" field if the given value is not nil.
+func (ftu *FieldTypeUpdate) SetNillableNillableUUID(u *uuid.UUID) *FieldTypeUpdate {
+	if u != nil {
+		ftu.SetNillableUUID(*u)
+	}
 	return ftu
 }
 
@@ -1363,6 +1411,10 @@ func (ftu *FieldTypeUpdate) defaults() {
 	if _, ok := ftu.mutation.Duration(); !ok && !ftu.mutation.DurationCleared() {
 		v := fieldtype.UpdateDefaultDuration()
 		ftu.mutation.SetDuration(v)
+	}
+	if _, ok := ftu.mutation.DeletedAt(); !ok && !ftu.mutation.DeletedAtCleared() {
+		v := fieldtype.UpdateDefaultDeletedAt()
+		ftu.mutation.SetDeletedAt(v)
 	}
 }
 
@@ -1577,6 +1629,9 @@ func (ftu *FieldTypeUpdate) gremlin() *dsl.Traversal {
 	if value, ok := ftu.mutation.AddedOptionalFloat32(); ok {
 		v.Property(dsl.Single, fieldtype.FieldOptionalFloat32, __.Union(__.Values(fieldtype.FieldOptionalFloat32), __.Constant(value)).Sum())
 	}
+	if value, ok := ftu.mutation.Text(); ok {
+		v.Property(dsl.Single, fieldtype.FieldText, value)
+	}
 	if value, ok := ftu.mutation.Datetime(); ok {
 		v.Property(dsl.Single, fieldtype.FieldDatetime, value)
 	}
@@ -1588,6 +1643,9 @@ func (ftu *FieldTypeUpdate) gremlin() *dsl.Traversal {
 	}
 	if value, ok := ftu.mutation.LinkOther(); ok {
 		v.Property(dsl.Single, fieldtype.FieldLinkOther, value)
+	}
+	if value, ok := ftu.mutation.LinkOtherFunc(); ok {
+		v.Property(dsl.Single, fieldtype.FieldLinkOtherFunc, value)
 	}
 	if value, ok := ftu.mutation.MAC(); ok {
 		v.Property(dsl.Single, fieldtype.FieldMAC, value)
@@ -1688,8 +1746,8 @@ func (ftu *FieldTypeUpdate) gremlin() *dsl.Traversal {
 	if value, ok := ftu.mutation.Priority(); ok {
 		v.Property(dsl.Single, fieldtype.FieldPriority, value)
 	}
-	if value, ok := ftu.mutation.UUID(); ok {
-		v.Property(dsl.Single, fieldtype.FieldUUID, value)
+	if value, ok := ftu.mutation.OptionalUUID(); ok {
+		v.Property(dsl.Single, fieldtype.FieldOptionalUUID, value)
 	}
 	if value, ok := ftu.mutation.NillableUUID(); ok {
 		v.Property(dsl.Single, fieldtype.FieldNillableUUID, value)
@@ -1776,6 +1834,9 @@ func (ftu *FieldTypeUpdate) gremlin() *dsl.Traversal {
 	if ftu.mutation.OptionalFloat32Cleared() {
 		properties = append(properties, fieldtype.FieldOptionalFloat32)
 	}
+	if ftu.mutation.TextCleared() {
+		properties = append(properties, fieldtype.FieldText)
+	}
 	if ftu.mutation.DatetimeCleared() {
 		properties = append(properties, fieldtype.FieldDatetime)
 	}
@@ -1784,6 +1845,9 @@ func (ftu *FieldTypeUpdate) gremlin() *dsl.Traversal {
 	}
 	if ftu.mutation.LinkOtherCleared() {
 		properties = append(properties, fieldtype.FieldLinkOther)
+	}
+	if ftu.mutation.LinkOtherFuncCleared() {
+		properties = append(properties, fieldtype.FieldLinkOtherFunc)
 	}
 	if ftu.mutation.MACCleared() {
 		properties = append(properties, fieldtype.FieldMAC)
@@ -1860,8 +1924,8 @@ func (ftu *FieldTypeUpdate) gremlin() *dsl.Traversal {
 	if ftu.mutation.PriorityCleared() {
 		properties = append(properties, fieldtype.FieldPriority)
 	}
-	if ftu.mutation.UUIDCleared() {
-		properties = append(properties, fieldtype.FieldUUID)
+	if ftu.mutation.OptionalUUIDCleared() {
+		properties = append(properties, fieldtype.FieldOptionalUUID)
 	}
 	if ftu.mutation.NillableUUIDCleared() {
 		properties = append(properties, fieldtype.FieldNillableUUID)
@@ -2272,7 +2336,7 @@ func (ftuo *FieldTypeUpdateOne) SetNillableOptionalUint(u *uint) *FieldTypeUpdat
 }
 
 // AddOptionalUint adds u to the "optional_uint" field.
-func (ftuo *FieldTypeUpdateOne) AddOptionalUint(u uint) *FieldTypeUpdateOne {
+func (ftuo *FieldTypeUpdateOne) AddOptionalUint(u int) *FieldTypeUpdateOne {
 	ftuo.mutation.AddOptionalUint(u)
 	return ftuo
 }
@@ -2299,7 +2363,7 @@ func (ftuo *FieldTypeUpdateOne) SetNillableOptionalUint8(u *uint8) *FieldTypeUpd
 }
 
 // AddOptionalUint8 adds u to the "optional_uint8" field.
-func (ftuo *FieldTypeUpdateOne) AddOptionalUint8(u uint8) *FieldTypeUpdateOne {
+func (ftuo *FieldTypeUpdateOne) AddOptionalUint8(u int8) *FieldTypeUpdateOne {
 	ftuo.mutation.AddOptionalUint8(u)
 	return ftuo
 }
@@ -2326,7 +2390,7 @@ func (ftuo *FieldTypeUpdateOne) SetNillableOptionalUint16(u *uint16) *FieldTypeU
 }
 
 // AddOptionalUint16 adds u to the "optional_uint16" field.
-func (ftuo *FieldTypeUpdateOne) AddOptionalUint16(u uint16) *FieldTypeUpdateOne {
+func (ftuo *FieldTypeUpdateOne) AddOptionalUint16(u int16) *FieldTypeUpdateOne {
 	ftuo.mutation.AddOptionalUint16(u)
 	return ftuo
 }
@@ -2353,7 +2417,7 @@ func (ftuo *FieldTypeUpdateOne) SetNillableOptionalUint32(u *uint32) *FieldTypeU
 }
 
 // AddOptionalUint32 adds u to the "optional_uint32" field.
-func (ftuo *FieldTypeUpdateOne) AddOptionalUint32(u uint32) *FieldTypeUpdateOne {
+func (ftuo *FieldTypeUpdateOne) AddOptionalUint32(u int32) *FieldTypeUpdateOne {
 	ftuo.mutation.AddOptionalUint32(u)
 	return ftuo
 }
@@ -2380,7 +2444,7 @@ func (ftuo *FieldTypeUpdateOne) SetNillableOptionalUint64(u *uint64) *FieldTypeU
 }
 
 // AddOptionalUint64 adds u to the "optional_uint64" field.
-func (ftuo *FieldTypeUpdateOne) AddOptionalUint64(u uint64) *FieldTypeUpdateOne {
+func (ftuo *FieldTypeUpdateOne) AddOptionalUint64(u int64) *FieldTypeUpdateOne {
 	ftuo.mutation.AddOptionalUint64(u)
 	return ftuo
 }
@@ -2465,6 +2529,26 @@ func (ftuo *FieldTypeUpdateOne) ClearOptionalFloat32() *FieldTypeUpdateOne {
 	return ftuo
 }
 
+// SetText sets the "text" field.
+func (ftuo *FieldTypeUpdateOne) SetText(s string) *FieldTypeUpdateOne {
+	ftuo.mutation.SetText(s)
+	return ftuo
+}
+
+// SetNillableText sets the "text" field if the given value is not nil.
+func (ftuo *FieldTypeUpdateOne) SetNillableText(s *string) *FieldTypeUpdateOne {
+	if s != nil {
+		ftuo.SetText(*s)
+	}
+	return ftuo
+}
+
+// ClearText clears the value of the "text" field.
+func (ftuo *FieldTypeUpdateOne) ClearText() *FieldTypeUpdateOne {
+	ftuo.mutation.ClearText()
+	return ftuo
+}
+
 // SetDatetime sets the "datetime" field.
 func (ftuo *FieldTypeUpdateOne) SetDatetime(t time.Time) *FieldTypeUpdateOne {
 	ftuo.mutation.SetDatetime(t)
@@ -2521,6 +2605,18 @@ func (ftuo *FieldTypeUpdateOne) SetLinkOther(s *schema.Link) *FieldTypeUpdateOne
 // ClearLinkOther clears the value of the "link_other" field.
 func (ftuo *FieldTypeUpdateOne) ClearLinkOther() *FieldTypeUpdateOne {
 	ftuo.mutation.ClearLinkOther()
+	return ftuo
+}
+
+// SetLinkOtherFunc sets the "link_other_func" field.
+func (ftuo *FieldTypeUpdateOne) SetLinkOtherFunc(s *schema.Link) *FieldTypeUpdateOne {
+	ftuo.mutation.SetLinkOtherFunc(s)
+	return ftuo
+}
+
+// ClearLinkOtherFunc clears the value of the "link_other_func" field.
+func (ftuo *FieldTypeUpdateOne) ClearLinkOtherFunc() *FieldTypeUpdateOne {
+	ftuo.mutation.ClearLinkOtherFunc()
 	return ftuo
 }
 
@@ -3006,21 +3102,37 @@ func (ftuo *FieldTypeUpdateOne) ClearPriority() *FieldTypeUpdateOne {
 	return ftuo
 }
 
-// SetUUID sets the "uuid" field.
-func (ftuo *FieldTypeUpdateOne) SetUUID(u uuid.UUID) *FieldTypeUpdateOne {
-	ftuo.mutation.SetUUID(u)
+// SetOptionalUUID sets the "optional_uuid" field.
+func (ftuo *FieldTypeUpdateOne) SetOptionalUUID(u uuid.UUID) *FieldTypeUpdateOne {
+	ftuo.mutation.SetOptionalUUID(u)
 	return ftuo
 }
 
-// ClearUUID clears the value of the "uuid" field.
-func (ftuo *FieldTypeUpdateOne) ClearUUID() *FieldTypeUpdateOne {
-	ftuo.mutation.ClearUUID()
+// SetNillableOptionalUUID sets the "optional_uuid" field if the given value is not nil.
+func (ftuo *FieldTypeUpdateOne) SetNillableOptionalUUID(u *uuid.UUID) *FieldTypeUpdateOne {
+	if u != nil {
+		ftuo.SetOptionalUUID(*u)
+	}
+	return ftuo
+}
+
+// ClearOptionalUUID clears the value of the "optional_uuid" field.
+func (ftuo *FieldTypeUpdateOne) ClearOptionalUUID() *FieldTypeUpdateOne {
+	ftuo.mutation.ClearOptionalUUID()
 	return ftuo
 }
 
 // SetNillableUUID sets the "nillable_uuid" field.
 func (ftuo *FieldTypeUpdateOne) SetNillableUUID(u uuid.UUID) *FieldTypeUpdateOne {
 	ftuo.mutation.SetNillableUUID(u)
+	return ftuo
+}
+
+// SetNillableNillableUUID sets the "nillable_uuid" field if the given value is not nil.
+func (ftuo *FieldTypeUpdateOne) SetNillableNillableUUID(u *uuid.UUID) *FieldTypeUpdateOne {
+	if u != nil {
+		ftuo.SetNillableUUID(*u)
+	}
 	return ftuo
 }
 
@@ -3187,9 +3299,15 @@ func (ftuo *FieldTypeUpdateOne) Save(ctx context.Context) (*FieldType, error) {
 			}
 			mut = ftuo.hooks[i](mut)
 		}
-		if _, err := mut.Mutate(ctx, ftuo.mutation); err != nil {
+		v, err := mut.Mutate(ctx, ftuo.mutation)
+		if err != nil {
 			return nil, err
 		}
+		nv, ok := v.(*FieldType)
+		if !ok {
+			return nil, fmt.Errorf("unexpected node type %T returned from FieldTypeMutation", v)
+		}
+		node = nv
 	}
 	return node, err
 }
@@ -3225,6 +3343,10 @@ func (ftuo *FieldTypeUpdateOne) defaults() {
 	if _, ok := ftuo.mutation.Duration(); !ok && !ftuo.mutation.DurationCleared() {
 		v := fieldtype.UpdateDefaultDuration()
 		ftuo.mutation.SetDuration(v)
+	}
+	if _, ok := ftuo.mutation.DeletedAt(); !ok && !ftuo.mutation.DeletedAtCleared() {
+		v := fieldtype.UpdateDefaultDeletedAt()
+		ftuo.mutation.SetDeletedAt(v)
 	}
 }
 
@@ -3444,6 +3566,9 @@ func (ftuo *FieldTypeUpdateOne) gremlin(id string) *dsl.Traversal {
 	if value, ok := ftuo.mutation.AddedOptionalFloat32(); ok {
 		v.Property(dsl.Single, fieldtype.FieldOptionalFloat32, __.Union(__.Values(fieldtype.FieldOptionalFloat32), __.Constant(value)).Sum())
 	}
+	if value, ok := ftuo.mutation.Text(); ok {
+		v.Property(dsl.Single, fieldtype.FieldText, value)
+	}
 	if value, ok := ftuo.mutation.Datetime(); ok {
 		v.Property(dsl.Single, fieldtype.FieldDatetime, value)
 	}
@@ -3455,6 +3580,9 @@ func (ftuo *FieldTypeUpdateOne) gremlin(id string) *dsl.Traversal {
 	}
 	if value, ok := ftuo.mutation.LinkOther(); ok {
 		v.Property(dsl.Single, fieldtype.FieldLinkOther, value)
+	}
+	if value, ok := ftuo.mutation.LinkOtherFunc(); ok {
+		v.Property(dsl.Single, fieldtype.FieldLinkOtherFunc, value)
 	}
 	if value, ok := ftuo.mutation.MAC(); ok {
 		v.Property(dsl.Single, fieldtype.FieldMAC, value)
@@ -3555,8 +3683,8 @@ func (ftuo *FieldTypeUpdateOne) gremlin(id string) *dsl.Traversal {
 	if value, ok := ftuo.mutation.Priority(); ok {
 		v.Property(dsl.Single, fieldtype.FieldPriority, value)
 	}
-	if value, ok := ftuo.mutation.UUID(); ok {
-		v.Property(dsl.Single, fieldtype.FieldUUID, value)
+	if value, ok := ftuo.mutation.OptionalUUID(); ok {
+		v.Property(dsl.Single, fieldtype.FieldOptionalUUID, value)
 	}
 	if value, ok := ftuo.mutation.NillableUUID(); ok {
 		v.Property(dsl.Single, fieldtype.FieldNillableUUID, value)
@@ -3643,6 +3771,9 @@ func (ftuo *FieldTypeUpdateOne) gremlin(id string) *dsl.Traversal {
 	if ftuo.mutation.OptionalFloat32Cleared() {
 		properties = append(properties, fieldtype.FieldOptionalFloat32)
 	}
+	if ftuo.mutation.TextCleared() {
+		properties = append(properties, fieldtype.FieldText)
+	}
 	if ftuo.mutation.DatetimeCleared() {
 		properties = append(properties, fieldtype.FieldDatetime)
 	}
@@ -3651,6 +3782,9 @@ func (ftuo *FieldTypeUpdateOne) gremlin(id string) *dsl.Traversal {
 	}
 	if ftuo.mutation.LinkOtherCleared() {
 		properties = append(properties, fieldtype.FieldLinkOther)
+	}
+	if ftuo.mutation.LinkOtherFuncCleared() {
+		properties = append(properties, fieldtype.FieldLinkOtherFunc)
 	}
 	if ftuo.mutation.MACCleared() {
 		properties = append(properties, fieldtype.FieldMAC)
@@ -3727,8 +3861,8 @@ func (ftuo *FieldTypeUpdateOne) gremlin(id string) *dsl.Traversal {
 	if ftuo.mutation.PriorityCleared() {
 		properties = append(properties, fieldtype.FieldPriority)
 	}
-	if ftuo.mutation.UUIDCleared() {
-		properties = append(properties, fieldtype.FieldUUID)
+	if ftuo.mutation.OptionalUUIDCleared() {
+		properties = append(properties, fieldtype.FieldOptionalUUID)
 	}
 	if ftuo.mutation.NillableUUIDCleared() {
 		properties = append(properties, fieldtype.FieldNillableUUID)

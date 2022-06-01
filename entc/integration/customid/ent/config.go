@@ -28,16 +28,20 @@ type config struct {
 
 // hooks per client, for fast access.
 type hooks struct {
-	Blob    []ent.Hook
-	Car     []ent.Hook
-	Device  []ent.Hook
-	Doc     []ent.Hook
-	Group   []ent.Hook
-	MixinID []ent.Hook
-	Note    []ent.Hook
-	Pet     []ent.Hook
-	Session []ent.Hook
-	User    []ent.Hook
+	Account  []ent.Hook
+	Blob     []ent.Hook
+	Car      []ent.Hook
+	Device   []ent.Hook
+	Doc      []ent.Hook
+	Group    []ent.Hook
+	MixinID  []ent.Hook
+	Note     []ent.Hook
+	Other    []ent.Hook
+	Pet      []ent.Hook
+	Revision []ent.Hook
+	Session  []ent.Hook
+	Token    []ent.Hook
+	User     []ent.Hook
 }
 
 // Options applies the options on the config object.

@@ -34,6 +34,14 @@ func (sc *SessionCreate) SetID(s schema.ID) *SessionCreate {
 	return sc
 }
 
+// SetNillableID sets the "id" field if the given value is not nil.
+func (sc *SessionCreate) SetNillableID(s *schema.ID) *SessionCreate {
+	if s != nil {
+		sc.SetID(*s)
+	}
+	return sc
+}
+
 // SetDeviceID sets the "device" edge to the Device entity by ID.
 func (sc *SessionCreate) SetDeviceID(id schema.ID) *SessionCreate {
 	sc.mutation.SetDeviceID(id)
@@ -93,9 +101,15 @@ func (sc *SessionCreate) Save(ctx context.Context) (*Session, error) {
 			}
 			mut = sc.hooks[i](mut)
 		}
-		if _, err := mut.Mutate(ctx, sc.mutation); err != nil {
+		v, err := mut.Mutate(ctx, sc.mutation)
+		if err != nil {
 			return nil, err
 		}
+		nv, ok := v.(*Session)
+		if !ok {
+			return nil, fmt.Errorf("unexpected node type %T returned from SessionMutation", v)
+		}
+		node = nv
 	}
 	return node, err
 }
@@ -149,7 +163,11 @@ func (sc *SessionCreate) sqlSave(ctx context.Context) (*Session, error) {
 		return nil, err
 	}
 	if _spec.ID.Value != nil {
-		_node.ID = *_spec.ID.Value.(*schema.ID)
+		if id, ok := _spec.ID.Value.(*schema.ID); ok {
+			_node.ID = *id
+		} else if err := _node.ID.Scan(_spec.ID.Value); err != nil {
+			return nil, err
+		}
 	}
 	return _node, nil
 }

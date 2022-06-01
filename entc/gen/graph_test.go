@@ -123,7 +123,11 @@ func TestNewGraph(t *testing.T) {
 	require.Equal(graph.Nodes[0], e1.Type)
 
 	require.Equal("t2_m2m_from", t2.Edges[5].Name)
+	require.Equal("t2_m2m_to", t2.Edges[5].Inverse)
 	require.Equal("t2_m2m_to", t2.Edges[6].Name)
+	require.Empty(t2.Edges[6].Inverse)
+	require.Equal(t2.Edges[6], t2.Edges[5].Ref)
+	require.Equal(t2.Edges[5], t2.Edges[6].Ref)
 	require.Equal(map[string]string{"Name": "From"}, t2.Edges[5].Annotations["GQL"])
 	require.Equal(map[string]string{"Name": "To"}, t2.Edges[6].Annotations["GQL"])
 }
@@ -208,7 +212,49 @@ func TestNewGraphDuplicateEdgeField(t *testing.T) {
 				{Name: "parent", Type: "User"},
 			},
 		})
-	require.EqualError(t, err, `entc/gen: User schema can't contain field and edge with the same name "parent"`)
+	require.EqualError(t, err, `entc/gen: User schema cannot contain field and edge with the same name "parent"`)
+}
+
+func TestNewGraphThroughUndefinedType(t *testing.T) {
+	_, err := NewGraph(&Config{Package: "entc/gen", Storage: drivers[0]}, &load.Schema{
+		Name: "T1",
+		Edges: []*load.Edge{
+			{Name: "groups", Type: "T1", Required: true, Through: &struct{ N, T string }{N: "groups_edge", T: "T2"}},
+		},
+	})
+	require.EqualError(t, err, `entc/gen: resolving edges: edge T1.groups defined with Through("groups_edge", T2.Type), but type T2 was not found`)
+}
+
+func TestNewGraphThroughInvalidRel(t *testing.T) {
+	_, err := NewGraph(&Config{Package: "entc/gen", Storage: drivers[0]}, &load.Schema{
+		Name: "T1",
+		Edges: []*load.Edge{
+			{Name: "groups", Type: "T1", Unique: true, Required: true, Through: &struct{ N, T string }{N: "groups_edge", T: "T2"}},
+		},
+	})
+	require.EqualError(t, err, `entc/gen: resolving edges: edge T1.groups Through("groups_edge", T2.Type) is allowed only on M2M edges, but got: "O2O"`)
+}
+
+func TestNewGraphThroughDuplicates(t *testing.T) {
+	_, err := NewGraph(&Config{Package: "entc/gen", Storage: drivers[0]},
+		&load.Schema{
+			Name: "User",
+			Edges: []*load.Edge{
+				{Name: "groups", Type: "Group", Through: &struct{ N, T string }{N: "group_edges", T: "T1"}},
+				{Name: "group_edges", Type: "Group"},
+			},
+		},
+		&load.Schema{
+			Name: "Group",
+			Edges: []*load.Edge{
+				{Name: "users", Type: "User", Inverse: true, RefName: "groups", Through: &struct{ N, T string }{N: "user_edges", T: "T1"}},
+			},
+		},
+		&load.Schema{
+			Name: "T1",
+		},
+	)
+	require.EqualError(t, err, `entc/gen: resolving edges: edge User.groups defined with Through("group_edges", T1.Type), but schema User already has an edge named group_edges`)
 }
 
 func TestRelation(t *testing.T) {
@@ -303,11 +349,12 @@ func TestGraph_Gen(t *testing.T) {
 	require.NoError(os.MkdirAll(target, os.ModePerm), "creating tmpdir")
 	defer os.RemoveAll(target)
 	external := MustParse(NewTemplate("external").Parse("package external"))
+	skipped := MustParse(NewTemplate("skipped").SkipIf(func(*Graph) bool { return true }).Parse("package external"))
 	graph, err := NewGraph(&Config{
 		Package:   "entc/gen",
 		Target:    target,
 		Storage:   drivers[0],
-		Templates: []*Template{external},
+		Templates: []*Template{external, skipped},
 		IDType:    &field.TypeInfo{Type: field.TypeInt},
 		Features:  AllFeatures,
 	}, &load.Schema{
@@ -336,6 +383,8 @@ func TestGraph_Gen(t *testing.T) {
 	}
 	_, err = os.Stat(filepath.Join(target, "external.go"))
 	require.NoError(err)
+	_, err = os.Stat(filepath.Join(target, "skipped.go"))
+	require.True(os.IsNotExist(err))
 
 	// Generated feature templates.
 	_, err = os.Stat(filepath.Join(target, "internal", "schema.go"))
@@ -395,4 +444,47 @@ func TestGraph_Hooks(t *testing.T) {
 	require.NoError(err)
 	require.NotNil(graph)
 	require.EqualError(graph.Gen(), `struct tag "yaml" is missing for field T1.age`)
+}
+
+func TestDependencyAnnotation_Build(t *testing.T) {
+	tests := []struct {
+		typ   *field.TypeInfo
+		field string
+	}{
+		{
+			typ: &field.TypeInfo{
+				Ident: "*http.Client",
+			},
+			field: "HTTPClient",
+		},
+		{
+			typ: &field.TypeInfo{
+				Ident: "[]*http.Client",
+				RType: &field.RType{
+					Kind: reflect.Slice,
+				},
+			},
+			field: "HTTPClients",
+		},
+		{
+			typ: &field.TypeInfo{
+				Ident: "[]*url.URL",
+				RType: &field.RType{
+					Kind: reflect.Slice,
+				},
+			},
+			field: "URLs",
+		},
+		{
+			typ: &field.TypeInfo{
+				Ident: "*net.Conn",
+			},
+			field: "NetConn",
+		},
+	}
+	for _, tt := range tests {
+		d := &Dependency{Type: tt.typ}
+		require.NoError(t, d.Build())
+		require.Equal(t, tt.field, d.Field)
+	}
 }

@@ -8,6 +8,7 @@ package entv2
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -47,6 +48,7 @@ type CarMutation struct {
 	op            Op
 	typ           string
 	id            *int
+	name          *string
 	clearedFields map[string]struct{}
 	owner         *int
 	clearedowner  bool
@@ -85,7 +87,7 @@ func withCarID(id int) carOption {
 		m.oldValue = func(ctx context.Context) (*Car, error) {
 			once.Do(func() {
 				if m.done {
-					err = fmt.Errorf("querying old values post mutation is not allowed")
+					err = errors.New("querying old values post mutation is not allowed")
 				} else {
 					value, err = m.Client().Car.Get(ctx, id)
 				}
@@ -118,7 +120,7 @@ func (m CarMutation) Client() *Client {
 // it returns an error otherwise.
 func (m CarMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, fmt.Errorf("entv2: mutation is not running in a transaction")
+		return nil, errors.New("entv2: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()
@@ -132,6 +134,74 @@ func (m *CarMutation) ID() (id int, exists bool) {
 		return
 	}
 	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *CarMutation) IDs(ctx context.Context) ([]int, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().Car.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetName sets the "name" field.
+func (m *CarMutation) SetName(s string) {
+	m.name = &s
+}
+
+// Name returns the value of the "name" field in the mutation.
+func (m *CarMutation) Name() (r string, exists bool) {
+	v := m.name
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldName returns the old "name" field's value of the Car entity.
+// If the Car object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *CarMutation) OldName(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldName is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldName requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldName: %w", err)
+	}
+	return oldValue.Name, nil
+}
+
+// ClearName clears the value of the "name" field.
+func (m *CarMutation) ClearName() {
+	m.name = nil
+	m.clearedFields[car.FieldName] = struct{}{}
+}
+
+// NameCleared returns if the "name" field was cleared in this mutation.
+func (m *CarMutation) NameCleared() bool {
+	_, ok := m.clearedFields[car.FieldName]
+	return ok
+}
+
+// ResetName resets all changes to the "name" field.
+func (m *CarMutation) ResetName() {
+	m.name = nil
+	delete(m.clearedFields, car.FieldName)
 }
 
 // SetOwnerID sets the "owner" edge to the User entity by id.
@@ -192,7 +262,10 @@ func (m *CarMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *CarMutation) Fields() []string {
-	fields := make([]string, 0, 0)
+	fields := make([]string, 0, 1)
+	if m.name != nil {
+		fields = append(fields, car.FieldName)
+	}
 	return fields
 }
 
@@ -200,6 +273,10 @@ func (m *CarMutation) Fields() []string {
 // return value indicates that this field was not set, or was not defined in the
 // schema.
 func (m *CarMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case car.FieldName:
+		return m.Name()
+	}
 	return nil, false
 }
 
@@ -207,6 +284,10 @@ func (m *CarMutation) Field(name string) (ent.Value, bool) {
 // returned if the mutation operation is not UpdateOne, or the query to the
 // database failed.
 func (m *CarMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case car.FieldName:
+		return m.OldName(ctx)
+	}
 	return nil, fmt.Errorf("unknown Car field %s", name)
 }
 
@@ -215,6 +296,13 @@ func (m *CarMutation) OldField(ctx context.Context, name string) (ent.Value, err
 // type.
 func (m *CarMutation) SetField(name string, value ent.Value) error {
 	switch name {
+	case car.FieldName:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetName(v)
+		return nil
 	}
 	return fmt.Errorf("unknown Car field %s", name)
 }
@@ -236,13 +324,19 @@ func (m *CarMutation) AddedField(name string) (ent.Value, bool) {
 // the field is not defined in the schema, or if the type mismatched the field
 // type.
 func (m *CarMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	}
 	return fmt.Errorf("unknown Car numeric field %s", name)
 }
 
 // ClearedFields returns all nullable fields that were cleared during this
 // mutation.
 func (m *CarMutation) ClearedFields() []string {
-	return nil
+	var fields []string
+	if m.FieldCleared(car.FieldName) {
+		fields = append(fields, car.FieldName)
+	}
+	return fields
 }
 
 // FieldCleared returns a boolean indicating if a field with the given name was
@@ -255,12 +349,22 @@ func (m *CarMutation) FieldCleared(name string) bool {
 // ClearField clears the value of the field with the given name. It returns an
 // error if the field is not defined in the schema.
 func (m *CarMutation) ClearField(name string) error {
+	switch name {
+	case car.FieldName:
+		m.ClearName()
+		return nil
+	}
 	return fmt.Errorf("unknown Car nullable field %s", name)
 }
 
 // ResetField resets all changes in the mutation for the field with the given name.
 // It returns an error if the field is not defined in the schema.
 func (m *CarMutation) ResetField(name string) error {
+	switch name {
+	case car.FieldName:
+		m.ResetName()
+		return nil
+	}
 	return fmt.Errorf("unknown Car field %s", name)
 }
 
@@ -391,7 +495,7 @@ func withConversionID(id int) conversionOption {
 		m.oldValue = func(ctx context.Context) (*Conversion, error) {
 			once.Do(func() {
 				if m.done {
-					err = fmt.Errorf("querying old values post mutation is not allowed")
+					err = errors.New("querying old values post mutation is not allowed")
 				} else {
 					value, err = m.Client().Conversion.Get(ctx, id)
 				}
@@ -424,7 +528,7 @@ func (m ConversionMutation) Client() *Client {
 // it returns an error otherwise.
 func (m ConversionMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, fmt.Errorf("entv2: mutation is not running in a transaction")
+		return nil, errors.New("entv2: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()
@@ -438,6 +542,25 @@ func (m *ConversionMutation) ID() (id int, exists bool) {
 		return
 	}
 	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *ConversionMutation) IDs(ctx context.Context) ([]int, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().Conversion.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
 }
 
 // SetName sets the "name" field.
@@ -459,10 +582,10 @@ func (m *ConversionMutation) Name() (r string, exists bool) {
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
 func (m *ConversionMutation) OldName(ctx context.Context) (v string, err error) {
 	if !m.op.Is(OpUpdateOne) {
-		return v, fmt.Errorf("OldName is only allowed on UpdateOne operations")
+		return v, errors.New("OldName is only allowed on UpdateOne operations")
 	}
 	if m.id == nil || m.oldValue == nil {
-		return v, fmt.Errorf("OldName requires an ID field in the mutation")
+		return v, errors.New("OldName requires an ID field in the mutation")
 	}
 	oldValue, err := m.oldValue(ctx)
 	if err != nil {
@@ -508,10 +631,10 @@ func (m *ConversionMutation) Int8ToString() (r string, exists bool) {
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
 func (m *ConversionMutation) OldInt8ToString(ctx context.Context) (v string, err error) {
 	if !m.op.Is(OpUpdateOne) {
-		return v, fmt.Errorf("OldInt8ToString is only allowed on UpdateOne operations")
+		return v, errors.New("OldInt8ToString is only allowed on UpdateOne operations")
 	}
 	if m.id == nil || m.oldValue == nil {
-		return v, fmt.Errorf("OldInt8ToString requires an ID field in the mutation")
+		return v, errors.New("OldInt8ToString requires an ID field in the mutation")
 	}
 	oldValue, err := m.oldValue(ctx)
 	if err != nil {
@@ -557,10 +680,10 @@ func (m *ConversionMutation) Uint8ToString() (r string, exists bool) {
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
 func (m *ConversionMutation) OldUint8ToString(ctx context.Context) (v string, err error) {
 	if !m.op.Is(OpUpdateOne) {
-		return v, fmt.Errorf("OldUint8ToString is only allowed on UpdateOne operations")
+		return v, errors.New("OldUint8ToString is only allowed on UpdateOne operations")
 	}
 	if m.id == nil || m.oldValue == nil {
-		return v, fmt.Errorf("OldUint8ToString requires an ID field in the mutation")
+		return v, errors.New("OldUint8ToString requires an ID field in the mutation")
 	}
 	oldValue, err := m.oldValue(ctx)
 	if err != nil {
@@ -606,10 +729,10 @@ func (m *ConversionMutation) Int16ToString() (r string, exists bool) {
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
 func (m *ConversionMutation) OldInt16ToString(ctx context.Context) (v string, err error) {
 	if !m.op.Is(OpUpdateOne) {
-		return v, fmt.Errorf("OldInt16ToString is only allowed on UpdateOne operations")
+		return v, errors.New("OldInt16ToString is only allowed on UpdateOne operations")
 	}
 	if m.id == nil || m.oldValue == nil {
-		return v, fmt.Errorf("OldInt16ToString requires an ID field in the mutation")
+		return v, errors.New("OldInt16ToString requires an ID field in the mutation")
 	}
 	oldValue, err := m.oldValue(ctx)
 	if err != nil {
@@ -655,10 +778,10 @@ func (m *ConversionMutation) Uint16ToString() (r string, exists bool) {
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
 func (m *ConversionMutation) OldUint16ToString(ctx context.Context) (v string, err error) {
 	if !m.op.Is(OpUpdateOne) {
-		return v, fmt.Errorf("OldUint16ToString is only allowed on UpdateOne operations")
+		return v, errors.New("OldUint16ToString is only allowed on UpdateOne operations")
 	}
 	if m.id == nil || m.oldValue == nil {
-		return v, fmt.Errorf("OldUint16ToString requires an ID field in the mutation")
+		return v, errors.New("OldUint16ToString requires an ID field in the mutation")
 	}
 	oldValue, err := m.oldValue(ctx)
 	if err != nil {
@@ -704,10 +827,10 @@ func (m *ConversionMutation) Int32ToString() (r string, exists bool) {
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
 func (m *ConversionMutation) OldInt32ToString(ctx context.Context) (v string, err error) {
 	if !m.op.Is(OpUpdateOne) {
-		return v, fmt.Errorf("OldInt32ToString is only allowed on UpdateOne operations")
+		return v, errors.New("OldInt32ToString is only allowed on UpdateOne operations")
 	}
 	if m.id == nil || m.oldValue == nil {
-		return v, fmt.Errorf("OldInt32ToString requires an ID field in the mutation")
+		return v, errors.New("OldInt32ToString requires an ID field in the mutation")
 	}
 	oldValue, err := m.oldValue(ctx)
 	if err != nil {
@@ -753,10 +876,10 @@ func (m *ConversionMutation) Uint32ToString() (r string, exists bool) {
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
 func (m *ConversionMutation) OldUint32ToString(ctx context.Context) (v string, err error) {
 	if !m.op.Is(OpUpdateOne) {
-		return v, fmt.Errorf("OldUint32ToString is only allowed on UpdateOne operations")
+		return v, errors.New("OldUint32ToString is only allowed on UpdateOne operations")
 	}
 	if m.id == nil || m.oldValue == nil {
-		return v, fmt.Errorf("OldUint32ToString requires an ID field in the mutation")
+		return v, errors.New("OldUint32ToString requires an ID field in the mutation")
 	}
 	oldValue, err := m.oldValue(ctx)
 	if err != nil {
@@ -802,10 +925,10 @@ func (m *ConversionMutation) Int64ToString() (r string, exists bool) {
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
 func (m *ConversionMutation) OldInt64ToString(ctx context.Context) (v string, err error) {
 	if !m.op.Is(OpUpdateOne) {
-		return v, fmt.Errorf("OldInt64ToString is only allowed on UpdateOne operations")
+		return v, errors.New("OldInt64ToString is only allowed on UpdateOne operations")
 	}
 	if m.id == nil || m.oldValue == nil {
-		return v, fmt.Errorf("OldInt64ToString requires an ID field in the mutation")
+		return v, errors.New("OldInt64ToString requires an ID field in the mutation")
 	}
 	oldValue, err := m.oldValue(ctx)
 	if err != nil {
@@ -851,10 +974,10 @@ func (m *ConversionMutation) Uint64ToString() (r string, exists bool) {
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
 func (m *ConversionMutation) OldUint64ToString(ctx context.Context) (v string, err error) {
 	if !m.op.Is(OpUpdateOne) {
-		return v, fmt.Errorf("OldUint64ToString is only allowed on UpdateOne operations")
+		return v, errors.New("OldUint64ToString is only allowed on UpdateOne operations")
 	}
 	if m.id == nil || m.oldValue == nil {
-		return v, fmt.Errorf("OldUint64ToString requires an ID field in the mutation")
+		return v, errors.New("OldUint64ToString requires an ID field in the mutation")
 	}
 	oldValue, err := m.oldValue(ctx)
 	if err != nil {
@@ -1245,6 +1368,8 @@ type CustomTypeMutation struct {
 	typ           string
 	id            *int
 	custom        *string
+	tz0           *time.Time
+	tz3           *time.Time
 	clearedFields map[string]struct{}
 	done          bool
 	oldValue      func(context.Context) (*CustomType, error)
@@ -1281,7 +1406,7 @@ func withCustomTypeID(id int) customtypeOption {
 		m.oldValue = func(ctx context.Context) (*CustomType, error) {
 			once.Do(func() {
 				if m.done {
-					err = fmt.Errorf("querying old values post mutation is not allowed")
+					err = errors.New("querying old values post mutation is not allowed")
 				} else {
 					value, err = m.Client().CustomType.Get(ctx, id)
 				}
@@ -1314,7 +1439,7 @@ func (m CustomTypeMutation) Client() *Client {
 // it returns an error otherwise.
 func (m CustomTypeMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, fmt.Errorf("entv2: mutation is not running in a transaction")
+		return nil, errors.New("entv2: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()
@@ -1328,6 +1453,25 @@ func (m *CustomTypeMutation) ID() (id int, exists bool) {
 		return
 	}
 	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *CustomTypeMutation) IDs(ctx context.Context) ([]int, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().CustomType.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
 }
 
 // SetCustom sets the "custom" field.
@@ -1349,10 +1493,10 @@ func (m *CustomTypeMutation) Custom() (r string, exists bool) {
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
 func (m *CustomTypeMutation) OldCustom(ctx context.Context) (v string, err error) {
 	if !m.op.Is(OpUpdateOne) {
-		return v, fmt.Errorf("OldCustom is only allowed on UpdateOne operations")
+		return v, errors.New("OldCustom is only allowed on UpdateOne operations")
 	}
 	if m.id == nil || m.oldValue == nil {
-		return v, fmt.Errorf("OldCustom requires an ID field in the mutation")
+		return v, errors.New("OldCustom requires an ID field in the mutation")
 	}
 	oldValue, err := m.oldValue(ctx)
 	if err != nil {
@@ -1379,6 +1523,104 @@ func (m *CustomTypeMutation) ResetCustom() {
 	delete(m.clearedFields, customtype.FieldCustom)
 }
 
+// SetTz0 sets the "tz0" field.
+func (m *CustomTypeMutation) SetTz0(t time.Time) {
+	m.tz0 = &t
+}
+
+// Tz0 returns the value of the "tz0" field in the mutation.
+func (m *CustomTypeMutation) Tz0() (r time.Time, exists bool) {
+	v := m.tz0
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTz0 returns the old "tz0" field's value of the CustomType entity.
+// If the CustomType object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *CustomTypeMutation) OldTz0(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTz0 is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTz0 requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTz0: %w", err)
+	}
+	return oldValue.Tz0, nil
+}
+
+// ClearTz0 clears the value of the "tz0" field.
+func (m *CustomTypeMutation) ClearTz0() {
+	m.tz0 = nil
+	m.clearedFields[customtype.FieldTz0] = struct{}{}
+}
+
+// Tz0Cleared returns if the "tz0" field was cleared in this mutation.
+func (m *CustomTypeMutation) Tz0Cleared() bool {
+	_, ok := m.clearedFields[customtype.FieldTz0]
+	return ok
+}
+
+// ResetTz0 resets all changes to the "tz0" field.
+func (m *CustomTypeMutation) ResetTz0() {
+	m.tz0 = nil
+	delete(m.clearedFields, customtype.FieldTz0)
+}
+
+// SetTz3 sets the "tz3" field.
+func (m *CustomTypeMutation) SetTz3(t time.Time) {
+	m.tz3 = &t
+}
+
+// Tz3 returns the value of the "tz3" field in the mutation.
+func (m *CustomTypeMutation) Tz3() (r time.Time, exists bool) {
+	v := m.tz3
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTz3 returns the old "tz3" field's value of the CustomType entity.
+// If the CustomType object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *CustomTypeMutation) OldTz3(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTz3 is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTz3 requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTz3: %w", err)
+	}
+	return oldValue.Tz3, nil
+}
+
+// ClearTz3 clears the value of the "tz3" field.
+func (m *CustomTypeMutation) ClearTz3() {
+	m.tz3 = nil
+	m.clearedFields[customtype.FieldTz3] = struct{}{}
+}
+
+// Tz3Cleared returns if the "tz3" field was cleared in this mutation.
+func (m *CustomTypeMutation) Tz3Cleared() bool {
+	_, ok := m.clearedFields[customtype.FieldTz3]
+	return ok
+}
+
+// ResetTz3 resets all changes to the "tz3" field.
+func (m *CustomTypeMutation) ResetTz3() {
+	m.tz3 = nil
+	delete(m.clearedFields, customtype.FieldTz3)
+}
+
 // Where appends a list predicates to the CustomTypeMutation builder.
 func (m *CustomTypeMutation) Where(ps ...predicate.CustomType) {
 	m.predicates = append(m.predicates, ps...)
@@ -1398,9 +1640,15 @@ func (m *CustomTypeMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *CustomTypeMutation) Fields() []string {
-	fields := make([]string, 0, 1)
+	fields := make([]string, 0, 3)
 	if m.custom != nil {
 		fields = append(fields, customtype.FieldCustom)
+	}
+	if m.tz0 != nil {
+		fields = append(fields, customtype.FieldTz0)
+	}
+	if m.tz3 != nil {
+		fields = append(fields, customtype.FieldTz3)
 	}
 	return fields
 }
@@ -1412,6 +1660,10 @@ func (m *CustomTypeMutation) Field(name string) (ent.Value, bool) {
 	switch name {
 	case customtype.FieldCustom:
 		return m.Custom()
+	case customtype.FieldTz0:
+		return m.Tz0()
+	case customtype.FieldTz3:
+		return m.Tz3()
 	}
 	return nil, false
 }
@@ -1423,6 +1675,10 @@ func (m *CustomTypeMutation) OldField(ctx context.Context, name string) (ent.Val
 	switch name {
 	case customtype.FieldCustom:
 		return m.OldCustom(ctx)
+	case customtype.FieldTz0:
+		return m.OldTz0(ctx)
+	case customtype.FieldTz3:
+		return m.OldTz3(ctx)
 	}
 	return nil, fmt.Errorf("unknown CustomType field %s", name)
 }
@@ -1438,6 +1694,20 @@ func (m *CustomTypeMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetCustom(v)
+		return nil
+	case customtype.FieldTz0:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTz0(v)
+		return nil
+	case customtype.FieldTz3:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTz3(v)
 		return nil
 	}
 	return fmt.Errorf("unknown CustomType field %s", name)
@@ -1472,6 +1742,12 @@ func (m *CustomTypeMutation) ClearedFields() []string {
 	if m.FieldCleared(customtype.FieldCustom) {
 		fields = append(fields, customtype.FieldCustom)
 	}
+	if m.FieldCleared(customtype.FieldTz0) {
+		fields = append(fields, customtype.FieldTz0)
+	}
+	if m.FieldCleared(customtype.FieldTz3) {
+		fields = append(fields, customtype.FieldTz3)
+	}
 	return fields
 }
 
@@ -1489,6 +1765,12 @@ func (m *CustomTypeMutation) ClearField(name string) error {
 	case customtype.FieldCustom:
 		m.ClearCustom()
 		return nil
+	case customtype.FieldTz0:
+		m.ClearTz0()
+		return nil
+	case customtype.FieldTz3:
+		m.ClearTz3()
+		return nil
 	}
 	return fmt.Errorf("unknown CustomType nullable field %s", name)
 }
@@ -1499,6 +1781,12 @@ func (m *CustomTypeMutation) ResetField(name string) error {
 	switch name {
 	case customtype.FieldCustom:
 		m.ResetCustom()
+		return nil
+	case customtype.FieldTz0:
+		m.ResetTz0()
+		return nil
+	case customtype.FieldTz3:
+		m.ResetTz3()
 		return nil
 	}
 	return fmt.Errorf("unknown CustomType field %s", name)
@@ -1594,7 +1882,7 @@ func withGroupID(id int) groupOption {
 		m.oldValue = func(ctx context.Context) (*Group, error) {
 			once.Do(func() {
 				if m.done {
-					err = fmt.Errorf("querying old values post mutation is not allowed")
+					err = errors.New("querying old values post mutation is not allowed")
 				} else {
 					value, err = m.Client().Group.Get(ctx, id)
 				}
@@ -1627,7 +1915,7 @@ func (m GroupMutation) Client() *Client {
 // it returns an error otherwise.
 func (m GroupMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, fmt.Errorf("entv2: mutation is not running in a transaction")
+		return nil, errors.New("entv2: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()
@@ -1641,6 +1929,25 @@ func (m *GroupMutation) ID() (id int, exists bool) {
 		return
 	}
 	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *GroupMutation) IDs(ctx context.Context) ([]int, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().Group.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
 }
 
 // Where appends a list predicates to the GroupMutation builder.
@@ -1827,7 +2134,7 @@ func withMediaID(id int) mediaOption {
 		m.oldValue = func(ctx context.Context) (*Media, error) {
 			once.Do(func() {
 				if m.done {
-					err = fmt.Errorf("querying old values post mutation is not allowed")
+					err = errors.New("querying old values post mutation is not allowed")
 				} else {
 					value, err = m.Client().Media.Get(ctx, id)
 				}
@@ -1860,7 +2167,7 @@ func (m MediaMutation) Client() *Client {
 // it returns an error otherwise.
 func (m MediaMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, fmt.Errorf("entv2: mutation is not running in a transaction")
+		return nil, errors.New("entv2: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()
@@ -1874,6 +2181,25 @@ func (m *MediaMutation) ID() (id int, exists bool) {
 		return
 	}
 	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *MediaMutation) IDs(ctx context.Context) ([]int, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().Media.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
 }
 
 // SetSource sets the "source" field.
@@ -1895,10 +2221,10 @@ func (m *MediaMutation) Source() (r string, exists bool) {
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
 func (m *MediaMutation) OldSource(ctx context.Context) (v string, err error) {
 	if !m.op.Is(OpUpdateOne) {
-		return v, fmt.Errorf("OldSource is only allowed on UpdateOne operations")
+		return v, errors.New("OldSource is only allowed on UpdateOne operations")
 	}
 	if m.id == nil || m.oldValue == nil {
-		return v, fmt.Errorf("OldSource requires an ID field in the mutation")
+		return v, errors.New("OldSource requires an ID field in the mutation")
 	}
 	oldValue, err := m.oldValue(ctx)
 	if err != nil {
@@ -1944,10 +2270,10 @@ func (m *MediaMutation) SourceURI() (r string, exists bool) {
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
 func (m *MediaMutation) OldSourceURI(ctx context.Context) (v string, err error) {
 	if !m.op.Is(OpUpdateOne) {
-		return v, fmt.Errorf("OldSourceURI is only allowed on UpdateOne operations")
+		return v, errors.New("OldSourceURI is only allowed on UpdateOne operations")
 	}
 	if m.id == nil || m.oldValue == nil {
-		return v, fmt.Errorf("OldSourceURI requires an ID field in the mutation")
+		return v, errors.New("OldSourceURI requires an ID field in the mutation")
 	}
 	oldValue, err := m.oldValue(ctx)
 	if err != nil {
@@ -1993,10 +2319,10 @@ func (m *MediaMutation) Text() (r string, exists bool) {
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
 func (m *MediaMutation) OldText(ctx context.Context) (v string, err error) {
 	if !m.op.Is(OpUpdateOne) {
-		return v, fmt.Errorf("OldText is only allowed on UpdateOne operations")
+		return v, errors.New("OldText is only allowed on UpdateOne operations")
 	}
 	if m.id == nil || m.oldValue == nil {
-		return v, fmt.Errorf("OldText requires an ID field in the mutation")
+		return v, errors.New("OldText requires an ID field in the mutation")
 	}
 	oldValue, err := m.oldValue(ctx)
 	if err != nil {
@@ -2248,6 +2574,7 @@ type PetMutation struct {
 	op            Op
 	typ           string
 	id            *int
+	name          *string
 	clearedFields map[string]struct{}
 	owner         *int
 	clearedowner  bool
@@ -2286,7 +2613,7 @@ func withPetID(id int) petOption {
 		m.oldValue = func(ctx context.Context) (*Pet, error) {
 			once.Do(func() {
 				if m.done {
-					err = fmt.Errorf("querying old values post mutation is not allowed")
+					err = errors.New("querying old values post mutation is not allowed")
 				} else {
 					value, err = m.Client().Pet.Get(ctx, id)
 				}
@@ -2319,7 +2646,7 @@ func (m PetMutation) Client() *Client {
 // it returns an error otherwise.
 func (m PetMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, fmt.Errorf("entv2: mutation is not running in a transaction")
+		return nil, errors.New("entv2: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()
@@ -2333,6 +2660,74 @@ func (m *PetMutation) ID() (id int, exists bool) {
 		return
 	}
 	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *PetMutation) IDs(ctx context.Context) ([]int, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().Pet.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetName sets the "name" field.
+func (m *PetMutation) SetName(s string) {
+	m.name = &s
+}
+
+// Name returns the value of the "name" field in the mutation.
+func (m *PetMutation) Name() (r string, exists bool) {
+	v := m.name
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldName returns the old "name" field's value of the Pet entity.
+// If the Pet object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PetMutation) OldName(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldName is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldName requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldName: %w", err)
+	}
+	return oldValue.Name, nil
+}
+
+// ClearName clears the value of the "name" field.
+func (m *PetMutation) ClearName() {
+	m.name = nil
+	m.clearedFields[pet.FieldName] = struct{}{}
+}
+
+// NameCleared returns if the "name" field was cleared in this mutation.
+func (m *PetMutation) NameCleared() bool {
+	_, ok := m.clearedFields[pet.FieldName]
+	return ok
+}
+
+// ResetName resets all changes to the "name" field.
+func (m *PetMutation) ResetName() {
+	m.name = nil
+	delete(m.clearedFields, pet.FieldName)
 }
 
 // SetOwnerID sets the "owner" edge to the User entity by id.
@@ -2393,7 +2788,10 @@ func (m *PetMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *PetMutation) Fields() []string {
-	fields := make([]string, 0, 0)
+	fields := make([]string, 0, 1)
+	if m.name != nil {
+		fields = append(fields, pet.FieldName)
+	}
 	return fields
 }
 
@@ -2401,6 +2799,10 @@ func (m *PetMutation) Fields() []string {
 // return value indicates that this field was not set, or was not defined in the
 // schema.
 func (m *PetMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case pet.FieldName:
+		return m.Name()
+	}
 	return nil, false
 }
 
@@ -2408,6 +2810,10 @@ func (m *PetMutation) Field(name string) (ent.Value, bool) {
 // returned if the mutation operation is not UpdateOne, or the query to the
 // database failed.
 func (m *PetMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case pet.FieldName:
+		return m.OldName(ctx)
+	}
 	return nil, fmt.Errorf("unknown Pet field %s", name)
 }
 
@@ -2416,6 +2822,13 @@ func (m *PetMutation) OldField(ctx context.Context, name string) (ent.Value, err
 // type.
 func (m *PetMutation) SetField(name string, value ent.Value) error {
 	switch name {
+	case pet.FieldName:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetName(v)
+		return nil
 	}
 	return fmt.Errorf("unknown Pet field %s", name)
 }
@@ -2437,13 +2850,19 @@ func (m *PetMutation) AddedField(name string) (ent.Value, bool) {
 // the field is not defined in the schema, or if the type mismatched the field
 // type.
 func (m *PetMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	}
 	return fmt.Errorf("unknown Pet numeric field %s", name)
 }
 
 // ClearedFields returns all nullable fields that were cleared during this
 // mutation.
 func (m *PetMutation) ClearedFields() []string {
-	return nil
+	var fields []string
+	if m.FieldCleared(pet.FieldName) {
+		fields = append(fields, pet.FieldName)
+	}
+	return fields
 }
 
 // FieldCleared returns a boolean indicating if a field with the given name was
@@ -2456,12 +2875,22 @@ func (m *PetMutation) FieldCleared(name string) bool {
 // ClearField clears the value of the field with the given name. It returns an
 // error if the field is not defined in the schema.
 func (m *PetMutation) ClearField(name string) error {
+	switch name {
+	case pet.FieldName:
+		m.ClearName()
+		return nil
+	}
 	return fmt.Errorf("unknown Pet nullable field %s", name)
 }
 
 // ResetField resets all changes in the mutation for the field with the given name.
 // It returns an error if the field is not defined in the schema.
 func (m *PetMutation) ResetField(name string) error {
+	switch name {
+	case pet.FieldName:
+		m.ResetName()
+		return nil
+	}
 	return fmt.Errorf("unknown Pet field %s", name)
 }
 
@@ -2558,11 +2987,13 @@ type UserMutation struct {
 	buffer         *[]byte
 	title          *string
 	new_name       *string
+	new_token      *string
 	blob           *[]byte
 	state          *user.State
 	status         *user.Status
 	workplace      *string
 	created_at     *time.Time
+	drop_optional  *string
 	clearedFields  map[string]struct{}
 	car            map[int]struct{}
 	removedcar     map[int]struct{}
@@ -2607,7 +3038,7 @@ func withUserID(id int) userOption {
 		m.oldValue = func(ctx context.Context) (*User, error) {
 			once.Do(func() {
 				if m.done {
-					err = fmt.Errorf("querying old values post mutation is not allowed")
+					err = errors.New("querying old values post mutation is not allowed")
 				} else {
 					value, err = m.Client().User.Get(ctx, id)
 				}
@@ -2640,7 +3071,7 @@ func (m UserMutation) Client() *Client {
 // it returns an error otherwise.
 func (m UserMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, fmt.Errorf("entv2: mutation is not running in a transaction")
+		return nil, errors.New("entv2: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()
@@ -2662,6 +3093,25 @@ func (m *UserMutation) ID() (id int, exists bool) {
 	return *m.id, true
 }
 
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *UserMutation) IDs(ctx context.Context) ([]int, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().User.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
 // SetMixedString sets the "mixed_string" field.
 func (m *UserMutation) SetMixedString(s string) {
 	m.mixed_string = &s
@@ -2681,10 +3131,10 @@ func (m *UserMutation) MixedString() (r string, exists bool) {
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
 func (m *UserMutation) OldMixedString(ctx context.Context) (v string, err error) {
 	if !m.op.Is(OpUpdateOne) {
-		return v, fmt.Errorf("OldMixedString is only allowed on UpdateOne operations")
+		return v, errors.New("OldMixedString is only allowed on UpdateOne operations")
 	}
 	if m.id == nil || m.oldValue == nil {
-		return v, fmt.Errorf("OldMixedString requires an ID field in the mutation")
+		return v, errors.New("OldMixedString requires an ID field in the mutation")
 	}
 	oldValue, err := m.oldValue(ctx)
 	if err != nil {
@@ -2717,10 +3167,10 @@ func (m *UserMutation) MixedEnum() (r user.MixedEnum, exists bool) {
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
 func (m *UserMutation) OldMixedEnum(ctx context.Context) (v user.MixedEnum, err error) {
 	if !m.op.Is(OpUpdateOne) {
-		return v, fmt.Errorf("OldMixedEnum is only allowed on UpdateOne operations")
+		return v, errors.New("OldMixedEnum is only allowed on UpdateOne operations")
 	}
 	if m.id == nil || m.oldValue == nil {
-		return v, fmt.Errorf("OldMixedEnum requires an ID field in the mutation")
+		return v, errors.New("OldMixedEnum requires an ID field in the mutation")
 	}
 	oldValue, err := m.oldValue(ctx)
 	if err != nil {
@@ -2754,10 +3204,10 @@ func (m *UserMutation) Age() (r int, exists bool) {
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
 func (m *UserMutation) OldAge(ctx context.Context) (v int, err error) {
 	if !m.op.Is(OpUpdateOne) {
-		return v, fmt.Errorf("OldAge is only allowed on UpdateOne operations")
+		return v, errors.New("OldAge is only allowed on UpdateOne operations")
 	}
 	if m.id == nil || m.oldValue == nil {
-		return v, fmt.Errorf("OldAge requires an ID field in the mutation")
+		return v, errors.New("OldAge requires an ID field in the mutation")
 	}
 	oldValue, err := m.oldValue(ctx)
 	if err != nil {
@@ -2809,10 +3259,10 @@ func (m *UserMutation) Name() (r string, exists bool) {
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
 func (m *UserMutation) OldName(ctx context.Context) (v string, err error) {
 	if !m.op.Is(OpUpdateOne) {
-		return v, fmt.Errorf("OldName is only allowed on UpdateOne operations")
+		return v, errors.New("OldName is only allowed on UpdateOne operations")
 	}
 	if m.id == nil || m.oldValue == nil {
-		return v, fmt.Errorf("OldName requires an ID field in the mutation")
+		return v, errors.New("OldName requires an ID field in the mutation")
 	}
 	oldValue, err := m.oldValue(ctx)
 	if err != nil {
@@ -2845,10 +3295,10 @@ func (m *UserMutation) Description() (r string, exists bool) {
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
 func (m *UserMutation) OldDescription(ctx context.Context) (v string, err error) {
 	if !m.op.Is(OpUpdateOne) {
-		return v, fmt.Errorf("OldDescription is only allowed on UpdateOne operations")
+		return v, errors.New("OldDescription is only allowed on UpdateOne operations")
 	}
 	if m.id == nil || m.oldValue == nil {
-		return v, fmt.Errorf("OldDescription requires an ID field in the mutation")
+		return v, errors.New("OldDescription requires an ID field in the mutation")
 	}
 	oldValue, err := m.oldValue(ctx)
 	if err != nil {
@@ -2894,10 +3344,10 @@ func (m *UserMutation) Nickname() (r string, exists bool) {
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
 func (m *UserMutation) OldNickname(ctx context.Context) (v string, err error) {
 	if !m.op.Is(OpUpdateOne) {
-		return v, fmt.Errorf("OldNickname is only allowed on UpdateOne operations")
+		return v, errors.New("OldNickname is only allowed on UpdateOne operations")
 	}
 	if m.id == nil || m.oldValue == nil {
-		return v, fmt.Errorf("OldNickname requires an ID field in the mutation")
+		return v, errors.New("OldNickname requires an ID field in the mutation")
 	}
 	oldValue, err := m.oldValue(ctx)
 	if err != nil {
@@ -2930,10 +3380,10 @@ func (m *UserMutation) Phone() (r string, exists bool) {
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
 func (m *UserMutation) OldPhone(ctx context.Context) (v string, err error) {
 	if !m.op.Is(OpUpdateOne) {
-		return v, fmt.Errorf("OldPhone is only allowed on UpdateOne operations")
+		return v, errors.New("OldPhone is only allowed on UpdateOne operations")
 	}
 	if m.id == nil || m.oldValue == nil {
-		return v, fmt.Errorf("OldPhone requires an ID field in the mutation")
+		return v, errors.New("OldPhone requires an ID field in the mutation")
 	}
 	oldValue, err := m.oldValue(ctx)
 	if err != nil {
@@ -2966,10 +3416,10 @@ func (m *UserMutation) Buffer() (r []byte, exists bool) {
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
 func (m *UserMutation) OldBuffer(ctx context.Context) (v []byte, err error) {
 	if !m.op.Is(OpUpdateOne) {
-		return v, fmt.Errorf("OldBuffer is only allowed on UpdateOne operations")
+		return v, errors.New("OldBuffer is only allowed on UpdateOne operations")
 	}
 	if m.id == nil || m.oldValue == nil {
-		return v, fmt.Errorf("OldBuffer requires an ID field in the mutation")
+		return v, errors.New("OldBuffer requires an ID field in the mutation")
 	}
 	oldValue, err := m.oldValue(ctx)
 	if err != nil {
@@ -3015,10 +3465,10 @@ func (m *UserMutation) Title() (r string, exists bool) {
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
 func (m *UserMutation) OldTitle(ctx context.Context) (v string, err error) {
 	if !m.op.Is(OpUpdateOne) {
-		return v, fmt.Errorf("OldTitle is only allowed on UpdateOne operations")
+		return v, errors.New("OldTitle is only allowed on UpdateOne operations")
 	}
 	if m.id == nil || m.oldValue == nil {
-		return v, fmt.Errorf("OldTitle requires an ID field in the mutation")
+		return v, errors.New("OldTitle requires an ID field in the mutation")
 	}
 	oldValue, err := m.oldValue(ctx)
 	if err != nil {
@@ -3051,10 +3501,10 @@ func (m *UserMutation) NewName() (r string, exists bool) {
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
 func (m *UserMutation) OldNewName(ctx context.Context) (v string, err error) {
 	if !m.op.Is(OpUpdateOne) {
-		return v, fmt.Errorf("OldNewName is only allowed on UpdateOne operations")
+		return v, errors.New("OldNewName is only allowed on UpdateOne operations")
 	}
 	if m.id == nil || m.oldValue == nil {
-		return v, fmt.Errorf("OldNewName requires an ID field in the mutation")
+		return v, errors.New("OldNewName requires an ID field in the mutation")
 	}
 	oldValue, err := m.oldValue(ctx)
 	if err != nil {
@@ -3081,6 +3531,42 @@ func (m *UserMutation) ResetNewName() {
 	delete(m.clearedFields, user.FieldNewName)
 }
 
+// SetNewToken sets the "new_token" field.
+func (m *UserMutation) SetNewToken(s string) {
+	m.new_token = &s
+}
+
+// NewToken returns the value of the "new_token" field in the mutation.
+func (m *UserMutation) NewToken() (r string, exists bool) {
+	v := m.new_token
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldNewToken returns the old "new_token" field's value of the User entity.
+// If the User object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserMutation) OldNewToken(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldNewToken is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldNewToken requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldNewToken: %w", err)
+	}
+	return oldValue.NewToken, nil
+}
+
+// ResetNewToken resets all changes to the "new_token" field.
+func (m *UserMutation) ResetNewToken() {
+	m.new_token = nil
+}
+
 // SetBlob sets the "blob" field.
 func (m *UserMutation) SetBlob(b []byte) {
 	m.blob = &b
@@ -3100,10 +3586,10 @@ func (m *UserMutation) Blob() (r []byte, exists bool) {
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
 func (m *UserMutation) OldBlob(ctx context.Context) (v []byte, err error) {
 	if !m.op.Is(OpUpdateOne) {
-		return v, fmt.Errorf("OldBlob is only allowed on UpdateOne operations")
+		return v, errors.New("OldBlob is only allowed on UpdateOne operations")
 	}
 	if m.id == nil || m.oldValue == nil {
-		return v, fmt.Errorf("OldBlob requires an ID field in the mutation")
+		return v, errors.New("OldBlob requires an ID field in the mutation")
 	}
 	oldValue, err := m.oldValue(ctx)
 	if err != nil {
@@ -3149,10 +3635,10 @@ func (m *UserMutation) State() (r user.State, exists bool) {
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
 func (m *UserMutation) OldState(ctx context.Context) (v user.State, err error) {
 	if !m.op.Is(OpUpdateOne) {
-		return v, fmt.Errorf("OldState is only allowed on UpdateOne operations")
+		return v, errors.New("OldState is only allowed on UpdateOne operations")
 	}
 	if m.id == nil || m.oldValue == nil {
-		return v, fmt.Errorf("OldState requires an ID field in the mutation")
+		return v, errors.New("OldState requires an ID field in the mutation")
 	}
 	oldValue, err := m.oldValue(ctx)
 	if err != nil {
@@ -3198,10 +3684,10 @@ func (m *UserMutation) Status() (r user.Status, exists bool) {
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
 func (m *UserMutation) OldStatus(ctx context.Context) (v user.Status, err error) {
 	if !m.op.Is(OpUpdateOne) {
-		return v, fmt.Errorf("OldStatus is only allowed on UpdateOne operations")
+		return v, errors.New("OldStatus is only allowed on UpdateOne operations")
 	}
 	if m.id == nil || m.oldValue == nil {
-		return v, fmt.Errorf("OldStatus requires an ID field in the mutation")
+		return v, errors.New("OldStatus requires an ID field in the mutation")
 	}
 	oldValue, err := m.oldValue(ctx)
 	if err != nil {
@@ -3247,10 +3733,10 @@ func (m *UserMutation) Workplace() (r string, exists bool) {
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
 func (m *UserMutation) OldWorkplace(ctx context.Context) (v string, err error) {
 	if !m.op.Is(OpUpdateOne) {
-		return v, fmt.Errorf("OldWorkplace is only allowed on UpdateOne operations")
+		return v, errors.New("OldWorkplace is only allowed on UpdateOne operations")
 	}
 	if m.id == nil || m.oldValue == nil {
-		return v, fmt.Errorf("OldWorkplace requires an ID field in the mutation")
+		return v, errors.New("OldWorkplace requires an ID field in the mutation")
 	}
 	oldValue, err := m.oldValue(ctx)
 	if err != nil {
@@ -3296,10 +3782,10 @@ func (m *UserMutation) CreatedAt() (r time.Time, exists bool) {
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
 func (m *UserMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
 	if !m.op.Is(OpUpdateOne) {
-		return v, fmt.Errorf("OldCreatedAt is only allowed on UpdateOne operations")
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
 	}
 	if m.id == nil || m.oldValue == nil {
-		return v, fmt.Errorf("OldCreatedAt requires an ID field in the mutation")
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
 	}
 	oldValue, err := m.oldValue(ctx)
 	if err != nil {
@@ -3311,6 +3797,42 @@ func (m *UserMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error
 // ResetCreatedAt resets all changes to the "created_at" field.
 func (m *UserMutation) ResetCreatedAt() {
 	m.created_at = nil
+}
+
+// SetDropOptional sets the "drop_optional" field.
+func (m *UserMutation) SetDropOptional(s string) {
+	m.drop_optional = &s
+}
+
+// DropOptional returns the value of the "drop_optional" field in the mutation.
+func (m *UserMutation) DropOptional() (r string, exists bool) {
+	v := m.drop_optional
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldDropOptional returns the old "drop_optional" field's value of the User entity.
+// If the User object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserMutation) OldDropOptional(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldDropOptional is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldDropOptional requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldDropOptional: %w", err)
+	}
+	return oldValue.DropOptional, nil
+}
+
+// ResetDropOptional resets all changes to the "drop_optional" field.
+func (m *UserMutation) ResetDropOptional() {
+	m.drop_optional = nil
 }
 
 // AddCarIDs adds the "car" edge to the Car entity by ids.
@@ -3479,7 +4001,7 @@ func (m *UserMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *UserMutation) Fields() []string {
-	fields := make([]string, 0, 15)
+	fields := make([]string, 0, 17)
 	if m.mixed_string != nil {
 		fields = append(fields, user.FieldMixedString)
 	}
@@ -3510,6 +4032,9 @@ func (m *UserMutation) Fields() []string {
 	if m.new_name != nil {
 		fields = append(fields, user.FieldNewName)
 	}
+	if m.new_token != nil {
+		fields = append(fields, user.FieldNewToken)
+	}
 	if m.blob != nil {
 		fields = append(fields, user.FieldBlob)
 	}
@@ -3524,6 +4049,9 @@ func (m *UserMutation) Fields() []string {
 	}
 	if m.created_at != nil {
 		fields = append(fields, user.FieldCreatedAt)
+	}
+	if m.drop_optional != nil {
+		fields = append(fields, user.FieldDropOptional)
 	}
 	return fields
 }
@@ -3553,6 +4081,8 @@ func (m *UserMutation) Field(name string) (ent.Value, bool) {
 		return m.Title()
 	case user.FieldNewName:
 		return m.NewName()
+	case user.FieldNewToken:
+		return m.NewToken()
 	case user.FieldBlob:
 		return m.Blob()
 	case user.FieldState:
@@ -3563,6 +4093,8 @@ func (m *UserMutation) Field(name string) (ent.Value, bool) {
 		return m.Workplace()
 	case user.FieldCreatedAt:
 		return m.CreatedAt()
+	case user.FieldDropOptional:
+		return m.DropOptional()
 	}
 	return nil, false
 }
@@ -3592,6 +4124,8 @@ func (m *UserMutation) OldField(ctx context.Context, name string) (ent.Value, er
 		return m.OldTitle(ctx)
 	case user.FieldNewName:
 		return m.OldNewName(ctx)
+	case user.FieldNewToken:
+		return m.OldNewToken(ctx)
 	case user.FieldBlob:
 		return m.OldBlob(ctx)
 	case user.FieldState:
@@ -3602,6 +4136,8 @@ func (m *UserMutation) OldField(ctx context.Context, name string) (ent.Value, er
 		return m.OldWorkplace(ctx)
 	case user.FieldCreatedAt:
 		return m.OldCreatedAt(ctx)
+	case user.FieldDropOptional:
+		return m.OldDropOptional(ctx)
 	}
 	return nil, fmt.Errorf("unknown User field %s", name)
 }
@@ -3681,6 +4217,13 @@ func (m *UserMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetNewName(v)
 		return nil
+	case user.FieldNewToken:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetNewToken(v)
+		return nil
 	case user.FieldBlob:
 		v, ok := value.([]byte)
 		if !ok {
@@ -3715,6 +4258,13 @@ func (m *UserMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetCreatedAt(v)
+		return nil
+	case user.FieldDropOptional:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetDropOptional(v)
 		return nil
 	}
 	return fmt.Errorf("unknown User field %s", name)
@@ -3855,6 +4405,9 @@ func (m *UserMutation) ResetField(name string) error {
 	case user.FieldNewName:
 		m.ResetNewName()
 		return nil
+	case user.FieldNewToken:
+		m.ResetNewToken()
+		return nil
 	case user.FieldBlob:
 		m.ResetBlob()
 		return nil
@@ -3869,6 +4422,9 @@ func (m *UserMutation) ResetField(name string) error {
 		return nil
 	case user.FieldCreatedAt:
 		m.ResetCreatedAt()
+		return nil
+	case user.FieldDropOptional:
+		m.ResetDropOptional()
 		return nil
 	}
 	return fmt.Errorf("unknown User field %s", name)

@@ -9,6 +9,7 @@ package ent
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -68,6 +69,20 @@ func (uc *UserCreate) SetStrings(s []string) *UserCreate {
 	return uc
 }
 
+// SetAddr sets the "addr" field.
+func (uc *UserCreate) SetAddr(s schema.Addr) *UserCreate {
+	uc.mutation.SetAddr(s)
+	return uc
+}
+
+// SetNillableAddr sets the "addr" field if the given value is not nil.
+func (uc *UserCreate) SetNillableAddr(s *schema.Addr) *UserCreate {
+	if s != nil {
+		uc.SetAddr(*s)
+	}
+	return uc
+}
+
 // Mutation returns the UserMutation object of the builder.
 func (uc *UserCreate) Mutation() *UserMutation {
 	return uc.mutation
@@ -79,6 +94,7 @@ func (uc *UserCreate) Save(ctx context.Context) (*User, error) {
 		err  error
 		node *User
 	)
+	uc.defaults()
 	if len(uc.hooks) == 0 {
 		if err = uc.check(); err != nil {
 			return nil, err
@@ -107,9 +123,15 @@ func (uc *UserCreate) Save(ctx context.Context) (*User, error) {
 			}
 			mut = uc.hooks[i](mut)
 		}
-		if _, err := mut.Mutate(ctx, uc.mutation); err != nil {
+		v, err := mut.Mutate(ctx, uc.mutation)
+		if err != nil {
 			return nil, err
 		}
+		nv, ok := v.(*User)
+		if !ok {
+			return nil, fmt.Errorf("unexpected node type %T returned from UserMutation", v)
+		}
+		node = nv
 	}
 	return node, err
 }
@@ -136,8 +158,23 @@ func (uc *UserCreate) ExecX(ctx context.Context) {
 	}
 }
 
+// defaults sets the default values of the builder before save.
+func (uc *UserCreate) defaults() {
+	if _, ok := uc.mutation.Dirs(); !ok {
+		v := user.DefaultDirs()
+		uc.mutation.SetDirs(v)
+	}
+	if _, ok := uc.mutation.Ints(); !ok {
+		v := user.DefaultInts
+		uc.mutation.SetInts(v)
+	}
+}
+
 // check runs all checks and user-defined validators on the builder.
 func (uc *UserCreate) check() error {
+	if _, ok := uc.mutation.Dirs(); !ok {
+		return &ValidationError{Name: "dirs", err: errors.New(`ent: missing required field "User.dirs"`)}
+	}
 	return nil
 }
 
@@ -221,6 +258,14 @@ func (uc *UserCreate) createSpec() (*User, *sqlgraph.CreateSpec) {
 		})
 		_node.Strings = value
 	}
+	if value, ok := uc.mutation.Addr(); ok {
+		_spec.Fields = append(_spec.Fields, &sqlgraph.FieldSpec{
+			Type:   field.TypeJSON,
+			Value:  value,
+			Column: user.FieldAddr,
+		})
+		_node.Addr = value
+	}
 	return _node, _spec
 }
 
@@ -238,6 +283,7 @@ func (ucb *UserCreateBulk) Save(ctx context.Context) ([]*User, error) {
 	for i := range ucb.builders {
 		func(i int, root context.Context) {
 			builder := ucb.builders[i]
+			builder.defaults()
 			var mut Mutator = MutateFunc(func(ctx context.Context, m Mutation) (Value, error) {
 				mutation, ok := m.(*UserMutation)
 				if !ok {
@@ -264,11 +310,11 @@ func (ucb *UserCreateBulk) Save(ctx context.Context) ([]*User, error) {
 					return nil, err
 				}
 				mutation.id = &nodes[i].ID
-				mutation.done = true
 				if specs[i].ID.Value != nil {
 					id := specs[i].ID.Value.(int64)
 					nodes[i].ID = int(id)
 				}
+				mutation.done = true
 				return nodes[i], nil
 			})
 			for i := len(builder.hooks) - 1; i >= 0; i-- {

@@ -129,9 +129,15 @@ func (nc *NoteCreate) Save(ctx context.Context) (*Note, error) {
 			}
 			mut = nc.hooks[i](mut)
 		}
-		if _, err := mut.Mutate(ctx, nc.mutation); err != nil {
+		v, err := mut.Mutate(ctx, nc.mutation)
+		if err != nil {
 			return nil, err
 		}
+		nv, ok := v.(*Note)
+		if !ok {
+			return nil, fmt.Errorf("unexpected node type %T returned from NoteMutation", v)
+		}
+		node = nv
 	}
 	return node, err
 }
@@ -185,7 +191,11 @@ func (nc *NoteCreate) sqlSave(ctx context.Context) (*Note, error) {
 		return nil, err
 	}
 	if _spec.ID.Value != nil {
-		_node.ID = _spec.ID.Value.(schema.NoteID)
+		if id, ok := _spec.ID.Value.(schema.NoteID); ok {
+			_node.ID = id
+		} else {
+			return nil, fmt.Errorf("unexpected Note.ID type: %T", _spec.ID.Value)
+		}
 	}
 	return _node, nil
 }

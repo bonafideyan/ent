@@ -592,13 +592,45 @@ func TestHasNeighbors(t *testing.T) {
 			selector:  sql.Select("*").From(sql.Table("users").Schema("s1")),
 			wantQuery: "SELECT * FROM `s1`.`users` WHERE `s1`.`users`.`id` IN (SELECT `s2`.`group_users`.`user_id` FROM `s2`.`group_users`)",
 		},
+		{
+			name: "O2M/2type2/selector",
+			step: NewStep(
+				From("users", "id"),
+				To("pets", "id"),
+				Edge(O2M, false, "pets", "owner_id"),
+			),
+			selector:  sql.Select("*").From(sql.Select("*").From(sql.Table("users")).As("users")).As("users"),
+			wantQuery: "SELECT * FROM (SELECT * FROM `users`) AS `users` WHERE `users`.`id` IN (SELECT `pets`.`owner_id` FROM `pets` WHERE `pets`.`owner_id` IS NOT NULL)",
+		},
+		{
+			name: "M2O/2type2/selector",
+			step: NewStep(
+				From("pets", "id"),
+				To("users", "id"),
+				Edge(M2O, true, "pets", "owner_id"),
+			),
+			selector:  sql.Select("*").From(sql.Select("*").From(sql.Table("pets")).As("pets")).As("pets"),
+			wantQuery: "SELECT * FROM (SELECT * FROM `pets`) AS `pets` WHERE `pets`.`owner_id` IS NOT NULL",
+		},
+		{
+			name: "M2M/2types/selector",
+			step: NewStep(
+				From("users", "id"),
+				To("groups", "id"),
+				Edge(M2M, false, "user_groups", "user_id", "group_id"),
+			),
+			selector:  sql.Select("*").From(sql.Select("*").From(sql.Table("users")).As("users")).As("users"),
+			wantQuery: "SELECT * FROM (SELECT * FROM `users`) AS `users` WHERE `users`.`id` IN (SELECT `user_groups`.`user_id` FROM `user_groups`)",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			HasNeighbors(tt.selector, tt.step)
-			query, args := tt.selector.Query()
-			require.Equal(t, tt.wantQuery, query)
-			require.Empty(t, args)
+			for _, s := range []*sql.Selector{tt.selector, tt.selector.Clone()} {
+				HasNeighbors(s, tt.step)
+				query, args := s.Query()
+				require.Equal(t, tt.wantQuery, query)
+				require.Empty(t, args)
+			}
 		})
 	}
 }
@@ -623,8 +655,7 @@ func TestHasNeighborsWith(t *testing.T) {
 			predicate: func(s *sql.Selector) {
 				s.Where(sql.EQ("expired", false))
 			},
-			wantQuery: `SELECT * FROM "users" WHERE "users"."id" IN (SELECT "cards"."owner_id" FROM "cards" WHERE "expired" = $1)`,
-			wantArgs:  []interface{}{false},
+			wantQuery: `SELECT * FROM "users" WHERE "users"."id" IN (SELECT "cards"."owner_id" FROM "cards" WHERE NOT "expired")`,
 		},
 		{
 			name: "O2O/inverse",
@@ -747,8 +778,7 @@ WHERE "groups"."id" IN
 			predicate: func(s *sql.Selector) {
 				s.Where(sql.EQ("expired", false))
 			},
-			wantQuery: `SELECT * FROM "s1"."users" WHERE "s1"."users"."id" IN (SELECT "s2"."cards"."owner_id" FROM "s2"."cards" WHERE "expired" = $1)`,
-			wantArgs:  []interface{}{false},
+			wantQuery: `SELECT * FROM "s1"."users" WHERE "s1"."users"."id" IN (SELECT "s2"."cards"."owner_id" FROM "s2"."cards" WHERE NOT "expired")`,
 		},
 		{
 			name: "schema/O2M",
@@ -795,14 +825,62 @@ WHERE "s1"."users"."id" IN
   JOIN "s3"."groups" AS "t1" ON "s2"."user_groups"."group_id" = "t1"."id" WHERE "name" = $1)`,
 			wantArgs: []interface{}{"GitHub"},
 		},
+		{
+			name: "O2M/selector",
+			step: NewStep(
+				From("users", "id"),
+				To("pets", "id"),
+				Edge(O2M, false, "pets", "owner_id"),
+			),
+			selector: sql.Dialect("postgres").Select("*").
+				From(sql.Select("*").From(sql.Table("users")).As("users")).
+				Where(sql.EQ("last_name", "mashraki")).As("users"),
+			predicate: func(s *sql.Selector) {
+				s.Where(sql.EQ("name", "pedro"))
+			},
+			wantQuery: `SELECT * FROM (SELECT * FROM "users") AS "users" WHERE "last_name" = $1 AND "users"."id" IN (SELECT "pets"."owner_id" FROM "pets" WHERE "name" = $2)`,
+			wantArgs:  []interface{}{"mashraki", "pedro"},
+		},
+		{
+			name: "M2O/selector",
+			step: NewStep(
+				From("pets", "id"),
+				To("users", "id"),
+				Edge(M2O, true, "pets", "owner_id"),
+			),
+			selector: sql.Dialect("postgres").Select("*").
+				From(sql.Select("*").From(sql.Table("pets")).As("pets")).
+				Where(sql.EQ("name", "pedro")).As("pets"),
+			predicate: func(s *sql.Selector) {
+				s.Where(sql.EQ("last_name", "mashraki"))
+			},
+			wantQuery: `SELECT * FROM (SELECT * FROM "pets") AS "pets" WHERE "name" = $1 AND "pets"."owner_id" IN (SELECT "users"."id" FROM "users" WHERE "last_name" = $2)`,
+			wantArgs:  []interface{}{"pedro", "mashraki"},
+		},
+		{
+			name: "M2M/selector",
+			step: NewStep(
+				From("users", "id"),
+				To("groups", "id"),
+				Edge(M2M, false, "user_groups", "user_id", "group_id"),
+			),
+			selector: sql.Dialect("postgres").Select("*").From(sql.Select("*").From(sql.Table("users")).As("users")).As("users"),
+			predicate: func(s *sql.Selector) {
+				s.Where(sql.EQ("name", "GitHub"))
+			},
+			wantQuery: `SELECT * FROM (SELECT * FROM "users") AS "users" WHERE "users"."id" IN (SELECT "user_groups"."user_id" FROM "user_groups" JOIN "groups" AS "t1" ON "user_groups"."group_id" = "t1"."id" WHERE "name" = $1)`,
+			wantArgs:  []interface{}{"GitHub"},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			HasNeighborsWith(tt.selector, tt.step, tt.predicate)
-			query, args := tt.selector.Query()
-			tt.wantQuery = strings.Join(strings.Fields(tt.wantQuery), " ")
-			require.Equal(t, tt.wantQuery, query)
-			require.Equal(t, tt.wantArgs, args)
+			for _, s := range []*sql.Selector{tt.selector, tt.selector.Clone()} {
+				HasNeighborsWith(s, tt.step, tt.predicate)
+				query, args := s.Query()
+				tt.wantQuery = strings.Join(strings.Fields(tt.wantQuery), " ")
+				require.Equal(t, tt.wantQuery, query)
+				require.Equal(t, tt.wantArgs, args)
+			}
 		})
 	}
 }
@@ -1058,6 +1136,29 @@ func TestCreateNode(t *testing.T) {
 			},
 		},
 		{
+			name: "edges/m2m/fields",
+			spec: &CreateSpec{
+				Table: "groups",
+				ID:    &FieldSpec{Column: "id", Type: field.TypeInt},
+				Fields: []*FieldSpec{
+					{Column: "name", Type: field.TypeString, Value: "GitHub"},
+				},
+				Edges: []*EdgeSpec{
+					{Rel: M2M, Table: "group_users", Columns: []string{"group_id", "user_id"}, Target: &EdgeTarget{Nodes: []driver.Value{2}, IDSpec: &FieldSpec{Column: "id"}, Fields: []*FieldSpec{{Column: "ts", Type: field.TypeInt, Value: 3}}}},
+				},
+			},
+			expect: func(m sqlmock.Sqlmock) {
+				m.ExpectBegin()
+				m.ExpectExec(escape("INSERT INTO `groups` (`name`) VALUES (?)")).
+					WithArgs("GitHub").
+					WillReturnResult(sqlmock.NewResult(1, 1))
+				m.ExpectExec(escape("INSERT INTO `group_users` (`group_id`, `user_id`, `ts`) VALUES (?, ?, ?)")).
+					WithArgs(1, 2, 3).
+					WillReturnResult(sqlmock.NewResult(1, 1))
+				m.ExpectCommit()
+			},
+		},
+		{
 			name: "edges/m2m/inverse",
 			spec: &CreateSpec{
 				Table: "users",
@@ -1099,6 +1200,29 @@ func TestCreateNode(t *testing.T) {
 					WillReturnResult(sqlmock.NewResult(1, 1))
 				m.ExpectExec(escape("INSERT INTO `user_friends` (`user_id`, `friend_id`) VALUES (?, ?), (?, ?)")).
 					WithArgs(1, 2, 2, 1).
+					WillReturnResult(sqlmock.NewResult(1, 1))
+				m.ExpectCommit()
+			},
+		},
+		{
+			name: "edges/m2m/bidi/fields",
+			spec: &CreateSpec{
+				Table: "users",
+				ID:    &FieldSpec{Column: "id", Type: field.TypeInt},
+				Fields: []*FieldSpec{
+					{Column: "name", Type: field.TypeString, Value: "mashraki"},
+				},
+				Edges: []*EdgeSpec{
+					{Rel: M2M, Bidi: true, Table: "user_friends", Columns: []string{"user_id", "friend_id"}, Target: &EdgeTarget{Nodes: []driver.Value{2}, IDSpec: &FieldSpec{Column: "id"}, Fields: []*FieldSpec{{Column: "ts", Type: field.TypeInt, Value: 3}}}},
+				},
+			},
+			expect: func(m sqlmock.Sqlmock) {
+				m.ExpectBegin()
+				m.ExpectExec(escape("INSERT INTO `users` (`name`) VALUES (?)")).
+					WithArgs("mashraki").
+					WillReturnResult(sqlmock.NewResult(1, 1))
+				m.ExpectExec(escape("INSERT INTO `user_friends` (`user_id`, `friend_id`, `ts`) VALUES (?, ?, ?), (?, ?, ?)")).
+					WithArgs(1, 2, 3, 2, 1, 3).
 					WillReturnResult(sqlmock.NewResult(1, 1))
 				m.ExpectCommit()
 			},
@@ -1204,10 +1328,86 @@ func TestBatchCreate(t *testing.T) {
 				},
 			},
 			expect: func(m sqlmock.Sqlmock) {
-				m.ExpectBegin()
 				m.ExpectExec(escape("INSERT INTO `users` (`active`, `age`, `name`) VALUES (?, ?, ?), (?, ?, ?) ON DUPLICATE KEY UPDATE `active` = `users`.`active`, `age` = `users`.`age`, `name` = `users`.`name`")).
 					WithArgs(false, 32, "a8m", true, 30, "nati").
 					WillReturnResult(sqlmock.NewResult(10, 2))
+			},
+		},
+		{
+			name: "no tx",
+			spec: &BatchCreateSpec{
+				Nodes: []*CreateSpec{
+					{
+						Table: "users",
+						ID:    &FieldSpec{Column: "id", Type: field.TypeInt},
+						Fields: []*FieldSpec{
+							{Column: "age", Type: field.TypeInt, Value: 32},
+							{Column: "name", Type: field.TypeString, Value: "a8m"},
+							{Column: "active", Type: field.TypeBool, Value: false},
+						},
+						Edges: []*EdgeSpec{
+							{Rel: M2O, Table: "company", Columns: []string{"workplace_id"}, Target: &EdgeTarget{Nodes: []driver.Value{2}}},
+							{Rel: O2O, Inverse: true, Table: "users", Columns: []string{"best_friend_id"}, Target: &EdgeTarget{Nodes: []driver.Value{3}, IDSpec: &FieldSpec{Column: "id"}}},
+						},
+					},
+					{
+						Table: "users",
+						ID:    &FieldSpec{Column: "id", Type: field.TypeInt},
+						Fields: []*FieldSpec{
+							{Column: "age", Type: field.TypeInt, Value: 30},
+							{Column: "name", Type: field.TypeString, Value: "nati"},
+						},
+						Edges: []*EdgeSpec{
+							{Rel: M2O, Table: "company", Columns: []string{"workplace_id"}, Target: &EdgeTarget{Nodes: []driver.Value{2}}},
+							{Rel: O2O, Inverse: true, Table: "users", Columns: []string{"best_friend_id"}, Target: &EdgeTarget{Nodes: []driver.Value{4}, IDSpec: &FieldSpec{Column: "id"}}},
+						},
+					},
+				},
+			},
+			expect: func(m sqlmock.Sqlmock) {
+				// Insert nodes with FKs.
+				m.ExpectExec(escape("INSERT INTO `users` (`active`, `age`, `best_friend_id`, `name`, `workplace_id`) VALUES (?, ?, ?, ?, ?), (?, ?, ?, ?, ?)")).
+					WithArgs(false, 32, 3, "a8m", 2, nil, 30, 4, "nati", 2).
+					WillReturnResult(sqlmock.NewResult(10, 2))
+			},
+		},
+		{
+			name: "with tx",
+			spec: &BatchCreateSpec{
+				Nodes: []*CreateSpec{
+					{
+						Table: "users",
+						ID:    &FieldSpec{Column: "id", Type: field.TypeInt},
+						Fields: []*FieldSpec{
+							{Column: "name", Type: field.TypeString, Value: "a8m"},
+						},
+						Edges: []*EdgeSpec{
+							{Rel: O2O, Table: "cards", Columns: []string{"owner_id"}, Target: &EdgeTarget{Nodes: []driver.Value{3}, IDSpec: &FieldSpec{Column: "id"}}},
+						},
+					},
+					{
+						Table: "users",
+						ID:    &FieldSpec{Column: "id", Type: field.TypeInt},
+						Fields: []*FieldSpec{
+							{Column: "name", Type: field.TypeString, Value: "nati"},
+						},
+						Edges: []*EdgeSpec{
+							{Rel: O2O, Table: "cards", Columns: []string{"owner_id"}, Target: &EdgeTarget{Nodes: []driver.Value{4}, IDSpec: &FieldSpec{Column: "id"}}},
+						},
+					},
+				},
+			},
+			expect: func(m sqlmock.Sqlmock) {
+				m.ExpectBegin()
+				m.ExpectExec(escape("INSERT INTO `users` (`name`) VALUES (?), (?)")).
+					WithArgs("a8m", "nati").
+					WillReturnResult(sqlmock.NewResult(10, 2))
+				m.ExpectExec(escape("UPDATE `cards` SET `owner_id` = ? WHERE `id` = ? AND `owner_id` IS NULL")).
+					WithArgs(10 /* LAST_INSERT_ID() */, 3).
+					WillReturnResult(sqlmock.NewResult(1, 1))
+				m.ExpectExec(escape("UPDATE `cards` SET `owner_id` = ? WHERE `id` = ? AND `owner_id` IS NULL")).
+					WithArgs(11 /* LAST_INSERT_ID() + 1 */, 4).
+					WillReturnResult(sqlmock.NewResult(1, 1))
 				m.ExpectCommit()
 			},
 		},
@@ -1372,7 +1572,7 @@ func TestUpdateNode(t *testing.T) {
 			wantUser: &user{name: "Ariel", age: 30, id: 1},
 		},
 		{
-			name: "fields/add_clear",
+			name: "fields/add_set_clear",
 			spec: &UpdateSpec{
 				Node: &NodeSpec{
 					Table:   "users",
@@ -1386,6 +1586,9 @@ func TestUpdateNode(t *testing.T) {
 					Add: []*FieldSpec{
 						{Column: "age", Type: field.TypeInt, Value: 1},
 					},
+					Set: []*FieldSpec{
+						{Column: "deleted", Type: field.TypeBool, Value: true},
+					},
 					Clear: []*FieldSpec{
 						{Column: "name", Type: field.TypeString},
 					},
@@ -1393,16 +1596,53 @@ func TestUpdateNode(t *testing.T) {
 			},
 			prepare: func(mock sqlmock.Sqlmock) {
 				mock.ExpectBegin()
-				mock.ExpectExec(escape("UPDATE `users` SET `name` = NULL, `age` = COALESCE(`users`.`age`, 0) + ? WHERE `id` = ? AND `deleted` = ?")).
-					WithArgs(1, 1, false).
-					WillReturnResult(sqlmock.NewResult(1, 1))
-				mock.ExpectQuery(escape("SELECT `id`, `name`, `age` FROM `users` WHERE `id` = ? AND `deleted` = ?")).
-					WithArgs(1, false).
+				mock.ExpectExec(escape("UPDATE `users` SET `name` = NULL, `deleted` = ?, `age` = COALESCE(`users`.`age`, 0) + ? WHERE `id` = ? AND NOT `deleted`")).
+					WithArgs(true, 1, 1).
+					WillReturnResult(sqlmock.NewResult(0, 1))
+				mock.ExpectQuery(escape("SELECT `id`, `name`, `age` FROM `users` WHERE `id` = ?")).
+					WithArgs(1).
 					WillReturnRows(sqlmock.NewRows([]string{"id", "age", "name"}).
 						AddRow(1, 31, nil))
 				mock.ExpectCommit()
 			},
 			wantUser: &user{age: 31, id: 1},
+		},
+		{
+			name: "fields/ensure_exists",
+			spec: &UpdateSpec{
+				Node: &NodeSpec{
+					Table:   "users",
+					Columns: []string{"id", "name", "age"},
+					ID:      &FieldSpec{Column: "id", Type: field.TypeInt, Value: 1},
+				},
+				Predicate: func(s *sql.Selector) {
+					s.Where(sql.EQ("deleted", false))
+				},
+				Fields: FieldMut{
+					Add: []*FieldSpec{
+						{Column: "age", Type: field.TypeInt, Value: 1},
+					},
+					Set: []*FieldSpec{
+						{Column: "deleted", Type: field.TypeBool, Value: true},
+					},
+					Clear: []*FieldSpec{
+						{Column: "name", Type: field.TypeString},
+					},
+				},
+			},
+			prepare: func(mock sqlmock.Sqlmock) {
+				mock.ExpectBegin()
+				mock.ExpectExec(escape("UPDATE `users` SET `name` = NULL, `deleted` = ?, `age` = COALESCE(`users`.`age`, 0) + ? WHERE `id` = ? AND NOT `deleted`")).
+					WithArgs(true, 1, 1).
+					WillReturnResult(sqlmock.NewResult(0, 0))
+				mock.ExpectQuery(escape("SELECT EXISTS (SELECT * FROM `users` WHERE `id` = ? AND NOT `deleted`)")).
+					WithArgs(1).
+					WillReturnRows(sqlmock.NewRows([]string{"exists"}).
+						AddRow(false))
+				mock.ExpectRollback()
+			},
+			wantErr:  true,
+			wantUser: &user{},
 		},
 		{
 			name: "edges/o2o_non_inverse and m2o",

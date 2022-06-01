@@ -66,6 +66,14 @@ func (tc *TaskCreate) SetUUID(u uuid.UUID) *TaskCreate {
 	return tc
 }
 
+// SetNillableUUID sets the "uuid" field if the given value is not nil.
+func (tc *TaskCreate) SetNillableUUID(u *uuid.UUID) *TaskCreate {
+	if u != nil {
+		tc.SetUUID(*u)
+	}
+	return tc
+}
+
 // AddTeamIDs adds the "teams" edge to the Team entity by IDs.
 func (tc *TaskCreate) AddTeamIDs(ids ...int) *TaskCreate {
 	tc.mutation.AddTeamIDs(ids...)
@@ -142,9 +150,15 @@ func (tc *TaskCreate) Save(ctx context.Context) (*Task, error) {
 			}
 			mut = tc.hooks[i](mut)
 		}
-		if _, err := mut.Mutate(ctx, tc.mutation); err != nil {
+		v, err := mut.Mutate(ctx, tc.mutation)
+		if err != nil {
 			return nil, err
 		}
+		nv, ok := v.(*Task)
+		if !ok {
+			return nil, fmt.Errorf("unexpected node type %T returned from TaskMutation", v)
+		}
+		node = nv
 	}
 	return node, err
 }
@@ -340,11 +354,11 @@ func (tcb *TaskCreateBulk) Save(ctx context.Context) ([]*Task, error) {
 					return nil, err
 				}
 				mutation.id = &nodes[i].ID
-				mutation.done = true
 				if specs[i].ID.Value != nil {
 					id := specs[i].ID.Value.(int64)
 					nodes[i].ID = int(id)
 				}
+				mutation.done = true
 				return nodes[i], nil
 			})
 			for i := len(builder.hooks) - 1; i >= 0; i-- {

@@ -75,7 +75,7 @@ func (uu *UserUpdate) SetNillableWorth(u *uint) *UserUpdate {
 }
 
 // AddWorth adds u to the "worth" field.
-func (uu *UserUpdate) AddWorth(u uint) *UserUpdate {
+func (uu *UserUpdate) AddWorth(u int) *UserUpdate {
 	uu.mutation.AddWorth(u)
 	return uu
 }
@@ -83,6 +83,26 @@ func (uu *UserUpdate) AddWorth(u uint) *UserUpdate {
 // ClearWorth clears the value of the "worth" field.
 func (uu *UserUpdate) ClearWorth() *UserUpdate {
 	uu.mutation.ClearWorth()
+	return uu
+}
+
+// SetPassword sets the "password" field.
+func (uu *UserUpdate) SetPassword(s string) *UserUpdate {
+	uu.mutation.SetPassword(s)
+	return uu
+}
+
+// SetNillablePassword sets the "password" field if the given value is not nil.
+func (uu *UserUpdate) SetNillablePassword(s *string) *UserUpdate {
+	if s != nil {
+		uu.SetPassword(*s)
+	}
+	return uu
+}
+
+// ClearPassword clears the value of the "password" field.
+func (uu *UserUpdate) ClearPassword() *UserUpdate {
+	uu.mutation.ClearPassword()
 	return uu
 }
 
@@ -301,6 +321,19 @@ func (uu *UserUpdate) sqlSave(ctx context.Context) (n int, err error) {
 			Column: user.FieldWorth,
 		})
 	}
+	if value, ok := uu.mutation.Password(); ok {
+		_spec.Fields.Set = append(_spec.Fields.Set, &sqlgraph.FieldSpec{
+			Type:   field.TypeString,
+			Value:  value,
+			Column: user.FieldPassword,
+		})
+	}
+	if uu.mutation.PasswordCleared() {
+		_spec.Fields.Clear = append(_spec.Fields.Clear, &sqlgraph.FieldSpec{
+			Type:   field.TypeString,
+			Column: user.FieldPassword,
+		})
+	}
 	if uu.mutation.CardsCleared() {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
@@ -506,7 +539,7 @@ func (uuo *UserUpdateOne) SetNillableWorth(u *uint) *UserUpdateOne {
 }
 
 // AddWorth adds u to the "worth" field.
-func (uuo *UserUpdateOne) AddWorth(u uint) *UserUpdateOne {
+func (uuo *UserUpdateOne) AddWorth(u int) *UserUpdateOne {
 	uuo.mutation.AddWorth(u)
 	return uuo
 }
@@ -514,6 +547,26 @@ func (uuo *UserUpdateOne) AddWorth(u uint) *UserUpdateOne {
 // ClearWorth clears the value of the "worth" field.
 func (uuo *UserUpdateOne) ClearWorth() *UserUpdateOne {
 	uuo.mutation.ClearWorth()
+	return uuo
+}
+
+// SetPassword sets the "password" field.
+func (uuo *UserUpdateOne) SetPassword(s string) *UserUpdateOne {
+	uuo.mutation.SetPassword(s)
+	return uuo
+}
+
+// SetNillablePassword sets the "password" field if the given value is not nil.
+func (uuo *UserUpdateOne) SetNillablePassword(s *string) *UserUpdateOne {
+	if s != nil {
+		uuo.SetPassword(*s)
+	}
+	return uuo
+}
+
+// ClearPassword clears the value of the "password" field.
+func (uuo *UserUpdateOne) ClearPassword() *UserUpdateOne {
+	uuo.mutation.ClearPassword()
 	return uuo
 }
 
@@ -651,9 +704,15 @@ func (uuo *UserUpdateOne) Save(ctx context.Context) (*User, error) {
 			}
 			mut = uuo.hooks[i](mut)
 		}
-		if _, err := mut.Mutate(ctx, uuo.mutation); err != nil {
+		v, err := mut.Mutate(ctx, uuo.mutation)
+		if err != nil {
 			return nil, err
 		}
+		nv, ok := v.(*User)
+		if !ok {
+			return nil, fmt.Errorf("unexpected node type %T returned from UserMutation", v)
+		}
+		node = nv
 	}
 	return node, err
 }
@@ -754,6 +813,19 @@ func (uuo *UserUpdateOne) sqlSave(ctx context.Context) (_node *User, err error) 
 		_spec.Fields.Clear = append(_spec.Fields.Clear, &sqlgraph.FieldSpec{
 			Type:   field.TypeUint,
 			Column: user.FieldWorth,
+		})
+	}
+	if value, ok := uuo.mutation.Password(); ok {
+		_spec.Fields.Set = append(_spec.Fields.Set, &sqlgraph.FieldSpec{
+			Type:   field.TypeString,
+			Value:  value,
+			Column: user.FieldPassword,
+		})
+	}
+	if uuo.mutation.PasswordCleared() {
+		_spec.Fields.Clear = append(_spec.Fields.Clear, &sqlgraph.FieldSpec{
+			Type:   field.TypeString,
+			Column: user.FieldPassword,
 		})
 	}
 	if uuo.mutation.CardsCleared() {

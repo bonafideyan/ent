@@ -327,6 +327,20 @@ func (ftc *FieldTypeCreate) SetNillableOptionalFloat32(f *float32) *FieldTypeCre
 	return ftc
 }
 
+// SetText sets the "text" field.
+func (ftc *FieldTypeCreate) SetText(s string) *FieldTypeCreate {
+	ftc.mutation.SetText(s)
+	return ftc
+}
+
+// SetNillableText sets the "text" field if the given value is not nil.
+func (ftc *FieldTypeCreate) SetNillableText(s *string) *FieldTypeCreate {
+	if s != nil {
+		ftc.SetText(*s)
+	}
+	return ftc
+}
+
 // SetDatetime sets the "datetime" field.
 func (ftc *FieldTypeCreate) SetDatetime(t time.Time) *FieldTypeCreate {
 	ftc.mutation.SetDatetime(t)
@@ -358,6 +372,12 @@ func (ftc *FieldTypeCreate) SetNillableDecimal(f *float64) *FieldTypeCreate {
 // SetLinkOther sets the "link_other" field.
 func (ftc *FieldTypeCreate) SetLinkOther(s *schema.Link) *FieldTypeCreate {
 	ftc.mutation.SetLinkOther(s)
+	return ftc
+}
+
+// SetLinkOtherFunc sets the "link_other_func" field.
+func (ftc *FieldTypeCreate) SetLinkOtherFunc(s *schema.Link) *FieldTypeCreate {
+	ftc.mutation.SetLinkOtherFunc(s)
 	return ftc
 }
 
@@ -659,15 +679,31 @@ func (ftc *FieldTypeCreate) SetNillablePriority(r *role.Priority) *FieldTypeCrea
 	return ftc
 }
 
-// SetUUID sets the "uuid" field.
-func (ftc *FieldTypeCreate) SetUUID(u uuid.UUID) *FieldTypeCreate {
-	ftc.mutation.SetUUID(u)
+// SetOptionalUUID sets the "optional_uuid" field.
+func (ftc *FieldTypeCreate) SetOptionalUUID(u uuid.UUID) *FieldTypeCreate {
+	ftc.mutation.SetOptionalUUID(u)
+	return ftc
+}
+
+// SetNillableOptionalUUID sets the "optional_uuid" field if the given value is not nil.
+func (ftc *FieldTypeCreate) SetNillableOptionalUUID(u *uuid.UUID) *FieldTypeCreate {
+	if u != nil {
+		ftc.SetOptionalUUID(*u)
+	}
 	return ftc
 }
 
 // SetNillableUUID sets the "nillable_uuid" field.
 func (ftc *FieldTypeCreate) SetNillableUUID(u uuid.UUID) *FieldTypeCreate {
 	ftc.mutation.SetNillableUUID(u)
+	return ftc
+}
+
+// SetNillableNillableUUID sets the "nillable_uuid" field if the given value is not nil.
+func (ftc *FieldTypeCreate) SetNillableNillableUUID(u *uuid.UUID) *FieldTypeCreate {
+	if u != nil {
+		ftc.SetNillableUUID(*u)
+	}
 	return ftc
 }
 
@@ -793,9 +829,15 @@ func (ftc *FieldTypeCreate) Save(ctx context.Context) (*FieldType, error) {
 			}
 			mut = ftc.hooks[i](mut)
 		}
-		if _, err := mut.Mutate(ctx, ftc.mutation); err != nil {
+		v, err := mut.Mutate(ctx, ftc.mutation)
+		if err != nil {
 			return nil, err
 		}
+		nv, ok := v.(*FieldType)
+		if !ok {
+			return nil, fmt.Errorf("unexpected node type %T returned from FieldTypeMutation", v)
+		}
+		node = nv
 	}
 	return node, err
 }
@@ -824,6 +866,14 @@ func (ftc *FieldTypeCreate) ExecX(ctx context.Context) {
 
 // defaults sets the default values of the builder before save.
 func (ftc *FieldTypeCreate) defaults() {
+	if _, ok := ftc.mutation.LinkOther(); !ok {
+		v := fieldtype.DefaultLinkOther
+		ftc.mutation.SetLinkOther(v)
+	}
+	if _, ok := ftc.mutation.LinkOtherFunc(); !ok {
+		v := fieldtype.DefaultLinkOtherFunc()
+		ftc.mutation.SetLinkOtherFunc(v)
+	}
 	if _, ok := ftc.mutation.Dir(); !ok {
 		v := fieldtype.DefaultDir()
 		ftc.mutation.SetDir(v)
@@ -835,6 +885,10 @@ func (ftc *FieldTypeCreate) defaults() {
 	if _, ok := ftc.mutation.NullStr(); !ok {
 		v := fieldtype.DefaultNullStr()
 		ftc.mutation.SetNullStr(v)
+	}
+	if _, ok := ftc.mutation.DeletedAt(); !ok {
+		v := fieldtype.DefaultDeletedAt()
+		ftc.mutation.SetDeletedAt(v)
 	}
 	if _, ok := ftc.mutation.IP(); !ok {
 		v := fieldtype.DefaultIP()
@@ -1155,6 +1209,14 @@ func (ftc *FieldTypeCreate) createSpec() (*FieldType, *sqlgraph.CreateSpec) {
 		})
 		_node.OptionalFloat32 = value
 	}
+	if value, ok := ftc.mutation.Text(); ok {
+		_spec.Fields = append(_spec.Fields, &sqlgraph.FieldSpec{
+			Type:   field.TypeString,
+			Value:  value,
+			Column: fieldtype.FieldText,
+		})
+		_node.Text = value
+	}
 	if value, ok := ftc.mutation.Datetime(); ok {
 		_spec.Fields = append(_spec.Fields, &sqlgraph.FieldSpec{
 			Type:   field.TypeTime,
@@ -1178,6 +1240,14 @@ func (ftc *FieldTypeCreate) createSpec() (*FieldType, *sqlgraph.CreateSpec) {
 			Column: fieldtype.FieldLinkOther,
 		})
 		_node.LinkOther = value
+	}
+	if value, ok := ftc.mutation.LinkOtherFunc(); ok {
+		_spec.Fields = append(_spec.Fields, &sqlgraph.FieldSpec{
+			Type:   field.TypeOther,
+			Value:  value,
+			Column: fieldtype.FieldLinkOtherFunc,
+		})
+		_node.LinkOtherFunc = value
 	}
 	if value, ok := ftc.mutation.MAC(); ok {
 		_spec.Fields = append(_spec.Fields, &sqlgraph.FieldSpec{
@@ -1395,13 +1465,13 @@ func (ftc *FieldTypeCreate) createSpec() (*FieldType, *sqlgraph.CreateSpec) {
 		})
 		_node.Priority = value
 	}
-	if value, ok := ftc.mutation.UUID(); ok {
+	if value, ok := ftc.mutation.OptionalUUID(); ok {
 		_spec.Fields = append(_spec.Fields, &sqlgraph.FieldSpec{
 			Type:   field.TypeUUID,
 			Value:  value,
-			Column: fieldtype.FieldUUID,
+			Column: fieldtype.FieldOptionalUUID,
 		})
-		_node.UUID = value
+		_node.OptionalUUID = value
 	}
 	if value, ok := ftc.mutation.NillableUUID(); ok {
 		_spec.Fields = append(_spec.Fields, &sqlgraph.FieldSpec{
@@ -2061,6 +2131,24 @@ func (u *FieldTypeUpsert) ClearOptionalFloat32() *FieldTypeUpsert {
 	return u
 }
 
+// SetText sets the "text" field.
+func (u *FieldTypeUpsert) SetText(v string) *FieldTypeUpsert {
+	u.Set(fieldtype.FieldText, v)
+	return u
+}
+
+// UpdateText sets the "text" field to the value that was provided on create.
+func (u *FieldTypeUpsert) UpdateText() *FieldTypeUpsert {
+	u.SetExcluded(fieldtype.FieldText)
+	return u
+}
+
+// ClearText clears the value of the "text" field.
+func (u *FieldTypeUpsert) ClearText() *FieldTypeUpsert {
+	u.SetNull(fieldtype.FieldText)
+	return u
+}
+
 // SetDatetime sets the "datetime" field.
 func (u *FieldTypeUpsert) SetDatetime(v time.Time) *FieldTypeUpsert {
 	u.Set(fieldtype.FieldDatetime, v)
@@ -2118,6 +2206,24 @@ func (u *FieldTypeUpsert) UpdateLinkOther() *FieldTypeUpsert {
 // ClearLinkOther clears the value of the "link_other" field.
 func (u *FieldTypeUpsert) ClearLinkOther() *FieldTypeUpsert {
 	u.SetNull(fieldtype.FieldLinkOther)
+	return u
+}
+
+// SetLinkOtherFunc sets the "link_other_func" field.
+func (u *FieldTypeUpsert) SetLinkOtherFunc(v *schema.Link) *FieldTypeUpsert {
+	u.Set(fieldtype.FieldLinkOtherFunc, v)
+	return u
+}
+
+// UpdateLinkOtherFunc sets the "link_other_func" field to the value that was provided on create.
+func (u *FieldTypeUpsert) UpdateLinkOtherFunc() *FieldTypeUpsert {
+	u.SetExcluded(fieldtype.FieldLinkOtherFunc)
+	return u
+}
+
+// ClearLinkOtherFunc clears the value of the "link_other_func" field.
+func (u *FieldTypeUpsert) ClearLinkOtherFunc() *FieldTypeUpsert {
+	u.SetNull(fieldtype.FieldLinkOtherFunc)
 	return u
 }
 
@@ -2631,21 +2737,21 @@ func (u *FieldTypeUpsert) ClearPriority() *FieldTypeUpsert {
 	return u
 }
 
-// SetUUID sets the "uuid" field.
-func (u *FieldTypeUpsert) SetUUID(v uuid.UUID) *FieldTypeUpsert {
-	u.Set(fieldtype.FieldUUID, v)
+// SetOptionalUUID sets the "optional_uuid" field.
+func (u *FieldTypeUpsert) SetOptionalUUID(v uuid.UUID) *FieldTypeUpsert {
+	u.Set(fieldtype.FieldOptionalUUID, v)
 	return u
 }
 
-// UpdateUUID sets the "uuid" field to the value that was provided on create.
-func (u *FieldTypeUpsert) UpdateUUID() *FieldTypeUpsert {
-	u.SetExcluded(fieldtype.FieldUUID)
+// UpdateOptionalUUID sets the "optional_uuid" field to the value that was provided on create.
+func (u *FieldTypeUpsert) UpdateOptionalUUID() *FieldTypeUpsert {
+	u.SetExcluded(fieldtype.FieldOptionalUUID)
 	return u
 }
 
-// ClearUUID clears the value of the "uuid" field.
-func (u *FieldTypeUpsert) ClearUUID() *FieldTypeUpsert {
-	u.SetNull(fieldtype.FieldUUID)
+// ClearOptionalUUID clears the value of the "optional_uuid" field.
+func (u *FieldTypeUpsert) ClearOptionalUUID() *FieldTypeUpsert {
+	u.SetNull(fieldtype.FieldOptionalUUID)
 	return u
 }
 
@@ -3453,6 +3559,27 @@ func (u *FieldTypeUpsertOne) ClearOptionalFloat32() *FieldTypeUpsertOne {
 	})
 }
 
+// SetText sets the "text" field.
+func (u *FieldTypeUpsertOne) SetText(v string) *FieldTypeUpsertOne {
+	return u.Update(func(s *FieldTypeUpsert) {
+		s.SetText(v)
+	})
+}
+
+// UpdateText sets the "text" field to the value that was provided on create.
+func (u *FieldTypeUpsertOne) UpdateText() *FieldTypeUpsertOne {
+	return u.Update(func(s *FieldTypeUpsert) {
+		s.UpdateText()
+	})
+}
+
+// ClearText clears the value of the "text" field.
+func (u *FieldTypeUpsertOne) ClearText() *FieldTypeUpsertOne {
+	return u.Update(func(s *FieldTypeUpsert) {
+		s.ClearText()
+	})
+}
+
 // SetDatetime sets the "datetime" field.
 func (u *FieldTypeUpsertOne) SetDatetime(v time.Time) *FieldTypeUpsertOne {
 	return u.Update(func(s *FieldTypeUpsert) {
@@ -3520,6 +3647,27 @@ func (u *FieldTypeUpsertOne) UpdateLinkOther() *FieldTypeUpsertOne {
 func (u *FieldTypeUpsertOne) ClearLinkOther() *FieldTypeUpsertOne {
 	return u.Update(func(s *FieldTypeUpsert) {
 		s.ClearLinkOther()
+	})
+}
+
+// SetLinkOtherFunc sets the "link_other_func" field.
+func (u *FieldTypeUpsertOne) SetLinkOtherFunc(v *schema.Link) *FieldTypeUpsertOne {
+	return u.Update(func(s *FieldTypeUpsert) {
+		s.SetLinkOtherFunc(v)
+	})
+}
+
+// UpdateLinkOtherFunc sets the "link_other_func" field to the value that was provided on create.
+func (u *FieldTypeUpsertOne) UpdateLinkOtherFunc() *FieldTypeUpsertOne {
+	return u.Update(func(s *FieldTypeUpsert) {
+		s.UpdateLinkOtherFunc()
+	})
+}
+
+// ClearLinkOtherFunc clears the value of the "link_other_func" field.
+func (u *FieldTypeUpsertOne) ClearLinkOtherFunc() *FieldTypeUpsertOne {
+	return u.Update(func(s *FieldTypeUpsert) {
+		s.ClearLinkOtherFunc()
 	})
 }
 
@@ -4118,24 +4266,24 @@ func (u *FieldTypeUpsertOne) ClearPriority() *FieldTypeUpsertOne {
 	})
 }
 
-// SetUUID sets the "uuid" field.
-func (u *FieldTypeUpsertOne) SetUUID(v uuid.UUID) *FieldTypeUpsertOne {
+// SetOptionalUUID sets the "optional_uuid" field.
+func (u *FieldTypeUpsertOne) SetOptionalUUID(v uuid.UUID) *FieldTypeUpsertOne {
 	return u.Update(func(s *FieldTypeUpsert) {
-		s.SetUUID(v)
+		s.SetOptionalUUID(v)
 	})
 }
 
-// UpdateUUID sets the "uuid" field to the value that was provided on create.
-func (u *FieldTypeUpsertOne) UpdateUUID() *FieldTypeUpsertOne {
+// UpdateOptionalUUID sets the "optional_uuid" field to the value that was provided on create.
+func (u *FieldTypeUpsertOne) UpdateOptionalUUID() *FieldTypeUpsertOne {
 	return u.Update(func(s *FieldTypeUpsert) {
-		s.UpdateUUID()
+		s.UpdateOptionalUUID()
 	})
 }
 
-// ClearUUID clears the value of the "uuid" field.
-func (u *FieldTypeUpsertOne) ClearUUID() *FieldTypeUpsertOne {
+// ClearOptionalUUID clears the value of the "optional_uuid" field.
+func (u *FieldTypeUpsertOne) ClearOptionalUUID() *FieldTypeUpsertOne {
 	return u.Update(func(s *FieldTypeUpsert) {
-		s.ClearUUID()
+		s.ClearOptionalUUID()
 	})
 }
 
@@ -4369,11 +4517,11 @@ func (ftcb *FieldTypeCreateBulk) Save(ctx context.Context) ([]*FieldType, error)
 					return nil, err
 				}
 				mutation.id = &nodes[i].ID
-				mutation.done = true
 				if specs[i].ID.Value != nil {
 					id := specs[i].ID.Value.(int64)
 					nodes[i].ID = int(id)
 				}
+				mutation.done = true
 				return nodes[i], nil
 			})
 			for i := len(builder.hooks) - 1; i >= 0; i-- {
@@ -5127,6 +5275,27 @@ func (u *FieldTypeUpsertBulk) ClearOptionalFloat32() *FieldTypeUpsertBulk {
 	})
 }
 
+// SetText sets the "text" field.
+func (u *FieldTypeUpsertBulk) SetText(v string) *FieldTypeUpsertBulk {
+	return u.Update(func(s *FieldTypeUpsert) {
+		s.SetText(v)
+	})
+}
+
+// UpdateText sets the "text" field to the value that was provided on create.
+func (u *FieldTypeUpsertBulk) UpdateText() *FieldTypeUpsertBulk {
+	return u.Update(func(s *FieldTypeUpsert) {
+		s.UpdateText()
+	})
+}
+
+// ClearText clears the value of the "text" field.
+func (u *FieldTypeUpsertBulk) ClearText() *FieldTypeUpsertBulk {
+	return u.Update(func(s *FieldTypeUpsert) {
+		s.ClearText()
+	})
+}
+
 // SetDatetime sets the "datetime" field.
 func (u *FieldTypeUpsertBulk) SetDatetime(v time.Time) *FieldTypeUpsertBulk {
 	return u.Update(func(s *FieldTypeUpsert) {
@@ -5194,6 +5363,27 @@ func (u *FieldTypeUpsertBulk) UpdateLinkOther() *FieldTypeUpsertBulk {
 func (u *FieldTypeUpsertBulk) ClearLinkOther() *FieldTypeUpsertBulk {
 	return u.Update(func(s *FieldTypeUpsert) {
 		s.ClearLinkOther()
+	})
+}
+
+// SetLinkOtherFunc sets the "link_other_func" field.
+func (u *FieldTypeUpsertBulk) SetLinkOtherFunc(v *schema.Link) *FieldTypeUpsertBulk {
+	return u.Update(func(s *FieldTypeUpsert) {
+		s.SetLinkOtherFunc(v)
+	})
+}
+
+// UpdateLinkOtherFunc sets the "link_other_func" field to the value that was provided on create.
+func (u *FieldTypeUpsertBulk) UpdateLinkOtherFunc() *FieldTypeUpsertBulk {
+	return u.Update(func(s *FieldTypeUpsert) {
+		s.UpdateLinkOtherFunc()
+	})
+}
+
+// ClearLinkOtherFunc clears the value of the "link_other_func" field.
+func (u *FieldTypeUpsertBulk) ClearLinkOtherFunc() *FieldTypeUpsertBulk {
+	return u.Update(func(s *FieldTypeUpsert) {
+		s.ClearLinkOtherFunc()
 	})
 }
 
@@ -5792,24 +5982,24 @@ func (u *FieldTypeUpsertBulk) ClearPriority() *FieldTypeUpsertBulk {
 	})
 }
 
-// SetUUID sets the "uuid" field.
-func (u *FieldTypeUpsertBulk) SetUUID(v uuid.UUID) *FieldTypeUpsertBulk {
+// SetOptionalUUID sets the "optional_uuid" field.
+func (u *FieldTypeUpsertBulk) SetOptionalUUID(v uuid.UUID) *FieldTypeUpsertBulk {
 	return u.Update(func(s *FieldTypeUpsert) {
-		s.SetUUID(v)
+		s.SetOptionalUUID(v)
 	})
 }
 
-// UpdateUUID sets the "uuid" field to the value that was provided on create.
-func (u *FieldTypeUpsertBulk) UpdateUUID() *FieldTypeUpsertBulk {
+// UpdateOptionalUUID sets the "optional_uuid" field to the value that was provided on create.
+func (u *FieldTypeUpsertBulk) UpdateOptionalUUID() *FieldTypeUpsertBulk {
 	return u.Update(func(s *FieldTypeUpsert) {
-		s.UpdateUUID()
+		s.UpdateOptionalUUID()
 	})
 }
 
-// ClearUUID clears the value of the "uuid" field.
-func (u *FieldTypeUpsertBulk) ClearUUID() *FieldTypeUpsertBulk {
+// ClearOptionalUUID clears the value of the "optional_uuid" field.
+func (u *FieldTypeUpsertBulk) ClearOptionalUUID() *FieldTypeUpsertBulk {
 	return u.Update(func(s *FieldTypeUpsert) {
-		s.ClearUUID()
+		s.ClearOptionalUUID()
 	})
 }
 

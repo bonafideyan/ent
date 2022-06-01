@@ -116,9 +116,15 @@ func (nc *NodeCreate) Save(ctx context.Context) (*Node, error) {
 			}
 			mut = nc.hooks[i](mut)
 		}
-		if _, err := mut.Mutate(ctx, nc.mutation); err != nil {
+		v, err := mut.Mutate(ctx, nc.mutation)
+		if err != nil {
 			return nil, err
 		}
+		nv, ok := v.(*Node)
+		if !ok {
+			return nil, fmt.Errorf("unexpected node type %T returned from NodeMutation", v)
+		}
+		node = nv
 	}
 	return node, err
 }
@@ -445,11 +451,11 @@ func (ncb *NodeCreateBulk) Save(ctx context.Context) ([]*Node, error) {
 					return nil, err
 				}
 				mutation.id = &nodes[i].ID
-				mutation.done = true
 				if specs[i].ID.Value != nil {
 					id := specs[i].ID.Value.(int64)
 					nodes[i].ID = int(id)
 				}
+				mutation.done = true
 				return nodes[i], nil
 			})
 			for i := len(builder.hooks) - 1; i >= 0; i-- {

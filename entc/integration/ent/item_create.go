@@ -94,9 +94,15 @@ func (ic *ItemCreate) Save(ctx context.Context) (*Item, error) {
 			}
 			mut = ic.hooks[i](mut)
 		}
-		if _, err := mut.Mutate(ctx, ic.mutation); err != nil {
+		v, err := mut.Mutate(ctx, ic.mutation)
+		if err != nil {
 			return nil, err
 		}
+		nv, ok := v.(*Item)
+		if !ok {
+			return nil, fmt.Errorf("unexpected node type %T returned from ItemMutation", v)
+		}
+		node = nv
 	}
 	return node, err
 }
@@ -155,7 +161,11 @@ func (ic *ItemCreate) sqlSave(ctx context.Context) (*Item, error) {
 		return nil, err
 	}
 	if _spec.ID.Value != nil {
-		_node.ID = _spec.ID.Value.(string)
+		if id, ok := _spec.ID.Value.(string); ok {
+			_node.ID = id
+		} else {
+			return nil, fmt.Errorf("unexpected Item.ID type: %T", _spec.ID.Value)
+		}
 	}
 	return _node, nil
 }

@@ -9,6 +9,7 @@ package ent
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -46,6 +47,7 @@ type UserMutation struct {
 	ints          *[]int
 	floats        *[]float64
 	strings       *[]string
+	addr          *schema.Addr
 	clearedFields map[string]struct{}
 	done          bool
 	oldValue      func(context.Context) (*User, error)
@@ -82,7 +84,7 @@ func withUserID(id int) userOption {
 		m.oldValue = func(ctx context.Context) (*User, error) {
 			once.Do(func() {
 				if m.done {
-					err = fmt.Errorf("querying old values post mutation is not allowed")
+					err = errors.New("querying old values post mutation is not allowed")
 				} else {
 					value, err = m.Client().User.Get(ctx, id)
 				}
@@ -115,7 +117,7 @@ func (m UserMutation) Client() *Client {
 // it returns an error otherwise.
 func (m UserMutation) Tx() (*Tx, error) {
 	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, fmt.Errorf("ent: mutation is not running in a transaction")
+		return nil, errors.New("ent: mutation is not running in a transaction")
 	}
 	tx := &Tx{config: m.config}
 	tx.init()
@@ -129,6 +131,25 @@ func (m *UserMutation) ID() (id int, exists bool) {
 		return
 	}
 	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *UserMutation) IDs(ctx context.Context) ([]int, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().User.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
 }
 
 // SetT sets the "t" field.
@@ -150,10 +171,10 @@ func (m *UserMutation) T() (r *schema.T, exists bool) {
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
 func (m *UserMutation) OldT(ctx context.Context) (v *schema.T, err error) {
 	if !m.op.Is(OpUpdateOne) {
-		return v, fmt.Errorf("OldT is only allowed on UpdateOne operations")
+		return v, errors.New("OldT is only allowed on UpdateOne operations")
 	}
 	if m.id == nil || m.oldValue == nil {
-		return v, fmt.Errorf("OldT requires an ID field in the mutation")
+		return v, errors.New("OldT requires an ID field in the mutation")
 	}
 	oldValue, err := m.oldValue(ctx)
 	if err != nil {
@@ -199,10 +220,10 @@ func (m *UserMutation) URL() (r *url.URL, exists bool) {
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
 func (m *UserMutation) OldURL(ctx context.Context) (v *url.URL, err error) {
 	if !m.op.Is(OpUpdateOne) {
-		return v, fmt.Errorf("OldURL is only allowed on UpdateOne operations")
+		return v, errors.New("OldURL is only allowed on UpdateOne operations")
 	}
 	if m.id == nil || m.oldValue == nil {
-		return v, fmt.Errorf("OldURL requires an ID field in the mutation")
+		return v, errors.New("OldURL requires an ID field in the mutation")
 	}
 	oldValue, err := m.oldValue(ctx)
 	if err != nil {
@@ -248,10 +269,10 @@ func (m *UserMutation) Raw() (r json.RawMessage, exists bool) {
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
 func (m *UserMutation) OldRaw(ctx context.Context) (v json.RawMessage, err error) {
 	if !m.op.Is(OpUpdateOne) {
-		return v, fmt.Errorf("OldRaw is only allowed on UpdateOne operations")
+		return v, errors.New("OldRaw is only allowed on UpdateOne operations")
 	}
 	if m.id == nil || m.oldValue == nil {
-		return v, fmt.Errorf("OldRaw requires an ID field in the mutation")
+		return v, errors.New("OldRaw requires an ID field in the mutation")
 	}
 	oldValue, err := m.oldValue(ctx)
 	if err != nil {
@@ -297,10 +318,10 @@ func (m *UserMutation) Dirs() (r []http.Dir, exists bool) {
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
 func (m *UserMutation) OldDirs(ctx context.Context) (v []http.Dir, err error) {
 	if !m.op.Is(OpUpdateOne) {
-		return v, fmt.Errorf("OldDirs is only allowed on UpdateOne operations")
+		return v, errors.New("OldDirs is only allowed on UpdateOne operations")
 	}
 	if m.id == nil || m.oldValue == nil {
-		return v, fmt.Errorf("OldDirs requires an ID field in the mutation")
+		return v, errors.New("OldDirs requires an ID field in the mutation")
 	}
 	oldValue, err := m.oldValue(ctx)
 	if err != nil {
@@ -309,22 +330,9 @@ func (m *UserMutation) OldDirs(ctx context.Context) (v []http.Dir, err error) {
 	return oldValue.Dirs, nil
 }
 
-// ClearDirs clears the value of the "dirs" field.
-func (m *UserMutation) ClearDirs() {
-	m.dirs = nil
-	m.clearedFields[user.FieldDirs] = struct{}{}
-}
-
-// DirsCleared returns if the "dirs" field was cleared in this mutation.
-func (m *UserMutation) DirsCleared() bool {
-	_, ok := m.clearedFields[user.FieldDirs]
-	return ok
-}
-
 // ResetDirs resets all changes to the "dirs" field.
 func (m *UserMutation) ResetDirs() {
 	m.dirs = nil
-	delete(m.clearedFields, user.FieldDirs)
 }
 
 // SetInts sets the "ints" field.
@@ -346,10 +354,10 @@ func (m *UserMutation) Ints() (r []int, exists bool) {
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
 func (m *UserMutation) OldInts(ctx context.Context) (v []int, err error) {
 	if !m.op.Is(OpUpdateOne) {
-		return v, fmt.Errorf("OldInts is only allowed on UpdateOne operations")
+		return v, errors.New("OldInts is only allowed on UpdateOne operations")
 	}
 	if m.id == nil || m.oldValue == nil {
-		return v, fmt.Errorf("OldInts requires an ID field in the mutation")
+		return v, errors.New("OldInts requires an ID field in the mutation")
 	}
 	oldValue, err := m.oldValue(ctx)
 	if err != nil {
@@ -395,10 +403,10 @@ func (m *UserMutation) Floats() (r []float64, exists bool) {
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
 func (m *UserMutation) OldFloats(ctx context.Context) (v []float64, err error) {
 	if !m.op.Is(OpUpdateOne) {
-		return v, fmt.Errorf("OldFloats is only allowed on UpdateOne operations")
+		return v, errors.New("OldFloats is only allowed on UpdateOne operations")
 	}
 	if m.id == nil || m.oldValue == nil {
-		return v, fmt.Errorf("OldFloats requires an ID field in the mutation")
+		return v, errors.New("OldFloats requires an ID field in the mutation")
 	}
 	oldValue, err := m.oldValue(ctx)
 	if err != nil {
@@ -444,10 +452,10 @@ func (m *UserMutation) Strings() (r []string, exists bool) {
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
 func (m *UserMutation) OldStrings(ctx context.Context) (v []string, err error) {
 	if !m.op.Is(OpUpdateOne) {
-		return v, fmt.Errorf("OldStrings is only allowed on UpdateOne operations")
+		return v, errors.New("OldStrings is only allowed on UpdateOne operations")
 	}
 	if m.id == nil || m.oldValue == nil {
-		return v, fmt.Errorf("OldStrings requires an ID field in the mutation")
+		return v, errors.New("OldStrings requires an ID field in the mutation")
 	}
 	oldValue, err := m.oldValue(ctx)
 	if err != nil {
@@ -474,6 +482,55 @@ func (m *UserMutation) ResetStrings() {
 	delete(m.clearedFields, user.FieldStrings)
 }
 
+// SetAddr sets the "addr" field.
+func (m *UserMutation) SetAddr(s schema.Addr) {
+	m.addr = &s
+}
+
+// Addr returns the value of the "addr" field in the mutation.
+func (m *UserMutation) Addr() (r schema.Addr, exists bool) {
+	v := m.addr
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAddr returns the old "addr" field's value of the User entity.
+// If the User object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *UserMutation) OldAddr(ctx context.Context) (v schema.Addr, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAddr is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAddr requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAddr: %w", err)
+	}
+	return oldValue.Addr, nil
+}
+
+// ClearAddr clears the value of the "addr" field.
+func (m *UserMutation) ClearAddr() {
+	m.addr = nil
+	m.clearedFields[user.FieldAddr] = struct{}{}
+}
+
+// AddrCleared returns if the "addr" field was cleared in this mutation.
+func (m *UserMutation) AddrCleared() bool {
+	_, ok := m.clearedFields[user.FieldAddr]
+	return ok
+}
+
+// ResetAddr resets all changes to the "addr" field.
+func (m *UserMutation) ResetAddr() {
+	m.addr = nil
+	delete(m.clearedFields, user.FieldAddr)
+}
+
 // Where appends a list predicates to the UserMutation builder.
 func (m *UserMutation) Where(ps ...predicate.User) {
 	m.predicates = append(m.predicates, ps...)
@@ -493,7 +550,7 @@ func (m *UserMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *UserMutation) Fields() []string {
-	fields := make([]string, 0, 7)
+	fields := make([]string, 0, 8)
 	if m.t != nil {
 		fields = append(fields, user.FieldT)
 	}
@@ -514,6 +571,9 @@ func (m *UserMutation) Fields() []string {
 	}
 	if m.strings != nil {
 		fields = append(fields, user.FieldStrings)
+	}
+	if m.addr != nil {
+		fields = append(fields, user.FieldAddr)
 	}
 	return fields
 }
@@ -537,6 +597,8 @@ func (m *UserMutation) Field(name string) (ent.Value, bool) {
 		return m.Floats()
 	case user.FieldStrings:
 		return m.Strings()
+	case user.FieldAddr:
+		return m.Addr()
 	}
 	return nil, false
 }
@@ -560,6 +622,8 @@ func (m *UserMutation) OldField(ctx context.Context, name string) (ent.Value, er
 		return m.OldFloats(ctx)
 	case user.FieldStrings:
 		return m.OldStrings(ctx)
+	case user.FieldAddr:
+		return m.OldAddr(ctx)
 	}
 	return nil, fmt.Errorf("unknown User field %s", name)
 }
@@ -618,6 +682,13 @@ func (m *UserMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetStrings(v)
 		return nil
+	case user.FieldAddr:
+		v, ok := value.(schema.Addr)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAddr(v)
+		return nil
 	}
 	return fmt.Errorf("unknown User field %s", name)
 }
@@ -657,9 +728,6 @@ func (m *UserMutation) ClearedFields() []string {
 	if m.FieldCleared(user.FieldRaw) {
 		fields = append(fields, user.FieldRaw)
 	}
-	if m.FieldCleared(user.FieldDirs) {
-		fields = append(fields, user.FieldDirs)
-	}
 	if m.FieldCleared(user.FieldInts) {
 		fields = append(fields, user.FieldInts)
 	}
@@ -668,6 +736,9 @@ func (m *UserMutation) ClearedFields() []string {
 	}
 	if m.FieldCleared(user.FieldStrings) {
 		fields = append(fields, user.FieldStrings)
+	}
+	if m.FieldCleared(user.FieldAddr) {
+		fields = append(fields, user.FieldAddr)
 	}
 	return fields
 }
@@ -692,9 +763,6 @@ func (m *UserMutation) ClearField(name string) error {
 	case user.FieldRaw:
 		m.ClearRaw()
 		return nil
-	case user.FieldDirs:
-		m.ClearDirs()
-		return nil
 	case user.FieldInts:
 		m.ClearInts()
 		return nil
@@ -703,6 +771,9 @@ func (m *UserMutation) ClearField(name string) error {
 		return nil
 	case user.FieldStrings:
 		m.ClearStrings()
+		return nil
+	case user.FieldAddr:
+		m.ClearAddr()
 		return nil
 	}
 	return fmt.Errorf("unknown User nullable field %s", name)
@@ -732,6 +803,9 @@ func (m *UserMutation) ResetField(name string) error {
 		return nil
 	case user.FieldStrings:
 		m.ResetStrings()
+		return nil
+	case user.FieldAddr:
+		m.ResetAddr()
 		return nil
 	}
 	return fmt.Errorf("unknown User field %s", name)

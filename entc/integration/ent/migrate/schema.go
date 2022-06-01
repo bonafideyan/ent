@@ -60,6 +60,7 @@ var (
 		{Name: "unique_int", Type: field.TypeInt, Unique: true},
 		{Name: "unique_float", Type: field.TypeFloat64, Unique: true},
 		{Name: "nillable_int", Type: field.TypeInt, Nullable: true},
+		{Name: "table", Type: field.TypeString, Nullable: true},
 	}
 	// CommentsTable holds the schema information for the "comments" table.
 	CommentsTable = &schema.Table{
@@ -94,9 +95,11 @@ var (
 		{Name: "state", Type: field.TypeEnum, Nullable: true, Enums: []string{"on", "off"}},
 		{Name: "optional_float", Type: field.TypeFloat64, Nullable: true},
 		{Name: "optional_float32", Type: field.TypeFloat32, Nullable: true},
+		{Name: "text", Type: field.TypeString, Nullable: true, Size: 2147483647, SchemaType: map[string]string{"mysql": "mediumtext"}},
 		{Name: "datetime", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"mysql": "datetime", "postgres": "date"}},
 		{Name: "decimal", Type: field.TypeFloat64, Nullable: true, SchemaType: map[string]string{"mysql": "decimal(6,2)", "postgres": "numeric"}},
 		{Name: "link_other", Type: field.TypeOther, Nullable: true, SchemaType: map[string]string{"mysql": "varchar(255)", "postgres": "varchar", "sqlite3": "varchar(255)"}},
+		{Name: "link_other_func", Type: field.TypeOther, Nullable: true, SchemaType: map[string]string{"mysql": "varchar(255)", "postgres": "varchar", "sqlite3": "varchar(255)"}},
 		{Name: "mac", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "macaddr"}},
 		{Name: "string_array", Type: field.TypeOther, Nullable: true, SchemaType: map[string]string{"mysql": "blob", "postgres": "text[]", "sqlite3": "json"}},
 		{Name: "password", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"mysql": "char(32)"}},
@@ -124,7 +127,7 @@ var (
 		{Name: "null_float", Type: field.TypeFloat64, Nullable: true},
 		{Name: "role", Type: field.TypeEnum, Enums: []string{"ADMIN", "OWNER", "USER", "READ", "WRITE"}, Default: "READ"},
 		{Name: "priority", Type: field.TypeEnum, Nullable: true, Enums: []string{"UNKNOWN", "LOW", "HIGH"}},
-		{Name: "uuid", Type: field.TypeUUID, Nullable: true},
+		{Name: "optional_uuid", Type: field.TypeUUID, Nullable: true},
 		{Name: "nillable_uuid", Type: field.TypeUUID, Nullable: true},
 		{Name: "strings", Type: field.TypeJSON, Nullable: true},
 		{Name: "pair", Type: field.TypeBytes},
@@ -143,7 +146,7 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "field_types_files_field",
-				Columns:    []*schema.Column{FieldTypesColumns[64]},
+				Columns:    []*schema.Column{FieldTypesColumns[66]},
 				RefColumns: []*schema.Column{FilesColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
@@ -245,7 +248,7 @@ var (
 		{Name: "type", Type: field.TypeString, Nullable: true, Size: 255},
 		{Name: "max_users", Type: field.TypeInt, Nullable: true, Default: 10},
 		{Name: "name", Type: field.TypeString},
-		{Name: "group_info", Type: field.TypeInt, Nullable: true},
+		{Name: "group_info", Type: field.TypeInt},
 	}
 	// GroupsTable holds the schema information for the "groups" table.
 	GroupsTable = &schema.Table{
@@ -257,7 +260,7 @@ var (
 				Symbol:     "groups_group_infos_info",
 				Columns:    []*schema.Column{GroupsColumns[6]},
 				RefColumns: []*schema.Column{GroupInfosColumns[0]},
-				OnDelete:   schema.SetNull,
+				OnDelete:   schema.NoAction,
 			},
 		},
 	}

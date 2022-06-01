@@ -45,6 +45,14 @@ func (mic *MixinIDCreate) SetID(u uuid.UUID) *MixinIDCreate {
 	return mic
 }
 
+// SetNillableID sets the "id" field if the given value is not nil.
+func (mic *MixinIDCreate) SetNillableID(u *uuid.UUID) *MixinIDCreate {
+	if u != nil {
+		mic.SetID(*u)
+	}
+	return mic
+}
+
 // Mutation returns the MixinIDMutation object of the builder.
 func (mic *MixinIDCreate) Mutation() *MixinIDMutation {
 	return mic.mutation
@@ -85,9 +93,15 @@ func (mic *MixinIDCreate) Save(ctx context.Context) (*MixinID, error) {
 			}
 			mut = mic.hooks[i](mut)
 		}
-		if _, err := mut.Mutate(ctx, mic.mutation); err != nil {
+		v, err := mut.Mutate(ctx, mic.mutation)
+		if err != nil {
 			return nil, err
 		}
+		nv, ok := v.(*MixinID)
+		if !ok {
+			return nil, fmt.Errorf("unexpected node type %T returned from MixinIDMutation", v)
+		}
+		node = nv
 	}
 	return node, err
 }
@@ -142,7 +156,11 @@ func (mic *MixinIDCreate) sqlSave(ctx context.Context) (*MixinID, error) {
 		return nil, err
 	}
 	if _spec.ID.Value != nil {
-		_node.ID = *_spec.ID.Value.(*uuid.UUID)
+		if id, ok := _spec.ID.Value.(*uuid.UUID); ok {
+			_node.ID = *id
+		} else if err := _node.ID.Scan(_spec.ID.Value); err != nil {
+			return nil, err
+		}
 	}
 	return _node, nil
 }

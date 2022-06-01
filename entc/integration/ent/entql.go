@@ -20,7 +20,7 @@ import (
 	"entgo.io/ent/entc/integration/ent/pet"
 	"entgo.io/ent/entc/integration/ent/predicate"
 	"entgo.io/ent/entc/integration/ent/spec"
-	"entgo.io/ent/entc/integration/ent/task"
+	enttask "entgo.io/ent/entc/integration/ent/task"
 	"entgo.io/ent/entc/integration/ent/user"
 
 	"entgo.io/ent/dialect/sql"
@@ -64,6 +64,7 @@ var schemaGraph = func() *sqlgraph.Schema {
 			comment.FieldUniqueInt:   {Type: field.TypeInt, Column: comment.FieldUniqueInt},
 			comment.FieldUniqueFloat: {Type: field.TypeFloat64, Column: comment.FieldUniqueFloat},
 			comment.FieldNillableInt: {Type: field.TypeInt, Column: comment.FieldNillableInt},
+			comment.FieldTable:       {Type: field.TypeString, Column: comment.FieldTable},
 		},
 	}
 	graph.Nodes[2] = &sqlgraph.Node{
@@ -101,9 +102,11 @@ var schemaGraph = func() *sqlgraph.Schema {
 			fieldtype.FieldState:                 {Type: field.TypeEnum, Column: fieldtype.FieldState},
 			fieldtype.FieldOptionalFloat:         {Type: field.TypeFloat64, Column: fieldtype.FieldOptionalFloat},
 			fieldtype.FieldOptionalFloat32:       {Type: field.TypeFloat32, Column: fieldtype.FieldOptionalFloat32},
+			fieldtype.FieldText:                  {Type: field.TypeString, Column: fieldtype.FieldText},
 			fieldtype.FieldDatetime:              {Type: field.TypeTime, Column: fieldtype.FieldDatetime},
 			fieldtype.FieldDecimal:               {Type: field.TypeFloat64, Column: fieldtype.FieldDecimal},
 			fieldtype.FieldLinkOther:             {Type: field.TypeOther, Column: fieldtype.FieldLinkOther},
+			fieldtype.FieldLinkOtherFunc:         {Type: field.TypeOther, Column: fieldtype.FieldLinkOtherFunc},
 			fieldtype.FieldMAC:                   {Type: field.TypeString, Column: fieldtype.FieldMAC},
 			fieldtype.FieldStringArray:           {Type: field.TypeOther, Column: fieldtype.FieldStringArray},
 			fieldtype.FieldPassword:              {Type: field.TypeString, Column: fieldtype.FieldPassword},
@@ -131,7 +134,7 @@ var schemaGraph = func() *sqlgraph.Schema {
 			fieldtype.FieldNullFloat:             {Type: field.TypeFloat64, Column: fieldtype.FieldNullFloat},
 			fieldtype.FieldRole:                  {Type: field.TypeEnum, Column: fieldtype.FieldRole},
 			fieldtype.FieldPriority:              {Type: field.TypeEnum, Column: fieldtype.FieldPriority},
-			fieldtype.FieldUUID:                  {Type: field.TypeUUID, Column: fieldtype.FieldUUID},
+			fieldtype.FieldOptionalUUID:          {Type: field.TypeUUID, Column: fieldtype.FieldOptionalUUID},
 			fieldtype.FieldNillableUUID:          {Type: field.TypeUUID, Column: fieldtype.FieldNillableUUID},
 			fieldtype.FieldStrings:               {Type: field.TypeJSON, Column: fieldtype.FieldStrings},
 			fieldtype.FieldPair:                  {Type: field.TypeBytes, Column: fieldtype.FieldPair},
@@ -280,16 +283,16 @@ var schemaGraph = func() *sqlgraph.Schema {
 	}
 	graph.Nodes[12] = &sqlgraph.Node{
 		NodeSpec: sqlgraph.NodeSpec{
-			Table:   task.Table,
-			Columns: task.Columns,
+			Table:   enttask.Table,
+			Columns: enttask.Columns,
 			ID: &sqlgraph.FieldSpec{
 				Type:   field.TypeInt,
-				Column: task.FieldID,
+				Column: enttask.FieldID,
 			},
 		},
 		Type: "Task",
 		Fields: map[string]*sqlgraph.FieldSpec{
-			task.FieldPriority: {Type: field.TypeInt, Column: task.FieldPriority},
+			enttask.FieldPriority: {Type: field.TypeInt, Column: enttask.FieldPriority},
 		},
 	}
 	graph.Nodes[13] = &sqlgraph.Node{
@@ -656,7 +659,7 @@ func (cq *CardQuery) addPredicate(pred func(s *sql.Selector)) {
 
 // Filter returns a Filter implementation to apply filters on the CardQuery builder.
 func (cq *CardQuery) Filter() *CardFilter {
-	return &CardFilter{cq}
+	return &CardFilter{cq.config, cq}
 }
 
 // addPredicate implements the predicateAdder interface.
@@ -666,11 +669,12 @@ func (m *CardMutation) addPredicate(pred func(s *sql.Selector)) {
 
 // Filter returns an entql.Where implementation to apply filters on the CardMutation builder.
 func (m *CardMutation) Filter() *CardFilter {
-	return &CardFilter{m}
+	return &CardFilter{m.config, m}
 }
 
 // CardFilter provides a generic filtering capability at runtime for CardQuery.
 type CardFilter struct {
+	config
 	predicateAdder
 }
 
@@ -748,7 +752,7 @@ func (cq *CommentQuery) addPredicate(pred func(s *sql.Selector)) {
 
 // Filter returns a Filter implementation to apply filters on the CommentQuery builder.
 func (cq *CommentQuery) Filter() *CommentFilter {
-	return &CommentFilter{cq}
+	return &CommentFilter{cq.config, cq}
 }
 
 // addPredicate implements the predicateAdder interface.
@@ -758,11 +762,12 @@ func (m *CommentMutation) addPredicate(pred func(s *sql.Selector)) {
 
 // Filter returns an entql.Where implementation to apply filters on the CommentMutation builder.
 func (m *CommentMutation) Filter() *CommentFilter {
-	return &CommentFilter{m}
+	return &CommentFilter{m.config, m}
 }
 
 // CommentFilter provides a generic filtering capability at runtime for CommentQuery.
 type CommentFilter struct {
+	config
 	predicateAdder
 }
 
@@ -795,6 +800,11 @@ func (f *CommentFilter) WhereNillableInt(p entql.IntP) {
 	f.Where(p.Field(comment.FieldNillableInt))
 }
 
+// WhereTable applies the entql string predicate on the table field.
+func (f *CommentFilter) WhereTable(p entql.StringP) {
+	f.Where(p.Field(comment.FieldTable))
+}
+
 // addPredicate implements the predicateAdder interface.
 func (ftq *FieldTypeQuery) addPredicate(pred func(s *sql.Selector)) {
 	ftq.predicates = append(ftq.predicates, pred)
@@ -802,7 +812,7 @@ func (ftq *FieldTypeQuery) addPredicate(pred func(s *sql.Selector)) {
 
 // Filter returns a Filter implementation to apply filters on the FieldTypeQuery builder.
 func (ftq *FieldTypeQuery) Filter() *FieldTypeFilter {
-	return &FieldTypeFilter{ftq}
+	return &FieldTypeFilter{ftq.config, ftq}
 }
 
 // addPredicate implements the predicateAdder interface.
@@ -812,11 +822,12 @@ func (m *FieldTypeMutation) addPredicate(pred func(s *sql.Selector)) {
 
 // Filter returns an entql.Where implementation to apply filters on the FieldTypeMutation builder.
 func (m *FieldTypeMutation) Filter() *FieldTypeFilter {
-	return &FieldTypeFilter{m}
+	return &FieldTypeFilter{m.config, m}
 }
 
 // FieldTypeFilter provides a generic filtering capability at runtime for FieldTypeQuery.
 type FieldTypeFilter struct {
+	config
 	predicateAdder
 }
 
@@ -954,6 +965,11 @@ func (f *FieldTypeFilter) WhereOptionalFloat32(p entql.Float32P) {
 	f.Where(p.Field(fieldtype.FieldOptionalFloat32))
 }
 
+// WhereText applies the entql string predicate on the text field.
+func (f *FieldTypeFilter) WhereText(p entql.StringP) {
+	f.Where(p.Field(fieldtype.FieldText))
+}
+
 // WhereDatetime applies the entql time.Time predicate on the datetime field.
 func (f *FieldTypeFilter) WhereDatetime(p entql.TimeP) {
 	f.Where(p.Field(fieldtype.FieldDatetime))
@@ -967,6 +983,11 @@ func (f *FieldTypeFilter) WhereDecimal(p entql.Float64P) {
 // WhereLinkOther applies the entql other predicate on the link_other field.
 func (f *FieldTypeFilter) WhereLinkOther(p entql.OtherP) {
 	f.Where(p.Field(fieldtype.FieldLinkOther))
+}
+
+// WhereLinkOtherFunc applies the entql other predicate on the link_other_func field.
+func (f *FieldTypeFilter) WhereLinkOtherFunc(p entql.OtherP) {
+	f.Where(p.Field(fieldtype.FieldLinkOtherFunc))
 }
 
 // WhereMAC applies the entql string predicate on the mac field.
@@ -1104,9 +1125,9 @@ func (f *FieldTypeFilter) WherePriority(p entql.StringP) {
 	f.Where(p.Field(fieldtype.FieldPriority))
 }
 
-// WhereUUID applies the entql [16]byte predicate on the uuid field.
-func (f *FieldTypeFilter) WhereUUID(p entql.ValueP) {
-	f.Where(p.Field(fieldtype.FieldUUID))
+// WhereOptionalUUID applies the entql [16]byte predicate on the optional_uuid field.
+func (f *FieldTypeFilter) WhereOptionalUUID(p entql.ValueP) {
+	f.Where(p.Field(fieldtype.FieldOptionalUUID))
 }
 
 // WhereNillableUUID applies the entql [16]byte predicate on the nillable_uuid field.
@@ -1156,7 +1177,7 @@ func (fq *FileQuery) addPredicate(pred func(s *sql.Selector)) {
 
 // Filter returns a Filter implementation to apply filters on the FileQuery builder.
 func (fq *FileQuery) Filter() *FileFilter {
-	return &FileFilter{fq}
+	return &FileFilter{fq.config, fq}
 }
 
 // addPredicate implements the predicateAdder interface.
@@ -1166,11 +1187,12 @@ func (m *FileMutation) addPredicate(pred func(s *sql.Selector)) {
 
 // Filter returns an entql.Where implementation to apply filters on the FileMutation builder.
 func (m *FileMutation) Filter() *FileFilter {
-	return &FileFilter{m}
+	return &FileFilter{m.config, m}
 }
 
 // FileFilter provides a generic filtering capability at runtime for FileQuery.
 type FileFilter struct {
+	config
 	predicateAdder
 }
 
@@ -1262,7 +1284,7 @@ func (ftq *FileTypeQuery) addPredicate(pred func(s *sql.Selector)) {
 
 // Filter returns a Filter implementation to apply filters on the FileTypeQuery builder.
 func (ftq *FileTypeQuery) Filter() *FileTypeFilter {
-	return &FileTypeFilter{ftq}
+	return &FileTypeFilter{ftq.config, ftq}
 }
 
 // addPredicate implements the predicateAdder interface.
@@ -1272,11 +1294,12 @@ func (m *FileTypeMutation) addPredicate(pred func(s *sql.Selector)) {
 
 // Filter returns an entql.Where implementation to apply filters on the FileTypeMutation builder.
 func (m *FileTypeMutation) Filter() *FileTypeFilter {
-	return &FileTypeFilter{m}
+	return &FileTypeFilter{m.config, m}
 }
 
 // FileTypeFilter provides a generic filtering capability at runtime for FileTypeQuery.
 type FileTypeFilter struct {
+	config
 	predicateAdder
 }
 
@@ -1330,7 +1353,7 @@ func (gq *GoodsQuery) addPredicate(pred func(s *sql.Selector)) {
 
 // Filter returns a Filter implementation to apply filters on the GoodsQuery builder.
 func (gq *GoodsQuery) Filter() *GoodsFilter {
-	return &GoodsFilter{gq}
+	return &GoodsFilter{gq.config, gq}
 }
 
 // addPredicate implements the predicateAdder interface.
@@ -1340,11 +1363,12 @@ func (m *GoodsMutation) addPredicate(pred func(s *sql.Selector)) {
 
 // Filter returns an entql.Where implementation to apply filters on the GoodsMutation builder.
 func (m *GoodsMutation) Filter() *GoodsFilter {
-	return &GoodsFilter{m}
+	return &GoodsFilter{m.config, m}
 }
 
 // GoodsFilter provides a generic filtering capability at runtime for GoodsQuery.
 type GoodsFilter struct {
+	config
 	predicateAdder
 }
 
@@ -1369,7 +1393,7 @@ func (gq *GroupQuery) addPredicate(pred func(s *sql.Selector)) {
 
 // Filter returns a Filter implementation to apply filters on the GroupQuery builder.
 func (gq *GroupQuery) Filter() *GroupFilter {
-	return &GroupFilter{gq}
+	return &GroupFilter{gq.config, gq}
 }
 
 // addPredicate implements the predicateAdder interface.
@@ -1379,11 +1403,12 @@ func (m *GroupMutation) addPredicate(pred func(s *sql.Selector)) {
 
 // Filter returns an entql.Where implementation to apply filters on the GroupMutation builder.
 func (m *GroupMutation) Filter() *GroupFilter {
-	return &GroupFilter{m}
+	return &GroupFilter{m.config, m}
 }
 
 // GroupFilter provides a generic filtering capability at runtime for GroupQuery.
 type GroupFilter struct {
+	config
 	predicateAdder
 }
 
@@ -1489,7 +1514,7 @@ func (giq *GroupInfoQuery) addPredicate(pred func(s *sql.Selector)) {
 
 // Filter returns a Filter implementation to apply filters on the GroupInfoQuery builder.
 func (giq *GroupInfoQuery) Filter() *GroupInfoFilter {
-	return &GroupInfoFilter{giq}
+	return &GroupInfoFilter{giq.config, giq}
 }
 
 // addPredicate implements the predicateAdder interface.
@@ -1499,11 +1524,12 @@ func (m *GroupInfoMutation) addPredicate(pred func(s *sql.Selector)) {
 
 // Filter returns an entql.Where implementation to apply filters on the GroupInfoMutation builder.
 func (m *GroupInfoMutation) Filter() *GroupInfoFilter {
-	return &GroupInfoFilter{m}
+	return &GroupInfoFilter{m.config, m}
 }
 
 // GroupInfoFilter provides a generic filtering capability at runtime for GroupInfoQuery.
 type GroupInfoFilter struct {
+	config
 	predicateAdder
 }
 
@@ -1552,7 +1578,7 @@ func (iq *ItemQuery) addPredicate(pred func(s *sql.Selector)) {
 
 // Filter returns a Filter implementation to apply filters on the ItemQuery builder.
 func (iq *ItemQuery) Filter() *ItemFilter {
-	return &ItemFilter{iq}
+	return &ItemFilter{iq.config, iq}
 }
 
 // addPredicate implements the predicateAdder interface.
@@ -1562,11 +1588,12 @@ func (m *ItemMutation) addPredicate(pred func(s *sql.Selector)) {
 
 // Filter returns an entql.Where implementation to apply filters on the ItemMutation builder.
 func (m *ItemMutation) Filter() *ItemFilter {
-	return &ItemFilter{m}
+	return &ItemFilter{m.config, m}
 }
 
 // ItemFilter provides a generic filtering capability at runtime for ItemQuery.
 type ItemFilter struct {
+	config
 	predicateAdder
 }
 
@@ -1596,7 +1623,7 @@ func (nq *NodeQuery) addPredicate(pred func(s *sql.Selector)) {
 
 // Filter returns a Filter implementation to apply filters on the NodeQuery builder.
 func (nq *NodeQuery) Filter() *NodeFilter {
-	return &NodeFilter{nq}
+	return &NodeFilter{nq.config, nq}
 }
 
 // addPredicate implements the predicateAdder interface.
@@ -1606,11 +1633,12 @@ func (m *NodeMutation) addPredicate(pred func(s *sql.Selector)) {
 
 // Filter returns an entql.Where implementation to apply filters on the NodeMutation builder.
 func (m *NodeMutation) Filter() *NodeFilter {
-	return &NodeFilter{m}
+	return &NodeFilter{m.config, m}
 }
 
 // NodeFilter provides a generic filtering capability at runtime for NodeQuery.
 type NodeFilter struct {
+	config
 	predicateAdder
 }
 
@@ -1668,7 +1696,7 @@ func (pq *PetQuery) addPredicate(pred func(s *sql.Selector)) {
 
 // Filter returns a Filter implementation to apply filters on the PetQuery builder.
 func (pq *PetQuery) Filter() *PetFilter {
-	return &PetFilter{pq}
+	return &PetFilter{pq.config, pq}
 }
 
 // addPredicate implements the predicateAdder interface.
@@ -1678,11 +1706,12 @@ func (m *PetMutation) addPredicate(pred func(s *sql.Selector)) {
 
 // Filter returns an entql.Where implementation to apply filters on the PetMutation builder.
 func (m *PetMutation) Filter() *PetFilter {
-	return &PetFilter{m}
+	return &PetFilter{m.config, m}
 }
 
 // PetFilter provides a generic filtering capability at runtime for PetQuery.
 type PetFilter struct {
+	config
 	predicateAdder
 }
 
@@ -1755,7 +1784,7 @@ func (sq *SpecQuery) addPredicate(pred func(s *sql.Selector)) {
 
 // Filter returns a Filter implementation to apply filters on the SpecQuery builder.
 func (sq *SpecQuery) Filter() *SpecFilter {
-	return &SpecFilter{sq}
+	return &SpecFilter{sq.config, sq}
 }
 
 // addPredicate implements the predicateAdder interface.
@@ -1765,11 +1794,12 @@ func (m *SpecMutation) addPredicate(pred func(s *sql.Selector)) {
 
 // Filter returns an entql.Where implementation to apply filters on the SpecMutation builder.
 func (m *SpecMutation) Filter() *SpecFilter {
-	return &SpecFilter{m}
+	return &SpecFilter{m.config, m}
 }
 
 // SpecFilter provides a generic filtering capability at runtime for SpecQuery.
 type SpecFilter struct {
+	config
 	predicateAdder
 }
 
@@ -1808,7 +1838,7 @@ func (tq *TaskQuery) addPredicate(pred func(s *sql.Selector)) {
 
 // Filter returns a Filter implementation to apply filters on the TaskQuery builder.
 func (tq *TaskQuery) Filter() *TaskFilter {
-	return &TaskFilter{tq}
+	return &TaskFilter{tq.config, tq}
 }
 
 // addPredicate implements the predicateAdder interface.
@@ -1818,11 +1848,12 @@ func (m *TaskMutation) addPredicate(pred func(s *sql.Selector)) {
 
 // Filter returns an entql.Where implementation to apply filters on the TaskMutation builder.
 func (m *TaskMutation) Filter() *TaskFilter {
-	return &TaskFilter{m}
+	return &TaskFilter{m.config, m}
 }
 
 // TaskFilter provides a generic filtering capability at runtime for TaskQuery.
 type TaskFilter struct {
+	config
 	predicateAdder
 }
 
@@ -1837,12 +1868,12 @@ func (f *TaskFilter) Where(p entql.P) {
 
 // WhereID applies the entql int predicate on the id field.
 func (f *TaskFilter) WhereID(p entql.IntP) {
-	f.Where(p.Field(task.FieldID))
+	f.Where(p.Field(enttask.FieldID))
 }
 
 // WherePriority applies the entql int predicate on the priority field.
 func (f *TaskFilter) WherePriority(p entql.IntP) {
-	f.Where(p.Field(task.FieldPriority))
+	f.Where(p.Field(enttask.FieldPriority))
 }
 
 // addPredicate implements the predicateAdder interface.
@@ -1852,7 +1883,7 @@ func (uq *UserQuery) addPredicate(pred func(s *sql.Selector)) {
 
 // Filter returns a Filter implementation to apply filters on the UserQuery builder.
 func (uq *UserQuery) Filter() *UserFilter {
-	return &UserFilter{uq}
+	return &UserFilter{uq.config, uq}
 }
 
 // addPredicate implements the predicateAdder interface.
@@ -1862,11 +1893,12 @@ func (m *UserMutation) addPredicate(pred func(s *sql.Selector)) {
 
 // Filter returns an entql.Where implementation to apply filters on the UserMutation builder.
 func (m *UserMutation) Filter() *UserFilter {
-	return &UserFilter{m}
+	return &UserFilter{m.config, m}
 }
 
 // UserFilter provides a generic filtering capability at runtime for UserQuery.
 type UserFilter struct {
+	config
 	predicateAdder
 }
 

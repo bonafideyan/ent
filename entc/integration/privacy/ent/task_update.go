@@ -80,6 +80,14 @@ func (tu *TaskUpdate) SetUUID(u uuid.UUID) *TaskUpdate {
 	return tu
 }
 
+// SetNillableUUID sets the "uuid" field if the given value is not nil.
+func (tu *TaskUpdate) SetNillableUUID(u *uuid.UUID) *TaskUpdate {
+	if u != nil {
+		tu.SetUUID(*u)
+	}
+	return tu
+}
+
 // ClearUUID clears the value of the "uuid" field.
 func (tu *TaskUpdate) ClearUUID() *TaskUpdate {
 	tu.mutation.ClearUUID()
@@ -439,6 +447,14 @@ func (tuo *TaskUpdateOne) SetUUID(u uuid.UUID) *TaskUpdateOne {
 	return tuo
 }
 
+// SetNillableUUID sets the "uuid" field if the given value is not nil.
+func (tuo *TaskUpdateOne) SetNillableUUID(u *uuid.UUID) *TaskUpdateOne {
+	if u != nil {
+		tuo.SetUUID(*u)
+	}
+	return tuo
+}
+
 // ClearUUID clears the value of the "uuid" field.
 func (tuo *TaskUpdateOne) ClearUUID() *TaskUpdateOne {
 	tuo.mutation.ClearUUID()
@@ -549,9 +565,15 @@ func (tuo *TaskUpdateOne) Save(ctx context.Context) (*Task, error) {
 			}
 			mut = tuo.hooks[i](mut)
 		}
-		if _, err := mut.Mutate(ctx, tuo.mutation); err != nil {
+		v, err := mut.Mutate(ctx, tuo.mutation)
+		if err != nil {
 			return nil, err
 		}
+		nv, ok := v.(*Task)
+		if !ok {
+			return nil, fmt.Errorf("unexpected node type %T returned from TaskMutation", v)
+		}
+		node = nv
 	}
 	return node, err
 }

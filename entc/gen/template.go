@@ -7,16 +7,21 @@ package gen
 import (
 	"bytes"
 	"embed"
+	"errors"
 	"fmt"
 	"go/parser"
 	"go/token"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"strings"
 	"text/template"
 	"text/template/parse"
+
+	"entgo.io/ent/schema"
+	"entgo.io/ent/schema/field"
 )
 
 type (
@@ -77,7 +82,7 @@ var (
 		{
 			Name: "meta",
 			Format: func(t *Type) string {
-				return fmt.Sprintf("%s/%s.go", t.Package(), t.Package())
+				return fmt.Sprintf("%[1]s/%[1]s.go", t.PackageDir())
 			},
 			ExtendPatterns: []string{
 				"meta/additional/*",
@@ -177,15 +182,21 @@ var (
 		"dialect/sql/create/additional/*",
 		"dialect/sql/create_bulk/additional/*",
 		"dialect/sql/model/additional/*",
+		"dialect/sql/model/edges/*",
+		"dialect/sql/model/edges/fields/additional/*",
 		"dialect/sql/model/fields/*",
 		"dialect/sql/select/additional/*",
 		"dialect/sql/predicate/edge/*/*",
 		"dialect/sql/query/additional/*",
+		"dialect/sql/query/all/nodes/*",
 		"dialect/sql/query/from/*",
 		"dialect/sql/query/path/*",
 		"import/additional/*",
 		"model/additional/*",
 		"model/comment/additional/*",
+		"model/edges/fields/additional/*",
+		"tx/additional/*",
+		"tx/additional/*/*",
 		"update/additional/*",
 		"query/additional/*",
 	}
@@ -220,7 +231,8 @@ func initTemplates() {
 // provide additional functionality for ent extensions.
 type Template struct {
 	*template.Template
-	FuncMap template.FuncMap
+	FuncMap   template.FuncMap
+	condition func(*Graph) bool
 }
 
 // NewTemplate creates an empty template with the standard codegen functions.
@@ -240,6 +252,12 @@ func (t *Template) Funcs(funcMap template.FuncMap) *Template {
 			t.FuncMap[name] = f
 		}
 	}
+	return t
+}
+
+// SkipIf allows registering a function to determine if the template needs to be skipped or not.
+func (t *Template) SkipIf(cond func(*Graph) bool) *Template {
+	t.condition = cond
 	return t
 }
 
@@ -310,8 +328,97 @@ func MustParse(t *Template, err error) *Template {
 	return t
 }
 
+type (
+	// Dependencies wraps a list of dependencies as codegen
+	// annotation.
+	Dependencies []*Dependency
+
+	// Dependency allows configuring optional dependencies as struct fields on the
+	// generated builders. For example:
+	//
+	//	DependencyAnnotation{
+	//		Field:	"HTTPClient",
+	//		Type:	"*http.Client",
+	//		Option:	"WithClient",
+	//	}
+	//
+	// Although the Dependency and the DependencyAnnotation are exported, used should
+	// use the entc.Dependency option in order to build this annotation.
+	Dependency struct {
+		// Field defines the struct field name on the builders.
+		// It defaults to the full type name. For example:
+		//
+		//	http.Client	=> HTTPClient
+		//	net.Conn	=> NetConn
+		//	url.URL		=> URL
+		//
+		Field string
+		// Type defines the type identifier. For example, `*http.Client`.
+		Type *field.TypeInfo
+		// Option defines the name of the config option.
+		// It defaults to the field name.
+		Option string
+	}
+)
+
+// Name describes the annotation name.
+func (Dependencies) Name() string {
+	return "Dependencies"
+}
+
+// Merge implements the schema.Merger interface.
+func (d Dependencies) Merge(other schema.Annotation) schema.Annotation {
+	if deps, ok := other.(Dependencies); ok {
+		return append(d, deps...)
+	}
+	return d
+}
+
+var _ interface {
+	schema.Annotation
+	schema.Merger
+} = (*Dependencies)(nil)
+
+// Build builds the annotation and fails if it is invalid.
+func (d *Dependency) Build() error {
+	if d.Type == nil {
+		return errors.New("entc/gen: missing dependency type")
+	}
+	if d.Field == "" {
+		name, err := d.defaultName()
+		if err != nil {
+			return err
+		}
+		d.Field = name
+	}
+	if d.Option == "" {
+		d.Option = d.Field
+	}
+	return nil
+}
+
+func (d *Dependency) defaultName() (string, error) {
+	var pkg, name string
+	switch parts := strings.Split(strings.TrimLeft(d.Type.Ident, "[]*"), "."); len(parts) {
+	case 1:
+		name = parts[0]
+	case 2:
+		name = parts[1]
+		// Avoid stuttering.
+		if !strings.EqualFold(parts[0], name) {
+			pkg = parts[0]
+		}
+	default:
+		return "", fmt.Errorf("entc/gen: unexpected number of parts: %q", parts)
+	}
+	if r := d.Type.RType; r != nil && (r.Kind == reflect.Array || r.Kind == reflect.Slice) {
+		name = plural(name)
+	}
+	return pascal(pkg) + pascal(name), nil
+}
+
 func pkgf(s string) func(t *Type) string {
-	return func(t *Type) string { return fmt.Sprintf(s, t.Package()) }
+	return func(t *Type) string { return fmt.Sprintf(s, t.PackageDir()) }
 }
 
 // match reports if the given name matches the extended pattern.

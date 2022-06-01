@@ -68,6 +68,14 @@ func (pu *PetUpdate) SetUUID(u uuid.UUID) *PetUpdate {
 	return pu
 }
 
+// SetNillableUUID sets the "uuid" field if the given value is not nil.
+func (pu *PetUpdate) SetNillableUUID(u *uuid.UUID) *PetUpdate {
+	if u != nil {
+		pu.SetUUID(*u)
+	}
+	return pu
+}
+
 // ClearUUID clears the value of the "uuid" field.
 func (pu *PetUpdate) ClearUUID() *PetUpdate {
 	pu.mutation.ClearUUID()
@@ -330,6 +338,14 @@ func (puo *PetUpdateOne) SetUUID(u uuid.UUID) *PetUpdateOne {
 	return puo
 }
 
+// SetNillableUUID sets the "uuid" field if the given value is not nil.
+func (puo *PetUpdateOne) SetNillableUUID(u *uuid.UUID) *PetUpdateOne {
+	if u != nil {
+		puo.SetUUID(*u)
+	}
+	return puo
+}
+
 // ClearUUID clears the value of the "uuid" field.
 func (puo *PetUpdateOne) ClearUUID() *PetUpdateOne {
 	puo.mutation.ClearUUID()
@@ -443,9 +459,15 @@ func (puo *PetUpdateOne) Save(ctx context.Context) (*Pet, error) {
 			}
 			mut = puo.hooks[i](mut)
 		}
-		if _, err := mut.Mutate(ctx, puo.mutation); err != nil {
+		v, err := mut.Mutate(ctx, puo.mutation)
+		if err != nil {
 			return nil, err
 		}
+		nv, ok := v.(*Pet)
+		if !ok {
+			return nil, fmt.Errorf("unexpected node type %T returned from PetMutation", v)
+		}
+		node = nv
 	}
 	return node, err
 }

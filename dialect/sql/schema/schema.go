@@ -409,9 +409,6 @@ const (
 
 // ConstName returns the constant name of a reference option. It's used by entc for printing the constant name in templates.
 func (r ReferenceOption) ConstName() string {
-	if r == NoAction {
-		return ""
-	}
 	return strings.ReplaceAll(strings.Title(strings.ToLower(string(r))), " ", "")
 }
 
@@ -558,6 +555,7 @@ func addChecks(t *sql.TableBuilder, ant *entsql.Annotation) {
 		}
 		sort.Strings(names)
 		for _, name := range names {
+			name := name
 			t.Checks(func(b *sql.Builder) {
 				b.WriteString("CONSTRAINT ").Ident(name).WriteString(" CHECK " + checkExpr(checks[name]))
 			})

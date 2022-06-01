@@ -23,6 +23,20 @@ type PetCreate struct {
 	hooks    []Hook
 }
 
+// SetName sets the "name" field.
+func (pc *PetCreate) SetName(s string) *PetCreate {
+	pc.mutation.SetName(s)
+	return pc
+}
+
+// SetNillableName sets the "name" field if the given value is not nil.
+func (pc *PetCreate) SetNillableName(s *string) *PetCreate {
+	if s != nil {
+		pc.SetName(*s)
+	}
+	return pc
+}
+
 // SetOwnerID sets the "owner" edge to the User entity by ID.
 func (pc *PetCreate) SetOwnerID(id int) *PetCreate {
 	pc.mutation.SetOwnerID(id)
@@ -81,9 +95,15 @@ func (pc *PetCreate) Save(ctx context.Context) (*Pet, error) {
 			}
 			mut = pc.hooks[i](mut)
 		}
-		if _, err := mut.Mutate(ctx, pc.mutation); err != nil {
+		v, err := mut.Mutate(ctx, pc.mutation)
+		if err != nil {
 			return nil, err
 		}
+		nv, ok := v.(*Pet)
+		if !ok {
+			return nil, fmt.Errorf("unexpected node type %T returned from PetMutation", v)
+		}
+		node = nv
 	}
 	return node, err
 }
@@ -139,6 +159,14 @@ func (pc *PetCreate) createSpec() (*Pet, *sqlgraph.CreateSpec) {
 			},
 		}
 	)
+	if value, ok := pc.mutation.Name(); ok {
+		_spec.Fields = append(_spec.Fields, &sqlgraph.FieldSpec{
+			Type:   field.TypeString,
+			Value:  value,
+			Column: pet.FieldName,
+		})
+		_node.Name = value
+	}
 	if nodes := pc.mutation.OwnerIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2O,
@@ -202,11 +230,11 @@ func (pcb *PetCreateBulk) Save(ctx context.Context) ([]*Pet, error) {
 					return nil, err
 				}
 				mutation.id = &nodes[i].ID
-				mutation.done = true
 				if specs[i].ID.Value != nil {
 					id := specs[i].ID.Value.(int64)
 					nodes[i].ID = int(id)
 				}
+				mutation.done = true
 				return nodes[i], nil
 			})
 			for i := len(builder.hooks) - 1; i >= 0; i-- {

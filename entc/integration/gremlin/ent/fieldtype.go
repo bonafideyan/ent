@@ -74,12 +74,16 @@ type FieldType struct {
 	OptionalFloat float64 `json:"optional_float,omitempty"`
 	// OptionalFloat32 holds the value of the "optional_float32" field.
 	OptionalFloat32 float32 `json:"optional_float32,omitempty"`
+	// Text holds the value of the "text" field.
+	Text string `json:"text,omitempty"`
 	// Datetime holds the value of the "datetime" field.
 	Datetime time.Time `json:"datetime,omitempty"`
 	// Decimal holds the value of the "decimal" field.
 	Decimal float64 `json:"decimal,omitempty"`
 	// LinkOther holds the value of the "link_other" field.
 	LinkOther *schema.Link `json:"link_other,omitempty"`
+	// LinkOtherFunc holds the value of the "link_other_func" field.
+	LinkOtherFunc *schema.Link `json:"link_other_func,omitempty"`
 	// MAC holds the value of the "mac" field.
 	MAC schema.MAC `json:"mac,omitempty"`
 	// StringArray holds the value of the "string_array" field.
@@ -134,8 +138,8 @@ type FieldType struct {
 	Role role.Role `json:"role,omitempty"`
 	// Priority holds the value of the "priority" field.
 	Priority role.Priority `json:"priority,omitempty"`
-	// UUID holds the value of the "uuid" field.
-	UUID uuid.UUID `json:"uuid,omitempty"`
+	// OptionalUUID holds the value of the "optional_uuid" field.
+	OptionalUUID uuid.UUID `json:"optional_uuid,omitempty"`
 	// NillableUUID holds the value of the "nillable_uuid" field.
 	NillableUUID *uuid.UUID `json:"nillable_uuid,omitempty"`
 	// Strings holds the value of the "strings" field.
@@ -186,9 +190,11 @@ func (ft *FieldType) FromResponse(res *gremlin.Response) error {
 		State                 fieldtype.State       `json:"state,omitempty"`
 		OptionalFloat         float64               `json:"optional_float,omitempty"`
 		OptionalFloat32       float32               `json:"optional_float32,omitempty"`
+		Text                  string                `json:"text,omitempty"`
 		Datetime              int64                 `json:"datetime,omitempty"`
 		Decimal               float64               `json:"decimal,omitempty"`
 		LinkOther             *schema.Link          `json:"link_other,omitempty"`
+		LinkOtherFunc         *schema.Link          `json:"link_other_func,omitempty"`
 		MAC                   schema.MAC            `json:"mac,omitempty"`
 		StringArray           schema.Strings        `json:"string_array,omitempty"`
 		Password              string                `json:"password,omitempty"`
@@ -216,7 +222,7 @@ func (ft *FieldType) FromResponse(res *gremlin.Response) error {
 		NullFloat             *sql.NullFloat64      `json:"null_float,omitempty"`
 		Role                  role.Role             `json:"role,omitempty"`
 		Priority              role.Priority         `json:"priority,omitempty"`
-		UUID                  uuid.UUID             `json:"uuid,omitempty"`
+		OptionalUUID          uuid.UUID             `json:"optional_uuid,omitempty"`
 		NillableUUID          *uuid.UUID            `json:"nillable_uuid,omitempty"`
 		Strings               []string              `json:"strings,omitempty"`
 		Pair                  schema.Pair           `json:"pair,omitempty"`
@@ -254,9 +260,11 @@ func (ft *FieldType) FromResponse(res *gremlin.Response) error {
 	ft.State = scanft.State
 	ft.OptionalFloat = scanft.OptionalFloat
 	ft.OptionalFloat32 = scanft.OptionalFloat32
+	ft.Text = scanft.Text
 	ft.Datetime = time.Unix(0, scanft.Datetime)
 	ft.Decimal = scanft.Decimal
 	ft.LinkOther = scanft.LinkOther
+	ft.LinkOtherFunc = scanft.LinkOtherFunc
 	ft.MAC = scanft.MAC
 	ft.StringArray = scanft.StringArray
 	ft.Password = scanft.Password
@@ -284,7 +292,7 @@ func (ft *FieldType) FromResponse(res *gremlin.Response) error {
 	ft.NullFloat = scanft.NullFloat
 	ft.Role = scanft.Role
 	ft.Priority = scanft.Priority
-	ft.UUID = scanft.UUID
+	ft.OptionalUUID = scanft.OptionalUUID
 	ft.NillableUUID = scanft.NillableUUID
 	ft.Strings = scanft.Strings
 	ft.Pair = scanft.Pair
@@ -318,156 +326,224 @@ func (ft *FieldType) Unwrap() *FieldType {
 func (ft *FieldType) String() string {
 	var builder strings.Builder
 	builder.WriteString("FieldType(")
-	builder.WriteString(fmt.Sprintf("id=%v", ft.ID))
-	builder.WriteString(", int=")
+	builder.WriteString(fmt.Sprintf("id=%v, ", ft.ID))
+	builder.WriteString("int=")
 	builder.WriteString(fmt.Sprintf("%v", ft.Int))
-	builder.WriteString(", int8=")
+	builder.WriteString(", ")
+	builder.WriteString("int8=")
 	builder.WriteString(fmt.Sprintf("%v", ft.Int8))
-	builder.WriteString(", int16=")
+	builder.WriteString(", ")
+	builder.WriteString("int16=")
 	builder.WriteString(fmt.Sprintf("%v", ft.Int16))
-	builder.WriteString(", int32=")
+	builder.WriteString(", ")
+	builder.WriteString("int32=")
 	builder.WriteString(fmt.Sprintf("%v", ft.Int32))
-	builder.WriteString(", int64=")
+	builder.WriteString(", ")
+	builder.WriteString("int64=")
 	builder.WriteString(fmt.Sprintf("%v", ft.Int64))
-	builder.WriteString(", optional_int=")
+	builder.WriteString(", ")
+	builder.WriteString("optional_int=")
 	builder.WriteString(fmt.Sprintf("%v", ft.OptionalInt))
-	builder.WriteString(", optional_int8=")
+	builder.WriteString(", ")
+	builder.WriteString("optional_int8=")
 	builder.WriteString(fmt.Sprintf("%v", ft.OptionalInt8))
-	builder.WriteString(", optional_int16=")
+	builder.WriteString(", ")
+	builder.WriteString("optional_int16=")
 	builder.WriteString(fmt.Sprintf("%v", ft.OptionalInt16))
-	builder.WriteString(", optional_int32=")
+	builder.WriteString(", ")
+	builder.WriteString("optional_int32=")
 	builder.WriteString(fmt.Sprintf("%v", ft.OptionalInt32))
-	builder.WriteString(", optional_int64=")
+	builder.WriteString(", ")
+	builder.WriteString("optional_int64=")
 	builder.WriteString(fmt.Sprintf("%v", ft.OptionalInt64))
+	builder.WriteString(", ")
 	if v := ft.NillableInt; v != nil {
-		builder.WriteString(", nillable_int=")
+		builder.WriteString("nillable_int=")
 		builder.WriteString(fmt.Sprintf("%v", *v))
 	}
+	builder.WriteString(", ")
 	if v := ft.NillableInt8; v != nil {
-		builder.WriteString(", nillable_int8=")
+		builder.WriteString("nillable_int8=")
 		builder.WriteString(fmt.Sprintf("%v", *v))
 	}
+	builder.WriteString(", ")
 	if v := ft.NillableInt16; v != nil {
-		builder.WriteString(", nillable_int16=")
+		builder.WriteString("nillable_int16=")
 		builder.WriteString(fmt.Sprintf("%v", *v))
 	}
+	builder.WriteString(", ")
 	if v := ft.NillableInt32; v != nil {
-		builder.WriteString(", nillable_int32=")
+		builder.WriteString("nillable_int32=")
 		builder.WriteString(fmt.Sprintf("%v", *v))
 	}
+	builder.WriteString(", ")
 	if v := ft.NillableInt64; v != nil {
-		builder.WriteString(", nillable_int64=")
+		builder.WriteString("nillable_int64=")
 		builder.WriteString(fmt.Sprintf("%v", *v))
 	}
-	builder.WriteString(", validate_optional_int32=")
+	builder.WriteString(", ")
+	builder.WriteString("validate_optional_int32=")
 	builder.WriteString(fmt.Sprintf("%v", ft.ValidateOptionalInt32))
-	builder.WriteString(", optional_uint=")
+	builder.WriteString(", ")
+	builder.WriteString("optional_uint=")
 	builder.WriteString(fmt.Sprintf("%v", ft.OptionalUint))
-	builder.WriteString(", optional_uint8=")
+	builder.WriteString(", ")
+	builder.WriteString("optional_uint8=")
 	builder.WriteString(fmt.Sprintf("%v", ft.OptionalUint8))
-	builder.WriteString(", optional_uint16=")
+	builder.WriteString(", ")
+	builder.WriteString("optional_uint16=")
 	builder.WriteString(fmt.Sprintf("%v", ft.OptionalUint16))
-	builder.WriteString(", optional_uint32=")
+	builder.WriteString(", ")
+	builder.WriteString("optional_uint32=")
 	builder.WriteString(fmt.Sprintf("%v", ft.OptionalUint32))
-	builder.WriteString(", optional_uint64=")
+	builder.WriteString(", ")
+	builder.WriteString("optional_uint64=")
 	builder.WriteString(fmt.Sprintf("%v", ft.OptionalUint64))
-	builder.WriteString(", state=")
+	builder.WriteString(", ")
+	builder.WriteString("state=")
 	builder.WriteString(fmt.Sprintf("%v", ft.State))
-	builder.WriteString(", optional_float=")
+	builder.WriteString(", ")
+	builder.WriteString("optional_float=")
 	builder.WriteString(fmt.Sprintf("%v", ft.OptionalFloat))
-	builder.WriteString(", optional_float32=")
+	builder.WriteString(", ")
+	builder.WriteString("optional_float32=")
 	builder.WriteString(fmt.Sprintf("%v", ft.OptionalFloat32))
-	builder.WriteString(", datetime=")
+	builder.WriteString(", ")
+	builder.WriteString("text=")
+	builder.WriteString(ft.Text)
+	builder.WriteString(", ")
+	builder.WriteString("datetime=")
 	builder.WriteString(ft.Datetime.Format(time.ANSIC))
-	builder.WriteString(", decimal=")
+	builder.WriteString(", ")
+	builder.WriteString("decimal=")
 	builder.WriteString(fmt.Sprintf("%v", ft.Decimal))
-	builder.WriteString(", link_other=")
+	builder.WriteString(", ")
+	builder.WriteString("link_other=")
 	builder.WriteString(fmt.Sprintf("%v", ft.LinkOther))
-	builder.WriteString(", mac=")
+	builder.WriteString(", ")
+	builder.WriteString("link_other_func=")
+	builder.WriteString(fmt.Sprintf("%v", ft.LinkOtherFunc))
+	builder.WriteString(", ")
+	builder.WriteString("mac=")
 	builder.WriteString(fmt.Sprintf("%v", ft.MAC))
-	builder.WriteString(", string_array=")
+	builder.WriteString(", ")
+	builder.WriteString("string_array=")
 	builder.WriteString(fmt.Sprintf("%v", ft.StringArray))
-	builder.WriteString(", password=<sensitive>")
+	builder.WriteString(", ")
+	builder.WriteString("password=<sensitive>")
+	builder.WriteString(", ")
 	if v := ft.StringScanner; v != nil {
-		builder.WriteString(", string_scanner=")
+		builder.WriteString("string_scanner=")
 		builder.WriteString(fmt.Sprintf("%v", *v))
 	}
-	builder.WriteString(", duration=")
+	builder.WriteString(", ")
+	builder.WriteString("duration=")
 	builder.WriteString(fmt.Sprintf("%v", ft.Duration))
-	builder.WriteString(", dir=")
+	builder.WriteString(", ")
+	builder.WriteString("dir=")
 	builder.WriteString(fmt.Sprintf("%v", ft.Dir))
+	builder.WriteString(", ")
 	if v := ft.Ndir; v != nil {
-		builder.WriteString(", ndir=")
+		builder.WriteString("ndir=")
 		builder.WriteString(fmt.Sprintf("%v", *v))
 	}
-	builder.WriteString(", str=")
+	builder.WriteString(", ")
+	builder.WriteString("str=")
 	builder.WriteString(fmt.Sprintf("%v", ft.Str))
+	builder.WriteString(", ")
 	if v := ft.NullStr; v != nil {
-		builder.WriteString(", null_str=")
+		builder.WriteString("null_str=")
 		builder.WriteString(fmt.Sprintf("%v", *v))
 	}
-	builder.WriteString(", link=")
+	builder.WriteString(", ")
+	builder.WriteString("link=")
 	builder.WriteString(fmt.Sprintf("%v", ft.Link))
+	builder.WriteString(", ")
 	if v := ft.NullLink; v != nil {
-		builder.WriteString(", null_link=")
+		builder.WriteString("null_link=")
 		builder.WriteString(fmt.Sprintf("%v", *v))
 	}
-	builder.WriteString(", active=")
+	builder.WriteString(", ")
+	builder.WriteString("active=")
 	builder.WriteString(fmt.Sprintf("%v", ft.Active))
+	builder.WriteString(", ")
 	if v := ft.NullActive; v != nil {
-		builder.WriteString(", null_active=")
+		builder.WriteString("null_active=")
 		builder.WriteString(fmt.Sprintf("%v", *v))
 	}
+	builder.WriteString(", ")
 	if v := ft.Deleted; v != nil {
-		builder.WriteString(", deleted=")
+		builder.WriteString("deleted=")
 		builder.WriteString(fmt.Sprintf("%v", *v))
 	}
-	builder.WriteString(", deleted_at=")
+	builder.WriteString(", ")
+	builder.WriteString("deleted_at=")
 	builder.WriteString(fmt.Sprintf("%v", ft.DeletedAt))
-	builder.WriteString(", raw_data=")
+	builder.WriteString(", ")
+	builder.WriteString("raw_data=")
 	builder.WriteString(fmt.Sprintf("%v", ft.RawData))
-	builder.WriteString(", sensitive=<sensitive>")
-	builder.WriteString(", ip=")
+	builder.WriteString(", ")
+	builder.WriteString("sensitive=<sensitive>")
+	builder.WriteString(", ")
+	builder.WriteString("ip=")
 	builder.WriteString(fmt.Sprintf("%v", ft.IP))
-	builder.WriteString(", null_int64=")
+	builder.WriteString(", ")
+	builder.WriteString("null_int64=")
 	builder.WriteString(fmt.Sprintf("%v", ft.NullInt64))
-	builder.WriteString(", schema_int=")
+	builder.WriteString(", ")
+	builder.WriteString("schema_int=")
 	builder.WriteString(fmt.Sprintf("%v", ft.SchemaInt))
-	builder.WriteString(", schema_int8=")
+	builder.WriteString(", ")
+	builder.WriteString("schema_int8=")
 	builder.WriteString(fmt.Sprintf("%v", ft.SchemaInt8))
-	builder.WriteString(", schema_int64=")
+	builder.WriteString(", ")
+	builder.WriteString("schema_int64=")
 	builder.WriteString(fmt.Sprintf("%v", ft.SchemaInt64))
-	builder.WriteString(", schema_float=")
+	builder.WriteString(", ")
+	builder.WriteString("schema_float=")
 	builder.WriteString(fmt.Sprintf("%v", ft.SchemaFloat))
-	builder.WriteString(", schema_float32=")
+	builder.WriteString(", ")
+	builder.WriteString("schema_float32=")
 	builder.WriteString(fmt.Sprintf("%v", ft.SchemaFloat32))
-	builder.WriteString(", null_float=")
+	builder.WriteString(", ")
+	builder.WriteString("null_float=")
 	builder.WriteString(fmt.Sprintf("%v", ft.NullFloat))
-	builder.WriteString(", role=")
+	builder.WriteString(", ")
+	builder.WriteString("role=")
 	builder.WriteString(fmt.Sprintf("%v", ft.Role))
-	builder.WriteString(", priority=")
+	builder.WriteString(", ")
+	builder.WriteString("priority=")
 	builder.WriteString(fmt.Sprintf("%v", ft.Priority))
-	builder.WriteString(", uuid=")
-	builder.WriteString(fmt.Sprintf("%v", ft.UUID))
+	builder.WriteString(", ")
+	builder.WriteString("optional_uuid=")
+	builder.WriteString(fmt.Sprintf("%v", ft.OptionalUUID))
+	builder.WriteString(", ")
 	if v := ft.NillableUUID; v != nil {
-		builder.WriteString(", nillable_uuid=")
+		builder.WriteString("nillable_uuid=")
 		builder.WriteString(fmt.Sprintf("%v", *v))
 	}
-	builder.WriteString(", strings=")
+	builder.WriteString(", ")
+	builder.WriteString("strings=")
 	builder.WriteString(fmt.Sprintf("%v", ft.Strings))
-	builder.WriteString(", pair=")
+	builder.WriteString(", ")
+	builder.WriteString("pair=")
 	builder.WriteString(fmt.Sprintf("%v", ft.Pair))
+	builder.WriteString(", ")
 	if v := ft.NilPair; v != nil {
-		builder.WriteString(", nil_pair=")
+		builder.WriteString("nil_pair=")
 		builder.WriteString(fmt.Sprintf("%v", *v))
 	}
-	builder.WriteString(", vstring=")
+	builder.WriteString(", ")
+	builder.WriteString("vstring=")
 	builder.WriteString(fmt.Sprintf("%v", ft.Vstring))
-	builder.WriteString(", triple=")
+	builder.WriteString(", ")
+	builder.WriteString("triple=")
 	builder.WriteString(fmt.Sprintf("%v", ft.Triple))
-	builder.WriteString(", big_int=")
+	builder.WriteString(", ")
+	builder.WriteString("big_int=")
 	builder.WriteString(fmt.Sprintf("%v", ft.BigInt))
-	builder.WriteString(", password_other=<sensitive>")
+	builder.WriteString(", ")
+	builder.WriteString("password_other=<sensitive>")
 	builder.WriteByte(')')
 	return builder.String()
 }
@@ -507,9 +583,11 @@ func (ft *FieldTypes) FromResponse(res *gremlin.Response) error {
 		State                 fieldtype.State       `json:"state,omitempty"`
 		OptionalFloat         float64               `json:"optional_float,omitempty"`
 		OptionalFloat32       float32               `json:"optional_float32,omitempty"`
+		Text                  string                `json:"text,omitempty"`
 		Datetime              int64                 `json:"datetime,omitempty"`
 		Decimal               float64               `json:"decimal,omitempty"`
 		LinkOther             *schema.Link          `json:"link_other,omitempty"`
+		LinkOtherFunc         *schema.Link          `json:"link_other_func,omitempty"`
 		MAC                   schema.MAC            `json:"mac,omitempty"`
 		StringArray           schema.Strings        `json:"string_array,omitempty"`
 		Password              string                `json:"password,omitempty"`
@@ -537,7 +615,7 @@ func (ft *FieldTypes) FromResponse(res *gremlin.Response) error {
 		NullFloat             *sql.NullFloat64      `json:"null_float,omitempty"`
 		Role                  role.Role             `json:"role,omitempty"`
 		Priority              role.Priority         `json:"priority,omitempty"`
-		UUID                  uuid.UUID             `json:"uuid,omitempty"`
+		OptionalUUID          uuid.UUID             `json:"optional_uuid,omitempty"`
 		NillableUUID          *uuid.UUID            `json:"nillable_uuid,omitempty"`
 		Strings               []string              `json:"strings,omitempty"`
 		Pair                  schema.Pair           `json:"pair,omitempty"`
@@ -577,9 +655,11 @@ func (ft *FieldTypes) FromResponse(res *gremlin.Response) error {
 			State:                 v.State,
 			OptionalFloat:         v.OptionalFloat,
 			OptionalFloat32:       v.OptionalFloat32,
+			Text:                  v.Text,
 			Datetime:              time.Unix(0, v.Datetime),
 			Decimal:               v.Decimal,
 			LinkOther:             v.LinkOther,
+			LinkOtherFunc:         v.LinkOtherFunc,
 			MAC:                   v.MAC,
 			StringArray:           v.StringArray,
 			Password:              v.Password,
@@ -607,7 +687,7 @@ func (ft *FieldTypes) FromResponse(res *gremlin.Response) error {
 			NullFloat:             v.NullFloat,
 			Role:                  v.Role,
 			Priority:              v.Priority,
-			UUID:                  v.UUID,
+			OptionalUUID:          v.OptionalUUID,
 			NillableUUID:          v.NillableUUID,
 			Strings:               v.Strings,
 			Pair:                  v.Pair,

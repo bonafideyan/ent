@@ -44,6 +44,14 @@ func (cc *CarCreate) SetID(u uuid.UUID) *CarCreate {
 	return cc
 }
 
+// SetNillableID sets the "id" field if the given value is not nil.
+func (cc *CarCreate) SetNillableID(u *uuid.UUID) *CarCreate {
+	if u != nil {
+		cc.SetID(*u)
+	}
+	return cc
+}
+
 // AddRentalIDs adds the "rentals" edge to the Rental entity by IDs.
 func (cc *CarCreate) AddRentalIDs(ids ...int) *CarCreate {
 	cc.mutation.AddRentalIDs(ids...)
@@ -99,9 +107,15 @@ func (cc *CarCreate) Save(ctx context.Context) (*Car, error) {
 			}
 			mut = cc.hooks[i](mut)
 		}
-		if _, err := mut.Mutate(ctx, cc.mutation); err != nil {
+		v, err := mut.Mutate(ctx, cc.mutation)
+		if err != nil {
 			return nil, err
 		}
+		nv, ok := v.(*Car)
+		if !ok {
+			return nil, fmt.Errorf("unexpected node type %T returned from CarMutation", v)
+		}
+		node = nv
 	}
 	return node, err
 }
@@ -150,7 +164,11 @@ func (cc *CarCreate) sqlSave(ctx context.Context) (*Car, error) {
 		return nil, err
 	}
 	if _spec.ID.Value != nil {
-		_node.ID = *_spec.ID.Value.(*uuid.UUID)
+		if id, ok := _spec.ID.Value.(*uuid.UUID); ok {
+			_node.ID = *id
+		} else if err := _node.ID.Scan(_spec.ID.Value); err != nil {
+			return nil, err
+		}
 	}
 	return _node, nil
 }

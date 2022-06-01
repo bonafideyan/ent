@@ -77,12 +77,6 @@ func (uu *UserUpdate) SetDirs(h []http.Dir) *UserUpdate {
 	return uu
 }
 
-// ClearDirs clears the value of the "dirs" field.
-func (uu *UserUpdate) ClearDirs() *UserUpdate {
-	uu.mutation.ClearDirs()
-	return uu
-}
-
 // SetInts sets the "ints" field.
 func (uu *UserUpdate) SetInts(i []int) *UserUpdate {
 	uu.mutation.SetInts(i)
@@ -116,6 +110,26 @@ func (uu *UserUpdate) SetStrings(s []string) *UserUpdate {
 // ClearStrings clears the value of the "strings" field.
 func (uu *UserUpdate) ClearStrings() *UserUpdate {
 	uu.mutation.ClearStrings()
+	return uu
+}
+
+// SetAddr sets the "addr" field.
+func (uu *UserUpdate) SetAddr(s schema.Addr) *UserUpdate {
+	uu.mutation.SetAddr(s)
+	return uu
+}
+
+// SetNillableAddr sets the "addr" field if the given value is not nil.
+func (uu *UserUpdate) SetNillableAddr(s *schema.Addr) *UserUpdate {
+	if s != nil {
+		uu.SetAddr(*s)
+	}
+	return uu
+}
+
+// ClearAddr clears the value of the "addr" field.
+func (uu *UserUpdate) ClearAddr() *UserUpdate {
+	uu.mutation.ClearAddr()
 	return uu
 }
 
@@ -242,12 +256,6 @@ func (uu *UserUpdate) sqlSave(ctx context.Context) (n int, err error) {
 			Column: user.FieldDirs,
 		})
 	}
-	if uu.mutation.DirsCleared() {
-		_spec.Fields.Clear = append(_spec.Fields.Clear, &sqlgraph.FieldSpec{
-			Type:   field.TypeJSON,
-			Column: user.FieldDirs,
-		})
-	}
 	if value, ok := uu.mutation.Ints(); ok {
 		_spec.Fields.Set = append(_spec.Fields.Set, &sqlgraph.FieldSpec{
 			Type:   field.TypeJSON,
@@ -285,6 +293,19 @@ func (uu *UserUpdate) sqlSave(ctx context.Context) (n int, err error) {
 		_spec.Fields.Clear = append(_spec.Fields.Clear, &sqlgraph.FieldSpec{
 			Type:   field.TypeJSON,
 			Column: user.FieldStrings,
+		})
+	}
+	if value, ok := uu.mutation.Addr(); ok {
+		_spec.Fields.Set = append(_spec.Fields.Set, &sqlgraph.FieldSpec{
+			Type:   field.TypeJSON,
+			Value:  value,
+			Column: user.FieldAddr,
+		})
+	}
+	if uu.mutation.AddrCleared() {
+		_spec.Fields.Clear = append(_spec.Fields.Clear, &sqlgraph.FieldSpec{
+			Type:   field.TypeJSON,
+			Column: user.FieldAddr,
 		})
 	}
 	if n, err = sqlgraph.UpdateNodes(ctx, uu.driver, _spec); err != nil {
@@ -348,12 +369,6 @@ func (uuo *UserUpdateOne) SetDirs(h []http.Dir) *UserUpdateOne {
 	return uuo
 }
 
-// ClearDirs clears the value of the "dirs" field.
-func (uuo *UserUpdateOne) ClearDirs() *UserUpdateOne {
-	uuo.mutation.ClearDirs()
-	return uuo
-}
-
 // SetInts sets the "ints" field.
 func (uuo *UserUpdateOne) SetInts(i []int) *UserUpdateOne {
 	uuo.mutation.SetInts(i)
@@ -387,6 +402,26 @@ func (uuo *UserUpdateOne) SetStrings(s []string) *UserUpdateOne {
 // ClearStrings clears the value of the "strings" field.
 func (uuo *UserUpdateOne) ClearStrings() *UserUpdateOne {
 	uuo.mutation.ClearStrings()
+	return uuo
+}
+
+// SetAddr sets the "addr" field.
+func (uuo *UserUpdateOne) SetAddr(s schema.Addr) *UserUpdateOne {
+	uuo.mutation.SetAddr(s)
+	return uuo
+}
+
+// SetNillableAddr sets the "addr" field if the given value is not nil.
+func (uuo *UserUpdateOne) SetNillableAddr(s *schema.Addr) *UserUpdateOne {
+	if s != nil {
+		uuo.SetAddr(*s)
+	}
+	return uuo
+}
+
+// ClearAddr clears the value of the "addr" field.
+func (uuo *UserUpdateOne) ClearAddr() *UserUpdateOne {
+	uuo.mutation.ClearAddr()
 	return uuo
 }
 
@@ -427,9 +462,15 @@ func (uuo *UserUpdateOne) Save(ctx context.Context) (*User, error) {
 			}
 			mut = uuo.hooks[i](mut)
 		}
-		if _, err := mut.Mutate(ctx, uuo.mutation); err != nil {
+		v, err := mut.Mutate(ctx, uuo.mutation)
+		if err != nil {
 			return nil, err
 		}
+		nv, ok := v.(*User)
+		if !ok {
+			return nil, fmt.Errorf("unexpected node type %T returned from UserMutation", v)
+		}
+		node = nv
 	}
 	return node, err
 }
@@ -537,12 +578,6 @@ func (uuo *UserUpdateOne) sqlSave(ctx context.Context) (_node *User, err error) 
 			Column: user.FieldDirs,
 		})
 	}
-	if uuo.mutation.DirsCleared() {
-		_spec.Fields.Clear = append(_spec.Fields.Clear, &sqlgraph.FieldSpec{
-			Type:   field.TypeJSON,
-			Column: user.FieldDirs,
-		})
-	}
 	if value, ok := uuo.mutation.Ints(); ok {
 		_spec.Fields.Set = append(_spec.Fields.Set, &sqlgraph.FieldSpec{
 			Type:   field.TypeJSON,
@@ -580,6 +615,19 @@ func (uuo *UserUpdateOne) sqlSave(ctx context.Context) (_node *User, err error) 
 		_spec.Fields.Clear = append(_spec.Fields.Clear, &sqlgraph.FieldSpec{
 			Type:   field.TypeJSON,
 			Column: user.FieldStrings,
+		})
+	}
+	if value, ok := uuo.mutation.Addr(); ok {
+		_spec.Fields.Set = append(_spec.Fields.Set, &sqlgraph.FieldSpec{
+			Type:   field.TypeJSON,
+			Value:  value,
+			Column: user.FieldAddr,
+		})
+	}
+	if uuo.mutation.AddrCleared() {
+		_spec.Fields.Clear = append(_spec.Fields.Clear, &sqlgraph.FieldSpec{
+			Type:   field.TypeJSON,
+			Column: user.FieldAddr,
 		})
 	}
 	_node = &User{config: uuo.config}

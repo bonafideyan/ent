@@ -262,6 +262,13 @@ func OptionalFloat32(v float32) predicate.FieldType {
 	})
 }
 
+// Text applies equality check predicate on the "text" field. It's identical to TextEQ.
+func Text(v string) predicate.FieldType {
+	return predicate.FieldType(func(s *sql.Selector) {
+		s.Where(sql.EQ(s.C(FieldText), v))
+	})
+}
+
 // Datetime applies equality check predicate on the "datetime" field. It's identical to DatetimeEQ.
 func Datetime(v time.Time) predicate.FieldType {
 	return predicate.FieldType(func(s *sql.Selector) {
@@ -280,6 +287,13 @@ func Decimal(v float64) predicate.FieldType {
 func LinkOther(v *schema.Link) predicate.FieldType {
 	return predicate.FieldType(func(s *sql.Selector) {
 		s.Where(sql.EQ(s.C(FieldLinkOther), v))
+	})
+}
+
+// LinkOtherFunc applies equality check predicate on the "link_other_func" field. It's identical to LinkOtherFuncEQ.
+func LinkOtherFunc(v *schema.Link) predicate.FieldType {
+	return predicate.FieldType(func(s *sql.Selector) {
+		s.Where(sql.EQ(s.C(FieldLinkOtherFunc), v))
 	})
 }
 
@@ -469,10 +483,10 @@ func NullFloat(v *sql.NullFloat64) predicate.FieldType {
 	})
 }
 
-// UUID applies equality check predicate on the "uuid" field. It's identical to UUIDEQ.
-func UUID(v uuid.UUID) predicate.FieldType {
+// OptionalUUID applies equality check predicate on the "optional_uuid" field. It's identical to OptionalUUIDEQ.
+func OptionalUUID(v uuid.UUID) predicate.FieldType {
 	return predicate.FieldType(func(s *sql.Selector) {
-		s.Where(sql.EQ(s.C(FieldUUID), v))
+		s.Where(sql.EQ(s.C(FieldOptionalUUID), v))
 	})
 }
 
@@ -2587,6 +2601,131 @@ func OptionalFloat32NotNil() predicate.FieldType {
 	})
 }
 
+// TextEQ applies the EQ predicate on the "text" field.
+func TextEQ(v string) predicate.FieldType {
+	return predicate.FieldType(func(s *sql.Selector) {
+		s.Where(sql.EQ(s.C(FieldText), v))
+	})
+}
+
+// TextNEQ applies the NEQ predicate on the "text" field.
+func TextNEQ(v string) predicate.FieldType {
+	return predicate.FieldType(func(s *sql.Selector) {
+		s.Where(sql.NEQ(s.C(FieldText), v))
+	})
+}
+
+// TextIn applies the In predicate on the "text" field.
+func TextIn(vs ...string) predicate.FieldType {
+	v := make([]interface{}, len(vs))
+	for i := range v {
+		v[i] = vs[i]
+	}
+	return predicate.FieldType(func(s *sql.Selector) {
+		// if not arguments were provided, append the FALSE constants,
+		// since we can't apply "IN ()". This will make this predicate falsy.
+		if len(v) == 0 {
+			s.Where(sql.False())
+			return
+		}
+		s.Where(sql.In(s.C(FieldText), v...))
+	})
+}
+
+// TextNotIn applies the NotIn predicate on the "text" field.
+func TextNotIn(vs ...string) predicate.FieldType {
+	v := make([]interface{}, len(vs))
+	for i := range v {
+		v[i] = vs[i]
+	}
+	return predicate.FieldType(func(s *sql.Selector) {
+		// if not arguments were provided, append the FALSE constants,
+		// since we can't apply "IN ()". This will make this predicate falsy.
+		if len(v) == 0 {
+			s.Where(sql.False())
+			return
+		}
+		s.Where(sql.NotIn(s.C(FieldText), v...))
+	})
+}
+
+// TextGT applies the GT predicate on the "text" field.
+func TextGT(v string) predicate.FieldType {
+	return predicate.FieldType(func(s *sql.Selector) {
+		s.Where(sql.GT(s.C(FieldText), v))
+	})
+}
+
+// TextGTE applies the GTE predicate on the "text" field.
+func TextGTE(v string) predicate.FieldType {
+	return predicate.FieldType(func(s *sql.Selector) {
+		s.Where(sql.GTE(s.C(FieldText), v))
+	})
+}
+
+// TextLT applies the LT predicate on the "text" field.
+func TextLT(v string) predicate.FieldType {
+	return predicate.FieldType(func(s *sql.Selector) {
+		s.Where(sql.LT(s.C(FieldText), v))
+	})
+}
+
+// TextLTE applies the LTE predicate on the "text" field.
+func TextLTE(v string) predicate.FieldType {
+	return predicate.FieldType(func(s *sql.Selector) {
+		s.Where(sql.LTE(s.C(FieldText), v))
+	})
+}
+
+// TextContains applies the Contains predicate on the "text" field.
+func TextContains(v string) predicate.FieldType {
+	return predicate.FieldType(func(s *sql.Selector) {
+		s.Where(sql.Contains(s.C(FieldText), v))
+	})
+}
+
+// TextHasPrefix applies the HasPrefix predicate on the "text" field.
+func TextHasPrefix(v string) predicate.FieldType {
+	return predicate.FieldType(func(s *sql.Selector) {
+		s.Where(sql.HasPrefix(s.C(FieldText), v))
+	})
+}
+
+// TextHasSuffix applies the HasSuffix predicate on the "text" field.
+func TextHasSuffix(v string) predicate.FieldType {
+	return predicate.FieldType(func(s *sql.Selector) {
+		s.Where(sql.HasSuffix(s.C(FieldText), v))
+	})
+}
+
+// TextIsNil applies the IsNil predicate on the "text" field.
+func TextIsNil() predicate.FieldType {
+	return predicate.FieldType(func(s *sql.Selector) {
+		s.Where(sql.IsNull(s.C(FieldText)))
+	})
+}
+
+// TextNotNil applies the NotNil predicate on the "text" field.
+func TextNotNil() predicate.FieldType {
+	return predicate.FieldType(func(s *sql.Selector) {
+		s.Where(sql.NotNull(s.C(FieldText)))
+	})
+}
+
+// TextEqualFold applies the EqualFold predicate on the "text" field.
+func TextEqualFold(v string) predicate.FieldType {
+	return predicate.FieldType(func(s *sql.Selector) {
+		s.Where(sql.EqualFold(s.C(FieldText), v))
+	})
+}
+
+// TextContainsFold applies the ContainsFold predicate on the "text" field.
+func TextContainsFold(v string) predicate.FieldType {
+	return predicate.FieldType(func(s *sql.Selector) {
+		s.Where(sql.ContainsFold(s.C(FieldText), v))
+	})
+}
+
 // DatetimeEQ applies the EQ predicate on the "datetime" field.
 func DatetimeEQ(v time.Time) predicate.FieldType {
 	return predicate.FieldType(func(s *sql.Selector) {
@@ -2854,6 +2993,96 @@ func LinkOtherIsNil() predicate.FieldType {
 func LinkOtherNotNil() predicate.FieldType {
 	return predicate.FieldType(func(s *sql.Selector) {
 		s.Where(sql.NotNull(s.C(FieldLinkOther)))
+	})
+}
+
+// LinkOtherFuncEQ applies the EQ predicate on the "link_other_func" field.
+func LinkOtherFuncEQ(v *schema.Link) predicate.FieldType {
+	return predicate.FieldType(func(s *sql.Selector) {
+		s.Where(sql.EQ(s.C(FieldLinkOtherFunc), v))
+	})
+}
+
+// LinkOtherFuncNEQ applies the NEQ predicate on the "link_other_func" field.
+func LinkOtherFuncNEQ(v *schema.Link) predicate.FieldType {
+	return predicate.FieldType(func(s *sql.Selector) {
+		s.Where(sql.NEQ(s.C(FieldLinkOtherFunc), v))
+	})
+}
+
+// LinkOtherFuncIn applies the In predicate on the "link_other_func" field.
+func LinkOtherFuncIn(vs ...*schema.Link) predicate.FieldType {
+	v := make([]interface{}, len(vs))
+	for i := range v {
+		v[i] = vs[i]
+	}
+	return predicate.FieldType(func(s *sql.Selector) {
+		// if not arguments were provided, append the FALSE constants,
+		// since we can't apply "IN ()". This will make this predicate falsy.
+		if len(v) == 0 {
+			s.Where(sql.False())
+			return
+		}
+		s.Where(sql.In(s.C(FieldLinkOtherFunc), v...))
+	})
+}
+
+// LinkOtherFuncNotIn applies the NotIn predicate on the "link_other_func" field.
+func LinkOtherFuncNotIn(vs ...*schema.Link) predicate.FieldType {
+	v := make([]interface{}, len(vs))
+	for i := range v {
+		v[i] = vs[i]
+	}
+	return predicate.FieldType(func(s *sql.Selector) {
+		// if not arguments were provided, append the FALSE constants,
+		// since we can't apply "IN ()". This will make this predicate falsy.
+		if len(v) == 0 {
+			s.Where(sql.False())
+			return
+		}
+		s.Where(sql.NotIn(s.C(FieldLinkOtherFunc), v...))
+	})
+}
+
+// LinkOtherFuncGT applies the GT predicate on the "link_other_func" field.
+func LinkOtherFuncGT(v *schema.Link) predicate.FieldType {
+	return predicate.FieldType(func(s *sql.Selector) {
+		s.Where(sql.GT(s.C(FieldLinkOtherFunc), v))
+	})
+}
+
+// LinkOtherFuncGTE applies the GTE predicate on the "link_other_func" field.
+func LinkOtherFuncGTE(v *schema.Link) predicate.FieldType {
+	return predicate.FieldType(func(s *sql.Selector) {
+		s.Where(sql.GTE(s.C(FieldLinkOtherFunc), v))
+	})
+}
+
+// LinkOtherFuncLT applies the LT predicate on the "link_other_func" field.
+func LinkOtherFuncLT(v *schema.Link) predicate.FieldType {
+	return predicate.FieldType(func(s *sql.Selector) {
+		s.Where(sql.LT(s.C(FieldLinkOtherFunc), v))
+	})
+}
+
+// LinkOtherFuncLTE applies the LTE predicate on the "link_other_func" field.
+func LinkOtherFuncLTE(v *schema.Link) predicate.FieldType {
+	return predicate.FieldType(func(s *sql.Selector) {
+		s.Where(sql.LTE(s.C(FieldLinkOtherFunc), v))
+	})
+}
+
+// LinkOtherFuncIsNil applies the IsNil predicate on the "link_other_func" field.
+func LinkOtherFuncIsNil() predicate.FieldType {
+	return predicate.FieldType(func(s *sql.Selector) {
+		s.Where(sql.IsNull(s.C(FieldLinkOtherFunc)))
+	})
+}
+
+// LinkOtherFuncNotNil applies the NotNil predicate on the "link_other_func" field.
+func LinkOtherFuncNotNil() predicate.FieldType {
+	return predicate.FieldType(func(s *sql.Selector) {
+		s.Where(sql.NotNull(s.C(FieldLinkOtherFunc)))
 	})
 }
 
@@ -5432,22 +5661,22 @@ func PriorityNotNil() predicate.FieldType {
 	})
 }
 
-// UUIDEQ applies the EQ predicate on the "uuid" field.
-func UUIDEQ(v uuid.UUID) predicate.FieldType {
+// OptionalUUIDEQ applies the EQ predicate on the "optional_uuid" field.
+func OptionalUUIDEQ(v uuid.UUID) predicate.FieldType {
 	return predicate.FieldType(func(s *sql.Selector) {
-		s.Where(sql.EQ(s.C(FieldUUID), v))
+		s.Where(sql.EQ(s.C(FieldOptionalUUID), v))
 	})
 }
 
-// UUIDNEQ applies the NEQ predicate on the "uuid" field.
-func UUIDNEQ(v uuid.UUID) predicate.FieldType {
+// OptionalUUIDNEQ applies the NEQ predicate on the "optional_uuid" field.
+func OptionalUUIDNEQ(v uuid.UUID) predicate.FieldType {
 	return predicate.FieldType(func(s *sql.Selector) {
-		s.Where(sql.NEQ(s.C(FieldUUID), v))
+		s.Where(sql.NEQ(s.C(FieldOptionalUUID), v))
 	})
 }
 
-// UUIDIn applies the In predicate on the "uuid" field.
-func UUIDIn(vs ...uuid.UUID) predicate.FieldType {
+// OptionalUUIDIn applies the In predicate on the "optional_uuid" field.
+func OptionalUUIDIn(vs ...uuid.UUID) predicate.FieldType {
 	v := make([]interface{}, len(vs))
 	for i := range v {
 		v[i] = vs[i]
@@ -5459,12 +5688,12 @@ func UUIDIn(vs ...uuid.UUID) predicate.FieldType {
 			s.Where(sql.False())
 			return
 		}
-		s.Where(sql.In(s.C(FieldUUID), v...))
+		s.Where(sql.In(s.C(FieldOptionalUUID), v...))
 	})
 }
 
-// UUIDNotIn applies the NotIn predicate on the "uuid" field.
-func UUIDNotIn(vs ...uuid.UUID) predicate.FieldType {
+// OptionalUUIDNotIn applies the NotIn predicate on the "optional_uuid" field.
+func OptionalUUIDNotIn(vs ...uuid.UUID) predicate.FieldType {
 	v := make([]interface{}, len(vs))
 	for i := range v {
 		v[i] = vs[i]
@@ -5476,49 +5705,49 @@ func UUIDNotIn(vs ...uuid.UUID) predicate.FieldType {
 			s.Where(sql.False())
 			return
 		}
-		s.Where(sql.NotIn(s.C(FieldUUID), v...))
+		s.Where(sql.NotIn(s.C(FieldOptionalUUID), v...))
 	})
 }
 
-// UUIDGT applies the GT predicate on the "uuid" field.
-func UUIDGT(v uuid.UUID) predicate.FieldType {
+// OptionalUUIDGT applies the GT predicate on the "optional_uuid" field.
+func OptionalUUIDGT(v uuid.UUID) predicate.FieldType {
 	return predicate.FieldType(func(s *sql.Selector) {
-		s.Where(sql.GT(s.C(FieldUUID), v))
+		s.Where(sql.GT(s.C(FieldOptionalUUID), v))
 	})
 }
 
-// UUIDGTE applies the GTE predicate on the "uuid" field.
-func UUIDGTE(v uuid.UUID) predicate.FieldType {
+// OptionalUUIDGTE applies the GTE predicate on the "optional_uuid" field.
+func OptionalUUIDGTE(v uuid.UUID) predicate.FieldType {
 	return predicate.FieldType(func(s *sql.Selector) {
-		s.Where(sql.GTE(s.C(FieldUUID), v))
+		s.Where(sql.GTE(s.C(FieldOptionalUUID), v))
 	})
 }
 
-// UUIDLT applies the LT predicate on the "uuid" field.
-func UUIDLT(v uuid.UUID) predicate.FieldType {
+// OptionalUUIDLT applies the LT predicate on the "optional_uuid" field.
+func OptionalUUIDLT(v uuid.UUID) predicate.FieldType {
 	return predicate.FieldType(func(s *sql.Selector) {
-		s.Where(sql.LT(s.C(FieldUUID), v))
+		s.Where(sql.LT(s.C(FieldOptionalUUID), v))
 	})
 }
 
-// UUIDLTE applies the LTE predicate on the "uuid" field.
-func UUIDLTE(v uuid.UUID) predicate.FieldType {
+// OptionalUUIDLTE applies the LTE predicate on the "optional_uuid" field.
+func OptionalUUIDLTE(v uuid.UUID) predicate.FieldType {
 	return predicate.FieldType(func(s *sql.Selector) {
-		s.Where(sql.LTE(s.C(FieldUUID), v))
+		s.Where(sql.LTE(s.C(FieldOptionalUUID), v))
 	})
 }
 
-// UUIDIsNil applies the IsNil predicate on the "uuid" field.
-func UUIDIsNil() predicate.FieldType {
+// OptionalUUIDIsNil applies the IsNil predicate on the "optional_uuid" field.
+func OptionalUUIDIsNil() predicate.FieldType {
 	return predicate.FieldType(func(s *sql.Selector) {
-		s.Where(sql.IsNull(s.C(FieldUUID)))
+		s.Where(sql.IsNull(s.C(FieldOptionalUUID)))
 	})
 }
 
-// UUIDNotNil applies the NotNil predicate on the "uuid" field.
-func UUIDNotNil() predicate.FieldType {
+// OptionalUUIDNotNil applies the NotNil predicate on the "optional_uuid" field.
+func OptionalUUIDNotNil() predicate.FieldType {
 	return predicate.FieldType(func(s *sql.Selector) {
-		s.Where(sql.NotNull(s.C(FieldUUID)))
+		s.Where(sql.NotNull(s.C(FieldOptionalUUID)))
 	})
 }
 

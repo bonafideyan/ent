@@ -53,6 +53,14 @@ func (pc *PetCreate) SetUUID(u uuid.UUID) *PetCreate {
 	return pc
 }
 
+// SetNillableUUID sets the "uuid" field if the given value is not nil.
+func (pc *PetCreate) SetNillableUUID(u *uuid.UUID) *PetCreate {
+	if u != nil {
+		pc.SetUUID(*u)
+	}
+	return pc
+}
+
 // SetNickname sets the "nickname" field.
 func (pc *PetCreate) SetNickname(s string) *PetCreate {
 	pc.mutation.SetNickname(s)
@@ -145,9 +153,15 @@ func (pc *PetCreate) Save(ctx context.Context) (*Pet, error) {
 			}
 			mut = pc.hooks[i](mut)
 		}
-		if _, err := mut.Mutate(ctx, pc.mutation); err != nil {
+		v, err := mut.Mutate(ctx, pc.mutation)
+		if err != nil {
 			return nil, err
 		}
+		nv, ok := v.(*Pet)
+		if !ok {
+			return nil, fmt.Errorf("unexpected node type %T returned from PetMutation", v)
+		}
+		node = nv
 	}
 	return node, err
 }
@@ -605,11 +619,11 @@ func (pcb *PetCreateBulk) Save(ctx context.Context) ([]*Pet, error) {
 					return nil, err
 				}
 				mutation.id = &nodes[i].ID
-				mutation.done = true
 				if specs[i].ID.Value != nil {
 					id := specs[i].ID.Value.(int64)
 					nodes[i].ID = int(id)
 				}
+				mutation.done = true
 				return nodes[i], nil
 			})
 			for i := len(builder.hooks) - 1; i >= 0; i-- {
