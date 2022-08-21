@@ -12,6 +12,7 @@ import (
 	"math"
 	"reflect"
 	"regexp"
+	"strings"
 	"time"
 
 	"entgo.io/ent/schema"
@@ -69,8 +70,7 @@ func Time(name string) *timeBuilder {
 //
 //	field.JSON("info", &Info{}).
 //		Optional()
-//
-func JSON(name string, typ interface{}) *jsonBuilder {
+func JSON(name string, typ any) *jsonBuilder {
 	b := &jsonBuilder{&Descriptor{
 		Name: name,
 		Info: &TypeInfo{
@@ -116,7 +116,6 @@ func Floats(name string) *jsonBuilder {
 //			"off",
 //		).
 //		Default("on")
-//
 func Enum(name string) *enumBuilder {
 	return &enumBuilder{&Descriptor{
 		Name: name,
@@ -127,7 +126,6 @@ func Enum(name string) *enumBuilder {
 // UUID returns a new Field with type UUID. An example for defining UUID field is as follows:
 //
 //	field.UUID("id", uuid.New())
-//
 func UUID(name string, typ driver.Valuer) *uuidBuilder {
 	rt := reflect.TypeOf(typ)
 	b := &uuidBuilder{&Descriptor{
@@ -153,7 +151,6 @@ func UUID(name string, typ driver.Valuer) *uuidBuilder {
 //			dialect.MySQL:    "text",
 //			dialect.Postgres: "varchar",
 //		})
-//
 func Other(name string, typ driver.Valuer) *otherBuilder {
 	ob := &otherBuilder{&Descriptor{
 		Name: name,
@@ -239,8 +236,7 @@ func (b *stringBuilder) Default(s string) *stringBuilder {
 //
 //	field.String("cuid").
 //		DefaultFunc(cuid.New)
-//
-func (b *stringBuilder) DefaultFunc(fn interface{}) *stringBuilder {
+func (b *stringBuilder) DefaultFunc(fn any) *stringBuilder {
 	b.desc.Default = fn
 	return b
 }
@@ -292,7 +288,6 @@ func (b *stringBuilder) StorageKey(key string) *stringBuilder {
 //			dialect.MySQL:    "text",
 //			dialect.Postgres: "varchar",
 //		})
-//
 func (b *stringBuilder) SchemaType(types map[string]string) *stringBuilder {
 	b.desc.SchemaType = types
 	return b
@@ -302,8 +297,7 @@ func (b *stringBuilder) SchemaType(types map[string]string) *stringBuilder {
 //
 //	field.String("dir").
 //		GoType(http.Dir("dir"))
-//
-func (b *stringBuilder) GoType(typ interface{}) *stringBuilder {
+func (b *stringBuilder) GoType(typ any) *stringBuilder {
 	b.desc.goType(typ, stringType)
 	return b
 }
@@ -315,7 +309,6 @@ func (b *stringBuilder) GoType(typ interface{}) *stringBuilder {
 //		Annotations(
 //			entgql.OrderField("DIR"),
 //		)
-//
 func (b *stringBuilder) Annotations(annotations ...schema.Annotation) *stringBuilder {
 	b.desc.Annotations = append(b.desc.Annotations, annotations...)
 	return b
@@ -372,8 +365,7 @@ func (b *timeBuilder) StructTag(s string) *timeBuilder {
 //
 //	field.Time("created_at").
 //		Default(time.Now)
-//
-func (b *timeBuilder) Default(fn interface{}) *timeBuilder {
+func (b *timeBuilder) Default(fn any) *timeBuilder {
 	b.desc.Default = fn
 	return b
 }
@@ -389,8 +381,7 @@ func (b *timeBuilder) Default(fn interface{}) *timeBuilder {
 //		Optional().
 //		GoType(&sql.NullTime{}).
 //		UpdateDefault(NewNullTime),
-//
-func (b *timeBuilder) UpdateDefault(fn interface{}) *timeBuilder {
+func (b *timeBuilder) UpdateDefault(fn any) *timeBuilder {
 	b.desc.UpdateDefault = fn
 	return b
 }
@@ -406,8 +397,7 @@ func (b *timeBuilder) StorageKey(key string) *timeBuilder {
 //
 //	field.Time("deleted_at").
 //		GoType(&sql.NullTime{})
-//
-func (b *timeBuilder) GoType(typ interface{}) *timeBuilder {
+func (b *timeBuilder) GoType(typ any) *timeBuilder {
 	b.desc.goType(typ, timeType)
 	return b
 }
@@ -419,7 +409,6 @@ func (b *timeBuilder) GoType(typ interface{}) *timeBuilder {
 //		Annotations(
 //			entgql.OrderField("DELETED_AT"),
 //		)
-//
 func (b *timeBuilder) Annotations(annotations ...schema.Annotation) *timeBuilder {
 	b.desc.Annotations = append(b.desc.Annotations, annotations...)
 	return b
@@ -441,7 +430,6 @@ func (b *timeBuilder) Descriptor() *Descriptor {
 //			dialect.MySQL:    "datetime",
 //			dialect.Postgres: "time with time zone",
 //		})
-//
 func (b *timeBuilder) SchemaType(types map[string]string) *timeBuilder {
 	b.desc.SchemaType = types
 	return b
@@ -501,8 +489,7 @@ func (b *boolBuilder) StorageKey(key string) *boolBuilder {
 //
 //	field.Bool("deleted").
 //		GoType(&sql.NullBool{})
-//
-func (b *boolBuilder) GoType(typ interface{}) *boolBuilder {
+func (b *boolBuilder) GoType(typ any) *boolBuilder {
 	b.desc.goType(typ, boolType)
 	return b
 }
@@ -514,7 +501,6 @@ func (b *boolBuilder) GoType(typ interface{}) *boolBuilder {
 //		Annotations(
 //			entgql.OrderField("DELETED"),
 //		)
-//
 func (b *boolBuilder) Annotations(annotations ...schema.Annotation) *boolBuilder {
 	b.desc.Annotations = append(b.desc.Annotations, annotations...)
 	return b
@@ -541,8 +527,7 @@ func (b *bytesBuilder) Default(v []byte) *bytesBuilder {
 //
 //	field.Bytes("cuid").
 //		DefaultFunc(cuid.New)
-//
-func (b *bytesBuilder) DefaultFunc(fn interface{}) *bytesBuilder {
+func (b *bytesBuilder) DefaultFunc(fn any) *bytesBuilder {
 	b.desc.Default = fn
 	return b
 }
@@ -633,7 +618,6 @@ func (b *bytesBuilder) NotEmpty() *bytesBuilder {
 //			}
 //			return nil
 //		})
-//
 func (b *bytesBuilder) Validate(fn func([]byte) error) *bytesBuilder {
 	b.desc.Validators = append(b.desc.Validators, fn)
 	return b
@@ -650,8 +634,7 @@ func (b *bytesBuilder) StorageKey(key string) *bytesBuilder {
 //
 //	field.Bytes("ip").
 //		GoType(net.IP("127.0.0.1"))
-//
-func (b *bytesBuilder) GoType(typ interface{}) *bytesBuilder {
+func (b *bytesBuilder) GoType(typ any) *bytesBuilder {
 	b.desc.goType(typ, bytesType)
 	return b
 }
@@ -671,7 +654,6 @@ func (b *bytesBuilder) Annotations(annotations ...schema.Annotation) *bytesBuild
 //			dialect.MySQL:	"tinyblob",
 //			dialect.SQLite:	"tinyblob",
 //		})
-//
 func (b *bytesBuilder) SchemaType(types map[string]string) *bytesBuilder {
 	b.desc.SchemaType = types
 	return b
@@ -716,6 +698,12 @@ func (b *jsonBuilder) Comment(c string) *jsonBuilder {
 	return b
 }
 
+// Sensitive fields not printable and not serializable.
+func (b *jsonBuilder) Sensitive() *jsonBuilder {
+	b.desc.Sensitive = true
+	return b
+}
+
 // StructTag sets the struct tag of the field.
 func (b *jsonBuilder) StructTag(s string) *jsonBuilder {
 	b.desc.Tag = s
@@ -730,7 +718,6 @@ func (b *jsonBuilder) StructTag(s string) *jsonBuilder {
 //			dialect.MySQL:		"json",
 //			dialect.Postgres:	"jsonb",
 //		})
-//
 func (b *jsonBuilder) SchemaType(types map[string]string) *jsonBuilder {
 	b.desc.SchemaType = types
 	return b
@@ -752,8 +739,7 @@ func (b *jsonBuilder) Annotations(annotations ...schema.Annotation) *jsonBuilder
 //	field.JSON("dirs", []http.Dir{}).
 //		// A function for generating the default value.
 //		Default(DefaultDirs)
-//
-func (b *jsonBuilder) Default(v interface{}) *jsonBuilder {
+func (b *jsonBuilder) Default(v any) *jsonBuilder {
 	b.desc.Default = v
 	switch fieldT, defaultT := b.desc.Info.RType.rtype, reflect.TypeOf(v); {
 	case fieldT == defaultT:
@@ -779,7 +765,6 @@ type enumBuilder struct {
 //
 //	field.Enum("priority").
 //		Values("low", "mid", "high")
-//
 func (b *enumBuilder) Values(values ...string) *enumBuilder {
 	for _, v := range values {
 		b.desc.Enums = append(b.desc.Enums, struct{ N, V string }{N: v, V: v})
@@ -799,7 +784,6 @@ func (b *enumBuilder) Values(values ...string) *enumBuilder {
 //			"Mid", "MID",
 //			"High", "HIGH",
 //		)
-//
 func (b *enumBuilder) NamedValues(namevalue ...string) *enumBuilder {
 	if len(namevalue)%2 == 1 {
 		b.desc.Err = fmt.Errorf("Enum.NamedValues: odd argument count")
@@ -863,7 +847,6 @@ func (b *enumBuilder) StructTag(s string) *enumBuilder {
 //		SchemaType(map[string]string{
 //			dialect.Postgres: "EnumType",
 //		})
-//
 func (b *enumBuilder) SchemaType(types map[string]string) *enumBuilder {
 	b.desc.SchemaType = types
 	return b
@@ -876,7 +859,6 @@ func (b *enumBuilder) SchemaType(types map[string]string) *enumBuilder {
 //		Annotations(
 //			entgql.OrderField("ENUM"),
 //		)
-//
 func (b *enumBuilder) Annotations(annotations ...schema.Annotation) *enumBuilder {
 	b.desc.Annotations = append(b.desc.Annotations, annotations...)
 	return b
@@ -891,7 +873,6 @@ type EnumValues interface {
 //
 //	field.Enum("enum").
 //		GoType(role.Enum("role"))
-//
 func (b *enumBuilder) GoType(ev EnumValues) *enumBuilder {
 	b.Values(ev.Values()...)
 	b.desc.goType(ev, stringType)
@@ -965,8 +946,7 @@ func (b *uuidBuilder) StructTag(s string) *uuidBuilder {
 //
 //	field.UUID("id", uuid.UUID{}).
 //		Default(uuid.New)
-//
-func (b *uuidBuilder) Default(fn interface{}) *uuidBuilder {
+func (b *uuidBuilder) Default(fn any) *uuidBuilder {
 	typ := reflect.TypeOf(fn)
 	if typ.Kind() != reflect.Func || typ.NumIn() != 0 || typ.NumOut() != 1 || typ.Out(0).String() != b.desc.Info.String() {
 		b.desc.Err = fmt.Errorf("expect type (func() %s) for uuid default value", b.desc.Info)
@@ -982,7 +962,6 @@ func (b *uuidBuilder) Default(fn interface{}) *uuidBuilder {
 //		SchemaType(map[string]string{
 //			dialect.Postgres: "CustomUUID",
 //		})
-//
 func (b *uuidBuilder) SchemaType(types map[string]string) *uuidBuilder {
 	b.desc.SchemaType = types
 	return b
@@ -995,7 +974,6 @@ func (b *uuidBuilder) SchemaType(types map[string]string) *uuidBuilder {
 //		Annotations(
 //			entgql.OrderField("ID"),
 //		)
-//
 func (b *uuidBuilder) Annotations(annotations ...schema.Annotation) *uuidBuilder {
 	b.desc.Annotations = append(b.desc.Annotations, annotations...)
 	return b
@@ -1040,8 +1018,7 @@ func (b *otherBuilder) Sensitive() *otherBuilder {
 //		}).
 //		// A function for generating the default value.
 //		Default(NewLink)
-//
-func (b *otherBuilder) Default(v interface{}) *otherBuilder {
+func (b *otherBuilder) Default(v any) *otherBuilder {
 	b.desc.Default = v
 	switch fieldT, defaultT := b.desc.Info.RType.rtype, reflect.TypeOf(v); {
 	case fieldT == defaultT:
@@ -1100,7 +1077,6 @@ func (b *otherBuilder) StorageKey(key string) *otherBuilder {
 //			dialect.MySQL:    "text",
 //			dialect.Postgres: "varchar",
 //		})
-//
 func (b *otherBuilder) SchemaType(types map[string]string) *otherBuilder {
 	b.desc.SchemaType = types
 	return b
@@ -1117,7 +1093,6 @@ func (b *otherBuilder) SchemaType(types map[string]string) *otherBuilder {
 //		Annotations(
 //			entgql.OrderField("LINK"),
 //		)
-//
 func (b *otherBuilder) Annotations(annotations ...schema.Annotation) *otherBuilder {
 	b.desc.Annotations = append(b.desc.Annotations, annotations...)
 	return b
@@ -1140,10 +1115,10 @@ type Descriptor struct {
 	Unique        bool                    // unique index of field.
 	Nillable      bool                    // nillable struct field.
 	Optional      bool                    // nullable field in database.
-	Immutable     bool                    // create-only field.
-	Default       interface{}             // default value on create.
-	UpdateDefault interface{}             // default value on update.
-	Validators    []interface{}           // validator functions.
+	Immutable     bool                    // create only field.
+	Default       any                     // default value on create.
+	UpdateDefault any                     // default value on update.
+	Validators    []any                   // validator functions.
 	StorageKey    string                  // sql column or gremlin property.
 	Enums         []struct{ N, V string } // enum values.
 	Sensitive     bool                    // sensitive info string field.
@@ -1153,13 +1128,14 @@ type Descriptor struct {
 	Err           error
 }
 
-func (d *Descriptor) goType(typ interface{}, expectType reflect.Type) {
+func (d *Descriptor) goType(typ any, expectType reflect.Type) {
 	t := reflect.TypeOf(typ)
 	tv := indirect(t)
 	info := &TypeInfo{
 		Type:    d.Info.Type,
 		Ident:   t.String(),
 		PkgPath: tv.PkgPath(),
+		PkgName: pkgName(tv.String()),
 		RType: &RType{
 			rtype:   t,
 			Kind:    t.Kind(),
@@ -1181,6 +1157,20 @@ func (d *Descriptor) goType(typ interface{}, expectType reflect.Type) {
 		d.Err = fmt.Errorf("GoType must be a %q type or ValueScanner", expectType)
 	}
 	d.Info = info
+}
+
+// pkgName returns the package name from a Go
+// identifier with a package qualifier.
+func pkgName(ident string) string {
+	i := strings.LastIndexByte(ident, '.')
+	if i == -1 {
+		return ""
+	}
+	s := ident[:i]
+	if i := strings.LastIndexAny(s, "]*"); i != -1 {
+		s = s[i+1:]
+	}
+	return s
 }
 
 func methods(t reflect.Type, rtype *RType) {

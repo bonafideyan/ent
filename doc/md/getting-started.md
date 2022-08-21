@@ -33,8 +33,8 @@ go mod init <project>
 go install entgo.io/ent/cmd/ent@latest
 ```
 
-After installing `ent` codegen tool, you should have it in your `PATH`.
-If you don't find it your path, you can also run: `go run entgo.io/ent/cmd/ent <command>`
+After installing `ent` codegen tool, use `go run entgo.io/ent/cmd/ent <command>` to execute
+commands.
 
 ## Create Your First Schema
 
@@ -177,7 +177,7 @@ import (
 func main() {
 	client, err := ent.Open("postgres","host=<host> port=<port> user=<user> dbname=<database> password=<pass>")
 	if err != nil {
-		log.Fatalf("failed opening connection to sqlite: %v", err)
+		log.Fatalf("failed opening connection to postgres: %v", err)
 	}
 	defer client.Close()
 	// Run the auto migration tool.
@@ -205,7 +205,7 @@ import (
 func main() {
 	client, err := ent.Open("mysql", "<user>:<pass>@tcp(<host>:<port>)/<database>?parseTime=True")
 	if err != nil {
-		log.Fatalf("failed opening connection to sqlite: %v", err)
+		log.Fatalf("failed opening connection to mysql: %v", err)
 	}
 	defer client.Close()
 	// Run the auto migration tool.

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"entgo.io/ent"
+	"entgo.io/ent/entc/integration/privacy/ent/privacy"
 	"entgo.io/ent/schema"
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
@@ -37,13 +38,25 @@ func (TweetLike) Fields() []ent.Field {
 // Edges of the TweetLike.
 func (TweetLike) Edges() []ent.Edge {
 	return []ent.Edge{
-		edge.To("user", User.Type).
-			Unique().
-			Required().
-			Field("user_id"),
 		edge.To("tweet", Tweet.Type).
 			Unique().
 			Required().
 			Field("tweet_id"),
+		edge.To("user", User.Type).
+			Unique().
+			Required().
+			Field("user_id"),
+	}
+}
+
+// Policy defines the privacy policy of the TweetLike.
+func (TweetLike) Policy() ent.Policy {
+	return privacy.Policy{
+		Mutation: privacy.MutationPolicy{
+			privacy.AlwaysAllowRule(),
+		},
+		Query: privacy.QueryPolicy{
+			privacy.AlwaysAllowRule(),
+		},
 	}
 }

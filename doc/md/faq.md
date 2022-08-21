@@ -245,7 +245,7 @@ type MAC struct {
 }
 
 // Scan implements the Scanner interface.
-func (m *MAC) Scan(value interface{}) (err error) {
+func (m *MAC) Scan(value any) (err error) {
 	switch v := value.(type) {
 	case nil:
 	case []byte:
@@ -291,7 +291,7 @@ type Inet struct {
 }
 
 // Scan implements the Scanner interface
-func (i *Inet) Scan(value interface{}) (err error) {
+func (i *Inet) Scan(value any) (err error) {
     switch v := value.(type) {
     case nil:
     case []byte:
@@ -402,7 +402,7 @@ func (User) Mixin() []ent.Mixin {
 #### How to use a custom XID globally unique ID?
 
 Package [xid](https://github.com/rs/xid) is a globally unique ID generator library that uses the [Mongo Object ID](https://docs.mongodb.org/manual/reference/object-id/)
-algorithm to generate a 12 byte, 20 character ID with no configuration. The xid package comes with [database/sql](https://golang.org/pkg/database/sql) `sql.Scanner` and `driver.Valuer` interfaces required by Ent for serialization.
+algorithm to generate a 12 byte, 20 character ID with no configuration. The xid package comes with [database/sql](https://pkg.go.dev/database/sql) `sql.Scanner` and `driver.Valuer` interfaces required by Ent for serialization.
 
 To store an XID in any string field use the [GoType](schema-fields.md#go-type) schema configuration:
 
@@ -494,7 +494,7 @@ import (
 type Point [2]float64
 
 // Scan implements the Scanner interface.
-func (p *Point) Scan(value interface{}) error {
+func (p *Point) Scan(value any) error {
 	bin, ok := value.([]byte)
 	if !ok {
 		return fmt.Errorf("invalid binary value for point")
@@ -579,7 +579,7 @@ func (x *Hi) Value() (driver.Value, error) {
 	return proto.Marshal(x)
 }
 
-func (x *Hi) Scan(src interface{}) error {
+func (x *Hi) Scan(src any) error {
 	if src == nil {
 		return nil
 	}
@@ -663,7 +663,7 @@ func (User) Annotations() []schema.Annotation {
 #### How to define a custom precision numeric field?
 
 Using [GoType](schema-fields.md#go-type) and [SchemaType](schema-fields.md#database-type) it is possible to define
-custom precision numeric fields. For example, defining a field that uses [big.Int](https://golang.org/pkg/math/big/).
+custom precision numeric fields. For example, defining a field that uses [big.Int](https://pkg.go.dev/math/big).
 
 ```go
 func (T) Fields() []ent.Field {
@@ -681,7 +681,7 @@ type BigInt struct {
 	big.Int
 }
 
-func (b *BigInt) Scan(src interface{}) error {
+func (b *BigInt) Scan(src any) error {
 	var i sql.NullString
 	if err := i.Scan(src); err != nil {
 		return err
@@ -729,11 +729,11 @@ type multiDriver struct {
 
 var _ dialect.Driver = (*multiDriver)(nil)
 
-func (d *multiDriver) Query(ctx context.Context, query string, args, v interface{}) error {
+func (d *multiDriver) Query(ctx context.Context, query string, args, v any) error {
 	return d.r.Query(ctx, query, args, v)
 }
 
-func (d *multiDriver) Exec(ctx context.Context, query string, args, v interface{}) error {
+func (d *multiDriver) Exec(ctx context.Context, query string, args, v any) error {
 	return d.w.Exec(ctx, query, args, v)
 }
 

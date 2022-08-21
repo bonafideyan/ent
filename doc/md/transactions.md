@@ -110,12 +110,12 @@ func WithTx(ctx context.Context, client *ent.Client, fn func(tx *ent.Tx) error) 
 	}()
 	if err := fn(tx); err != nil {
 		if rerr := tx.Rollback(); rerr != nil {
-			err = errors.Wrapf(err, "rolling back transaction: %v", rerr)
+			err = fmt.Errorf("rolling back transaction: %w", rerr)
 		}
 		return err
 	}
 	if err := tx.Commit(); err != nil {
-		return errors.Wrapf(err, "committing transaction: %v", err)
+		return fmt.Errorf("committing transaction: %w", err)
 	}
 	return nil
 }
@@ -168,4 +168,12 @@ func Do(ctx context.Context, client *ent.Client) error {
     //
     return err
 }
+```
+
+## Isolation Levels
+
+Some drivers support tweaking a transaction's isolation level. For example, with the [sql](sql-integration.md) driver, you can do so with the `BeginTx` method.
+
+```go
+tx, err := client.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead})
 ```

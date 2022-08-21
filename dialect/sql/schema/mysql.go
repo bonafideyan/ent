@@ -31,7 +31,7 @@ type MySQL struct {
 // init loads the MySQL version from the database for later use in the migration process.
 func (d *MySQL) init(ctx context.Context, conn dialect.ExecQuerier) error {
 	rows := &sql.Rows{}
-	if err := conn.Query(ctx, "SHOW VARIABLES LIKE 'version'", []interface{}{}, rows); err != nil {
+	if err := conn.Query(ctx, "SHOW VARIABLES LIKE 'version'", []any{}, rows); err != nil {
 		return fmt.Errorf("mysql: querying mysql version %w", err)
 	}
 	defer rows.Close()
@@ -138,10 +138,10 @@ func (d *MySQL) indexes(ctx context.Context, tx dialect.Tx, t *Table) ([]*Index,
 }
 
 func (d *MySQL) setRange(ctx context.Context, conn dialect.ExecQuerier, t *Table, value int64) error {
-	return conn.Exec(ctx, fmt.Sprintf("ALTER TABLE `%s` AUTO_INCREMENT = %d", t.Name, value), []interface{}{}, nil)
+	return conn.Exec(ctx, fmt.Sprintf("ALTER TABLE `%s` AUTO_INCREMENT = %d", t.Name, value), []any{}, nil)
 }
 
-func (d *MySQL) verifyRange(ctx context.Context, tx dialect.Tx, t *Table, expected int64) error {
+func (d *MySQL) verifyRange(ctx context.Context, tx dialect.ExecQuerier, t *Table, expected int64) error {
 	if expected == 0 {
 		return nil
 	}
@@ -969,4 +969,11 @@ func indexType(idx *Index, d string) (string, bool) {
 		return ant.Type, true
 	}
 	return "", false
+}
+
+func (MySQL) atTypeRangeSQL(ts ...string) string {
+	for i := range ts {
+		ts[i] = fmt.Sprintf("('%s')", ts[i])
+	}
+	return fmt.Sprintf("INSERT INTO `%s` (`type`) VALUES %s", TypeTable, strings.Join(ts, ", "))
 }

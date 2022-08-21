@@ -61,7 +61,7 @@ type Step struct {
 	From struct {
 		// V can be either one vertex or set of vertices.
 		// It can be a pre-processed step (sql.Query) or a simple Go type (integer or string).
-		V interface{}
+		V any
 		// Table holds the table name of V (from).
 		Table string
 		// Column to join with. Usually the "id" column.
@@ -99,7 +99,7 @@ type Step struct {
 type StepOption func(*Step)
 
 // From sets the source of the step.
-func From(table, column string, v ...interface{}) StepOption {
+func From(table, column string, v ...any) StepOption {
 	return func(s *Step) {
 		s.From.Table = table
 		s.From.Column = column
@@ -134,7 +134,6 @@ func Edge(rel Rel, inverse bool, table string, columns ...string) StepOption {
 //		To("table", "pk"),
 //		Edge("name", O2M, "fk"),
 //	)
-//
 func NewStep(opts ...StepOption) *Step {
 	s := &Step{}
 	for _, opt := range opts {
@@ -325,10 +324,11 @@ type (
 	// NodeSpec defines the information for querying and
 	// decoding nodes in the graph.
 	NodeSpec struct {
-		Table   string
-		Schema  string
-		Columns []string
-		ID      *FieldSpec
+		Table       string
+		Schema      string
+		Columns     []string
+		ID          *FieldSpec   // primary key.
+		CompositeID []*FieldSpec // composite id (edge schema).
 	}
 )
 
@@ -408,9 +408,10 @@ type (
 		Edges     EdgeMut
 		Fields    FieldMut
 		Predicate func(*sql.Selector)
+		Modifiers []func(*sql.UpdateBuilder)
 
-		ScanValues func(columns []string) ([]interface{}, error)
-		Assign     func(columns []string, values []interface{}) error
+		ScanValues func(columns []string) ([]any, error)
+		Assign     func(columns []string, values []any) error
 	}
 )
 
@@ -436,7 +437,7 @@ func UpdateNodes(ctx context.Context, drv dialect.Driver, spec *UpdateSpec) (int
 }
 
 // NotFoundError returns when trying to update an
-// entity and it was not found in the database.
+// entity, and it was not found in the database.
 type NotFoundError struct {
 	table string
 	id    driver.Value
@@ -489,8 +490,8 @@ type QuerySpec struct {
 	Predicate func(*sql.Selector)
 	Modifiers []func(*sql.Selector)
 
-	ScanValues func(columns []string) ([]interface{}, error)
-	Assign     func(columns []string, values []interface{}) error
+	ScanValues func(columns []string) ([]any, error)
+	Assign     func(columns []string, values []any) error
 }
 
 // QueryNodes queries the nodes in the graph query and scans them to the given values.
@@ -512,8 +513,8 @@ func CountNodes(ctx context.Context, drv dialect.Driver, spec *QuerySpec) (int, 
 type EdgeQuerySpec struct {
 	Edge       *EdgeSpec
 	Predicate  func(*sql.Selector)
-	ScanValues func() [2]interface{}
-	Assign     func(out, in interface{}) error
+	ScanValues func() [2]any
+	Assign     func(out, in any) error
 }
 
 // QueryEdges queries the edges in the graph and scans the result with the given dest function.
@@ -655,19 +656,40 @@ type updater struct {
 
 func (u *updater) node(ctx context.Context, tx dialect.ExecQuerier) error {
 	var (
-		// id holds the PK of the node used for linking
-		// it with the other nodes.
-		id         = u.Node.ID.Value
+		id         driver.Value
+		idp        *sql.Predicate
 		addEdges   = EdgeSpecs(u.Edges.Add).GroupRel()
 		clearEdges = EdgeSpecs(u.Edges.Clear).GroupRel()
 	)
-	update := u.builder.Update(u.Node.Table).Schema(u.Node.Schema).Where(sql.EQ(u.Node.ID.Column, id))
+	switch {
+	// In case it is not an edge schema, the id holds the PK
+	// of the node used for linking it with the other nodes.
+	case u.Node.ID != nil:
+		id = u.Node.ID.Value
+		idp = sql.EQ(u.Node.ID.Column, id)
+	case len(u.Node.CompositeID) == 2:
+		idp = sql.And(
+			sql.EQ(u.Node.CompositeID[0].Column, u.Node.CompositeID[0].Value),
+			sql.EQ(u.Node.CompositeID[1].Column, u.Node.CompositeID[1].Value),
+		)
+	case len(u.Node.CompositeID) != 2:
+		return fmt.Errorf("sql/sqlgraph: invalid composite id for update table %q", u.Node.Table)
+	default:
+		return fmt.Errorf("sql/sqlgraph: missing node id for update table %q", u.Node.Table)
+	}
+	update := u.builder.Update(u.Node.Table).Schema(u.Node.Schema).Where(idp)
 	if pred := u.Predicate; pred != nil {
 		selector := u.builder.Select().From(u.builder.Table(u.Node.Table).Schema(u.Node.Schema))
 		pred(selector)
 		update.FromSelect(selector)
 	}
 	if err := u.setTableColumns(update, addEdges, clearEdges); err != nil {
+		return err
+	}
+	for _, m := range u.Modifiers {
+		m(update)
+	}
+	if err := update.Err(); err != nil {
 		return err
 	}
 	if !update.Empty() {
@@ -688,8 +710,11 @@ func (u *updater) node(ctx context.Context, tx dialect.ExecQuerier) error {
 			}
 		}
 	}
-	if err := u.setExternalEdges(ctx, []driver.Value{id}, addEdges, clearEdges); err != nil {
-		return err
+	if id != nil {
+		// Not an edge schema.
+		if err := u.setExternalEdges(ctx, []driver.Value{id}, addEdges, clearEdges); err != nil {
+			return err
+		}
 	}
 	// Ignore querying the database when there's nothing
 	// to scan into it.
@@ -698,9 +723,10 @@ func (u *updater) node(ctx context.Context, tx dialect.ExecQuerier) error {
 	}
 	selector := u.builder.Select(u.Node.Columns...).
 		From(u.builder.Table(u.Node.Table).Schema(u.Node.Schema)).
-		// Skip adding the custom predicates that were attached to the updater
-		// as they may point to columns that were changed by the UPDATE statement.
-		Where(sql.EQ(u.Node.ID.Column, u.Node.ID.Value))
+		// Skip adding the custom predicates that were attached
+		// to the updater as they may point to columns that were
+		// changed by the UPDATE statement.
+		Where(idp)
 	rows := &sql.Rows{}
 	query, args := selector.Query()
 	if err := tx.Query(ctx, query, args, rows); err != nil {
@@ -773,6 +799,12 @@ func (u *updater) nodes(ctx context.Context, drv dialect.Driver) (int, error) {
 }
 
 func (u *updater) updateTable(ctx context.Context, stmt *sql.UpdateBuilder) (int, error) {
+	for _, m := range u.Modifiers {
+		m(stmt)
+	}
+	if err := stmt.Err(); err != nil {
+		return 0, err
+	}
 	if stmt.Empty() {
 		return 0, nil
 	}
@@ -854,6 +886,9 @@ func (u *updater) scan(rows *sql.Rows) error {
 		if err := rows.Err(); err != nil {
 			return err
 		}
+		if len(u.Node.CompositeID) == 2 {
+			return &NotFoundError{table: u.Node.Table, id: []driver.Value{u.Node.CompositeID[0].Value, u.Node.CompositeID[1].Value}}
+		}
 		return &NotFoundError{table: u.Node.Table, id: u.Node.ID.Value}
 	}
 	values, err := u.ScanValues(columns)
@@ -909,6 +944,7 @@ func (c *creator) node(ctx context.Context, drv dialect.Driver) error {
 		// In case the spec does not contain an ID field, we assume
 		// we interact with an edge-schema with composite primary key.
 		if c.ID == nil {
+			c.ensureConflict(insert)
 			query, args := insert.Query()
 			return c.tx.Exec(ctx, query, args, nil)
 		}
@@ -948,10 +984,7 @@ func (c *creator) setTableColumns(insert *sql.InsertBuilder, edges map[Rel][]*Ed
 
 // insert a node to its table and sets its ID if it was not provided by the user.
 func (c *creator) insert(ctx context.Context, insert *sql.InsertBuilder) error {
-	if opts := c.CreateSpec.OnConflict; len(opts) > 0 {
-		insert.OnConflict(opts...)
-		c.ensureLastInsertID(insert)
-	}
+	c.ensureConflict(insert)
 	// If the id field was provided by the user.
 	if c.ID.Value != nil {
 		insert.Set(c.ID.Column, c.ID.Value)
@@ -965,10 +998,18 @@ func (c *creator) insert(ctx context.Context, insert *sql.InsertBuilder) error {
 	return c.insertLastID(ctx, insert.Returning(c.ID.Column))
 }
 
+// ensureConflict ensures the ON CONFLICT is added to the insert statement.
+func (c *creator) ensureConflict(insert *sql.InsertBuilder) {
+	if opts := c.CreateSpec.OnConflict; len(opts) > 0 {
+		insert.OnConflict(opts...)
+		c.ensureLastInsertID(insert)
+	}
+}
+
 // ensureLastInsertID ensures the LAST_INSERT_ID was added to the
-// 'ON DUPLICATE .. UPDATE' clause in it was not provided.
+// 'ON DUPLICATE ... UPDATE' clause in it was not provided.
 func (c *creator) ensureLastInsertID(insert *sql.InsertBuilder) {
-	if !c.ID.Type.Numeric() || c.ID.Value != nil || insert.Dialect() != dialect.MySQL {
+	if c.ID == nil || !c.ID.Type.Numeric() || c.ID.Value != nil || insert.Dialect() != dialect.MySQL {
 		return
 	}
 	insert.OnConflict(sql.ResolveWith(func(s *sql.UpdateSet) {
@@ -997,7 +1038,7 @@ func (c *batchCreator) nodes(ctx context.Context, drv dialect.Driver) error {
 			return fmt.Errorf("more than 1 table for batch insert: %q != %q", node.Table, c.Nodes[i-1].Table)
 		}
 		values[i] = make(map[string]driver.Value)
-		if node.ID.Value != nil {
+		if node.ID != nil && node.ID.Value != nil {
 			columns[node.ID.Column] = struct{}{}
 			values[i][node.ID.Column] = node.ID.Value
 		}
@@ -1012,13 +1053,13 @@ func (c *batchCreator) nodes(ctx context.Context, drv dialect.Driver) error {
 	}
 	for column := range columns {
 		for i := range values {
-			switch _, exists := values[i][column]; {
-			case column == c.Nodes[i].ID.Column && !exists:
-				// If the ID value was provided to one of the nodes, it should be
-				// provided to all others because this affects the way we calculate
-				// their values in MySQL and SQLite dialects.
-				return fmt.Errorf("incosistent id values for batch insert")
-			case !exists:
+			if _, exists := values[i][column]; !exists {
+				if c.Nodes[i].ID != nil && column == c.Nodes[i].ID.Column {
+					// If the ID value was provided to one of the nodes, it should be
+					// provided to all others because this affects the way we calculate
+					// their values in MySQL and SQLite dialects.
+					return fmt.Errorf("incosistent id values for batch insert")
+				}
 				// Assign NULL values for empty placeholders.
 				values[i][column] = nil
 			}
@@ -1027,7 +1068,7 @@ func (c *batchCreator) nodes(ctx context.Context, drv dialect.Driver) error {
 	sorted := keys(columns)
 	insert := c.builder.Insert(c.Nodes[0].Table).Schema(c.Nodes[0].Schema).Default().Columns(sorted...)
 	for i := range values {
-		vs := make([]interface{}, len(sorted))
+		vs := make([]any, len(sorted))
 		for j, c := range sorted {
 			vs[j] = values[i][c]
 		}
@@ -1039,6 +1080,13 @@ func (c *batchCreator) nodes(ctx context.Context, drv dialect.Driver) error {
 	}
 	c.tx = tx
 	if err := func() error {
+		// In case the spec does not contain an ID field, we assume
+		// we interact with an edge-schema with composite primary key.
+		if c.Nodes[0].ID == nil {
+			c.ensureConflict(insert)
+			query, args := insert.Query()
+			return tx.Exec(ctx, query, args, nil)
+		}
 		if err := c.batchInsert(ctx, tx, insert); err != nil {
 			return fmt.Errorf("insert nodes to table %q: %w", c.Nodes[0].Table, err)
 		}
@@ -1074,10 +1122,15 @@ func (c *batchCreator) mayTx(ctx context.Context, drv dialect.Driver) (dialect.T
 
 // batchInsert inserts a batch of nodes to their table and sets their ID if it was not provided by the user.
 func (c *batchCreator) batchInsert(ctx context.Context, tx dialect.ExecQuerier, insert *sql.InsertBuilder) error {
+	c.ensureConflict(insert)
+	return c.insertLastIDs(ctx, tx, insert.Returning(c.Nodes[0].ID.Column))
+}
+
+// ensureConflict ensures the ON CONFLICT is added to the insert statement.
+func (c *batchCreator) ensureConflict(insert *sql.InsertBuilder) {
 	if opts := c.BatchCreateSpec.OnConflict; len(opts) > 0 {
 		insert.OnConflict(opts...)
 	}
-	return c.insertLastIDs(ctx, tx, insert.Returning(c.Nodes[0].ID.Column))
 }
 
 // GroupRel groups edges by their relation type.
@@ -1170,7 +1223,7 @@ func (g *graph) addM2MEdges(ctx context.Context, ids []driver.Value, edges EdgeS
 		var (
 			edges   = tables[table]
 			columns = edges[0].Columns
-			values  = make([]interface{}, 0, len(edges[0].Target.Fields))
+			values  = make([]any, 0, len(edges[0].Target.Fields))
 		)
 		// Specs are generated equally for all edges from the same type.
 		for _, f := range edges[0].Target.Fields {
@@ -1189,9 +1242,9 @@ func (g *graph) addM2MEdges(ctx context.Context, ids []driver.Value, edges EdgeS
 				pk1, pk2 = pk2, pk1
 			}
 			for _, pair := range product(pk1, pk2) {
-				insert.Values(append([]interface{}{pair[0], pair[1]}, values...)...)
+				insert.Values(append([]any{pair[0], pair[1]}, values...)...)
 				if edge.Bidi {
-					insert.Values(append([]interface{}{pair[1], pair[0]}, values...)...)
+					insert.Values(append([]any{pair[1], pair[0]}, values...)...)
 				}
 			}
 		}

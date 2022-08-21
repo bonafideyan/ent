@@ -7,6 +7,7 @@ package gen
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"go/token"
 	"go/types"
@@ -108,6 +109,8 @@ type (
 		Type *Type
 		// Optional indicates is this edge is optional on create.
 		Optional bool
+		// Immutable indicates is this edge cannot be updated.
+		Immutable bool
 		// Unique indicates if this edge is a unique edge.
 		Unique bool
 		// Inverse holds the name of the reference edge declared in the schema.
@@ -146,8 +149,10 @@ type (
 		// For O2O and O2M, it's the table name of the type we're this edge point to.
 		// For M2O, this is the owner's type, and for M2M this is the join table.
 		Table string
-		// Columns holds the relation column in the relation table above.
-		// In O2M, M2O and O2O, this the first element.
+		// Columns holds the relation column(s) in the relation table above.
+		// For O2M, M2O and O2O, it contains one element with the column name.
+		// For M2M edges, it contains two columns defined in the join table with
+		// the same order as defined in the schema: (owner_id, reference_id).
 		Columns []string
 		// foreign-key information for non-M2M edges.
 		fk *ForeignKey
@@ -248,7 +253,7 @@ func NewType(c *Config, schema *load.Schema) (*Type, error) {
 		// User defined id field.
 		if tf.Name == typ.ID.Name {
 			if tf.Optional {
-				return nil, fmt.Errorf("id field cannot be optional")
+				return nil, errors.New("id field cannot be optional")
 			}
 			typ.ID = tf
 		} else {
@@ -309,7 +314,7 @@ func (t Type) PackageDir() string { return strings.ToLower(t.Name) }
 
 // PackageAlias returns local package name of a type if there is one.
 // A package has an alias if its generated name conflicts with
-// one of the imports of the user-defined types.
+// one of the imports of the user-defined or ent builtin types.
 func (t Type) PackageAlias() string { return t.alias }
 
 // Receiver returns the receiver name of this node. It makes sure the
@@ -319,7 +324,7 @@ func (t Type) Receiver() string {
 }
 
 // hasEdge returns true if this type as an edge (reverse or assoc)
-/// with the given name.
+// with the given name.
 func (t Type) hasEdge(name string) bool {
 	for _, e := range t.Edges {
 		if name == e.Name {
@@ -514,9 +519,13 @@ func (t Type) NumConstraint() int {
 func (t Type) MutableFields() []*Field {
 	fields := make([]*Field, 0, len(t.Fields))
 	for _, f := range t.Fields {
-		if !f.Immutable {
-			fields = append(fields, f)
+		if f.Immutable {
+			continue
 		}
+		if e, err := f.Edge(); err == nil && e.Immutable {
+			continue
+		}
+		fields = append(fields, f)
 	}
 	return fields
 }
@@ -606,7 +615,7 @@ func (t Type) TagTypes() []string {
 func (t *Type) AddIndex(idx *load.Index) error {
 	index := &Index{Name: idx.StorageKey, Unique: idx.Unique, Annotations: idx.Annotations}
 	if len(idx.Fields) == 0 && len(idx.Edges) == 0 {
-		return fmt.Errorf("missing fields or edges")
+		return errors.New("missing fields or edges")
 	}
 	switch ant := entsqlIndexAnnotate(idx.Annotations); {
 	case ant == nil:
@@ -715,11 +724,17 @@ func (t *Type) setupFieldEdge(fk *ForeignKey, fkOwner *Edge, fkName string) erro
 	if !ok {
 		return fmt.Errorf("field %q was not found in the schema for edge %q", fkName, fkOwner.Name)
 	}
-	if tf.Optional != fkOwner.Optional {
-		return fmt.Errorf("mismatch optional/required config for edge %q and field %q", fkOwner.Name, fkName)
-	}
-	if tf.Immutable {
-		return fmt.Errorf("field edge %q cannot be immutable", fkName)
+	switch tf, ok := t.fields[fkName]; {
+	case !ok:
+		return fmt.Errorf("field %q was not found in the schema for edge %q", fkName, fkOwner.Name)
+	case tf.Optional && !fkOwner.Optional:
+		return fmt.Errorf("edge-field %q was set as Optional, but edge %q is not", fkName, fkOwner.Name)
+	case !tf.Optional && fkOwner.Optional:
+		return fmt.Errorf("edge %q was set as Optional, but edge-field %q is not", fkOwner.Name, fkName)
+	case tf.Immutable && !fkOwner.Immutable:
+		return fmt.Errorf("edge-field %q was set as Immutable, but edge %q is not", fkName, fkOwner.Name)
+	case !tf.Immutable && fkOwner.Immutable:
+		return fmt.Errorf("edge %q was set as Immutable, but edge-field %q is not", fkOwner.Name, fkName)
 	}
 	if t1, t2 := tf.Type.Type, fkOwner.Type.ID.Type.Type; t1 != t2 {
 		return fmt.Errorf("mismatch field type between edge field %q and id of type %q (%s != %s)", fkName, fkOwner.Type.Name, t1, t2)
@@ -887,8 +902,6 @@ func (t *Type) checkField(tf *Field, f *load.Field) (err error) {
 		err = fmt.Errorf("field name cannot be empty")
 	case f.Info == nil || !f.Info.Valid():
 		err = fmt.Errorf("invalid type for field %s", f.Name)
-	case f.Nillable && !f.Optional:
-		err = fmt.Errorf("nillable field %q must be optional", f.Name)
 	case f.Unique && f.Default && f.DefaultKind != reflect.Func:
 		err = fmt.Errorf("unique field %q cannot have default value", f.Name)
 	case t.fields[f.Name] != nil:
@@ -921,9 +934,14 @@ func (t Type) UnexportedForeignKeys() []*ForeignKey {
 // aliases adds package aliases (local names) for all type-packages that
 // their import identifier conflicts with user-defined packages (i.e. GoType).
 func aliases(g *Graph) {
-	names := make(map[string]*Type)
+	mayAlias := make(map[string]*Type)
 	for _, n := range g.Nodes {
-		names[n.PackageDir()] = n
+		if pkg := n.PackageDir(); importPkg[pkg] != "" {
+			// By default, a package named "pet" will be named as "entpet".
+			n.alias = path.Base(g.Package) + pkg
+		} else {
+			mayAlias[n.PackageDir()] = n
+		}
 	}
 	for _, n := range g.Nodes {
 		for _, f := range n.Fields {
@@ -936,7 +954,7 @@ func aliases(g *Graph) {
 			}
 			// A user-defined type already uses the
 			// package local name.
-			if n, ok := names[name]; ok {
+			if n, ok := mayAlias[name]; ok {
 				// By default, a package named "pet" will be named as "entpet".
 				n.alias = path.Base(g.Package) + name
 			}
@@ -956,7 +974,7 @@ func (f Field) DefaultName() string { return "Default" + pascal(f.Name) }
 func (f Field) UpdateDefaultName() string { return "Update" + f.DefaultName() }
 
 // DefaultValue returns the default value of the field. Invoked by the template.
-func (f Field) DefaultValue() interface{} { return f.def.DefaultValue }
+func (f Field) DefaultValue() any { return f.def.DefaultValue }
 
 // DefaultFunc returns a bool stating if the default value is a func. Invoked by the template.
 func (f Field) DefaultFunc() bool { return f.def.DefaultKind == reflect.Func }
@@ -1386,7 +1404,6 @@ func (f Field) SupportsMutationAdd() bool {
 //
 //	MutationAddAssignExpr(a, b) => *m.a += b		// Basic Go type.
 //	MutationAddAssignExpr(a, b) => *m.a = m.Add(b)	// Custom Go types that implement the (Add(T) T) interface.
-//
 func (f Field) MutationAddAssignExpr(ident1, ident2 string) (string, error) {
 	if !f.SupportsMutationAdd() {
 		return "", fmt.Errorf("field %q does not support the add operation (a + b)", f.Name)
@@ -1435,7 +1452,6 @@ var (
 //	v (http.Dir)		=> string(v)
 //	v (fmt.Stringer)	=> v.String()
 //	v (sql.NullString)	=> v.String
-//
 func (f Field) BasicType(ident string) (expr string) {
 	if !f.HasGoType() {
 		return ident
@@ -1502,7 +1518,7 @@ func (f Field) enums(lf *load.Field) ([]Enum, error) {
 			return nil, fmt.Errorf("%q field value cannot be empty", f.Name)
 		case values[value]:
 			return nil, fmt.Errorf("duplicate values %q for enum field %q", value, f.Name)
-		case !token.IsIdentifier(name):
+		case !token.IsIdentifier(name) && !f.HasGoType():
 			return nil, fmt.Errorf("enum %q does not have a valid Go identifier (%q)", value, name)
 		default:
 			values[value] = true
@@ -1592,9 +1608,16 @@ func (e Edge) BuilderField() string {
 	return builderField(e.Name)
 }
 
-// EagerLoadField returns the struct field (of query builder) for storing the eager-loading info.
+// EagerLoadField returns the struct field (of query builder)
+// for storing the eager-loading info.
 func (e Edge) EagerLoadField() string {
-	return "with" + pascal(e.Name)
+	return "with" + e.StructField()
+}
+
+// EagerLoadNamedField returns the struct field (of query builder)
+// for storing the eager-loading info for named edges.
+func (e Edge) EagerLoadNamedField() string {
+	return "withNamed" + e.StructField()
 }
 
 // StructField returns the struct member of the edge in the model.
@@ -1637,6 +1660,14 @@ func (e Edge) Field() *Field {
 		return fk.Field
 	}
 	return nil
+}
+
+// Comment returns the comment of the edge.
+func (e Edge) Comment() string {
+	if e.def.Comment != "" {
+		return e.def.Comment
+	}
+	return ""
 }
 
 // HasFieldSetter reports if this edge already has a field-edge setters for its mutation API.
@@ -1816,7 +1847,7 @@ func builderField(name string) string {
 }
 
 // fieldAnnotate extracts the field annotation from a loaded annotation format.
-func fieldAnnotate(annotation map[string]interface{}) *field.Annotation {
+func fieldAnnotate(annotation map[string]any) *field.Annotation {
 	annotate := &field.Annotation{}
 	if annotation == nil || annotation[annotate.Name()] == nil {
 		return nil
@@ -1828,7 +1859,7 @@ func fieldAnnotate(annotation map[string]interface{}) *field.Annotation {
 }
 
 // entsqlAnnotate extracts the entsql annotation from a loaded annotation format.
-func entsqlAnnotate(annotation map[string]interface{}) *entsql.Annotation {
+func entsqlAnnotate(annotation map[string]any) *entsql.Annotation {
 	annotate := &entsql.Annotation{}
 	if annotation == nil || annotation[annotate.Name()] == nil {
 		return nil
@@ -1840,7 +1871,7 @@ func entsqlAnnotate(annotation map[string]interface{}) *entsql.Annotation {
 }
 
 // entsqlIndexAnnotate extracts the entsql annotation from a loaded annotation format.
-func entsqlIndexAnnotate(annotation map[string]interface{}) *entsql.IndexAnnotation {
+func entsqlIndexAnnotate(annotation map[string]any) *entsql.IndexAnnotation {
 	annotate := &entsql.IndexAnnotation{}
 	if annotation == nil || annotation[annotate.Name()] == nil {
 		return nil

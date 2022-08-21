@@ -192,7 +192,7 @@ type Pair struct {
 	K, V []byte
 }
 
-func (*Pair) Scan(interface{}) error      { return nil }
+func (*Pair) Scan(any) error              { return nil }
 func (Pair) Value() (driver.Value, error) { return nil, nil }
 
 func TestBytes(t *testing.T) {
@@ -308,7 +308,7 @@ func TestString_DefaultFunc(t *testing.T) {
 
 type VString string
 
-func (s *VString) Scan(interface{}) error {
+func (s *VString) Scan(any) error {
 	return nil
 }
 
@@ -378,6 +378,7 @@ func TestString(t *testing.T) {
 	assert.Equal(t, "*field_test.tURL", fd.Info.String())
 	assert.True(t, fd.Info.ValueScanner())
 	assert.True(t, fd.Info.Stringer())
+	assert.Equal(t, "field_test", fd.Info.PkgName)
 
 	fd = field.String("name").GoType(1).Descriptor()
 	assert.Error(t, fd.Err)
@@ -426,6 +427,7 @@ func TestTime(t *testing.T) {
 	assert.Equal(t, "*sql.NullTime", fd.Info.String())
 	assert.True(t, fd.Info.Nillable)
 	assert.True(t, fd.Info.ValueScanner())
+	assert.Equal(t, "sql", fd.Info.PkgName)
 
 	fd = field.Time("deleted_at").GoType(Time{}).Default(time.Now).Descriptor()
 	assert.Error(t, fd.Err)
@@ -450,6 +452,7 @@ func TestJSON(t *testing.T) {
 	assert.Equal(t, "comment", fd.Comment)
 	assert.True(t, fd.Info.Nillable)
 	assert.False(t, fd.Info.RType.IsPtr())
+	assert.Empty(t, fd.Info.PkgName)
 
 	type T struct{ S string }
 	fd = field.JSON("name", &T{}).
@@ -474,9 +477,11 @@ func TestJSON(t *testing.T) {
 	fd = field.Strings("strings").
 		Optional().
 		Default([]string{"a", "b"}).
+		Sensitive().
 		Descriptor()
 	assert.NoError(t, fd.Err)
 	assert.True(t, fd.Optional)
+	assert.True(t, fd.Sensitive)
 	assert.Empty(t, fd.Info.PkgPath)
 	assert.Equal(t, "strings", fd.Name)
 	assert.Equal(t, []string{"a", "b"}, fd.Default)
@@ -487,12 +492,15 @@ func TestJSON(t *testing.T) {
 		Default([]http.Dir{"a", "b"}).
 		Descriptor()
 	assert.NoError(t, fd.Err)
+	assert.Equal(t, "http", fd.Info.PkgName)
+
 	fd = field.JSON("dirs", []http.Dir{}).
 		Default(func() []http.Dir {
 			return []http.Dir{"/tmp"}
 		}).
 		Descriptor()
 	assert.NoError(t, fd.Err)
+
 	fd = field.JSON("dirs", []http.Dir{}).
 		Default([]string{"a", "b"}).
 		Descriptor()
@@ -500,14 +508,19 @@ func TestJSON(t *testing.T) {
 
 	fd = field.JSON("values", &url.Values{}).Descriptor()
 	assert.Equal(t, "net/url", fd.Info.PkgPath)
+	assert.Equal(t, "url", fd.Info.PkgName)
 	fd = field.JSON("values", []url.Values{}).Descriptor()
 	assert.Equal(t, "net/url", fd.Info.PkgPath)
+	assert.Equal(t, "url", fd.Info.PkgName)
 	fd = field.JSON("values", []*url.Values{}).Descriptor()
 	assert.Equal(t, "net/url", fd.Info.PkgPath)
+	assert.Equal(t, "url", fd.Info.PkgName)
 	fd = field.JSON("values", map[string]url.Values{}).Descriptor()
 	assert.Equal(t, "net/url", fd.Info.PkgPath)
+	assert.Equal(t, "url", fd.Info.PkgName)
 	fd = field.JSON("values", map[string]*url.Values{}).Descriptor()
 	assert.Equal(t, "net/url", fd.Info.PkgPath)
+	assert.Equal(t, "url", fd.Info.PkgName)
 	fd = field.JSON("addr", net.Addr(nil)).Descriptor()
 	assert.EqualError(t, fd.Err, "expect a Go value as JSON type, but got nil")
 }
@@ -546,7 +559,7 @@ func (i RoleInt) Value() (driver.Value, error) {
 	return i.String(), nil
 }
 
-func (i *RoleInt) Scan(val interface{}) error {
+func (i *RoleInt) Scan(val any) error {
 	switch v := val.(type) {
 	case string:
 		switch v {
@@ -642,7 +655,7 @@ func TestField_UUID(t *testing.T) {
 type custom struct {
 }
 
-func (c *custom) Scan(_ interface{}) (err error) {
+func (c *custom) Scan(_ any) (err error) {
 	return nil
 }
 
@@ -711,7 +724,7 @@ func (e UserRole) MarshalGQL(w io.Writer) {
 }
 
 // UnmarshalGQL implements graphql.Unmarshaler interface.
-func (e *UserRole) UnmarshalGQL(val interface{}) error {
+func (e *UserRole) UnmarshalGQL(val any) error {
 	str, ok := val.(string)
 	if !ok {
 		return fmt.Errorf("enum %T must be a string", val)
@@ -727,14 +740,14 @@ func (e *UserRole) UnmarshalGQL(val interface{}) error {
 
 type Scalar struct{}
 
-func (Scalar) MarshalGQL(io.Writer)            {}
-func (*Scalar) UnmarshalGQL(interface{}) error { return nil }
-func (Scalar) Value() (driver.Value, error)    { return nil, nil }
+func (Scalar) MarshalGQL(io.Writer)         {}
+func (*Scalar) UnmarshalGQL(any) error      { return nil }
+func (Scalar) Value() (driver.Value, error) { return nil, nil }
 
 func TestRType_Implements(t *testing.T) {
 	type (
 		marshaler   interface{ MarshalGQL(w io.Writer) }
-		unmarshaler interface{ UnmarshalGQL(v interface{}) error }
+		unmarshaler interface{ UnmarshalGQL(v any) error }
 		codec       interface {
 			marshaler
 			unmarshaler

@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"reflect"
 	"testing"
 
 	"entgo.io/ent/dialect"
@@ -34,9 +35,9 @@ func TestMySQL(t *testing.T) {
 			require.NoError(t, err)
 			defer db.Close()
 			ctx := context.Background()
-			err = db.Exec(ctx, "CREATE DATABASE IF NOT EXISTS json", []interface{}{}, nil)
+			err = db.Exec(ctx, "CREATE DATABASE IF NOT EXISTS json", []any{}, nil)
 			require.NoError(t, err, "creating database")
-			defer db.Exec(ctx, "DROP DATABASE IF EXISTS json", []interface{}{}, nil)
+			defer db.Exec(ctx, "DROP DATABASE IF EXISTS json", []any{}, nil)
 			client, err := ent.Open("mysql", fmt.Sprintf("root:pass@tcp(localhost:%d)/json", port))
 			require.NoError(t, err, "connecting to json database")
 			err = client.Schema.Create(context.Background(), migrate.WithGlobalUniqueID(true))
@@ -64,9 +65,9 @@ func TestMaria(t *testing.T) {
 			require.NoError(t, err)
 			defer db.Close()
 			ctx := context.Background()
-			err = db.Exec(ctx, "CREATE DATABASE IF NOT EXISTS json", []interface{}{}, nil)
+			err = db.Exec(ctx, "CREATE DATABASE IF NOT EXISTS json", []any{}, nil)
 			require.NoError(t, err, "creating database")
-			defer db.Exec(ctx, "DROP DATABASE IF EXISTS json", []interface{}{}, nil)
+			defer db.Exec(ctx, "DROP DATABASE IF EXISTS json", []any{}, nil)
 			client, err := ent.Open("mysql", fmt.Sprintf("root:pass@tcp(localhost:%d)/json", port))
 			require.NoError(t, err, "connecting to json database")
 			err = client.Schema.Create(context.Background(), migrate.WithGlobalUniqueID(true))
@@ -96,9 +97,9 @@ func TestPostgres(t *testing.T) {
 			require.NoError(t, err)
 			defer db.Close()
 			ctx := context.Background()
-			err = db.Exec(ctx, "CREATE DATABASE json", []interface{}{}, nil)
+			err = db.Exec(ctx, "CREATE DATABASE json", []any{}, nil)
 			require.NoError(t, err, "creating database")
-			defer db.Exec(ctx, "DROP DATABASE IF EXISTS json", []interface{}{}, nil)
+			defer db.Exec(ctx, "DROP DATABASE IF EXISTS json", []any{}, nil)
 
 			client, err := ent.Open(dialect.Postgres, dsn+" dbname=json")
 			require.NoError(t, err, "connecting to json database")
@@ -199,6 +200,11 @@ func NetAddr(t *testing.T, client *ent.Client) {
 	require.Equal(t, "127.0.0.1:80", client.User.GetX(ctx, usr.ID).Addr.String())
 	usr.Update().SetAddr(schema.Addr{Addr: &net.UDPAddr{IP: ip, Port: 1812}}).ExecX(ctx)
 	require.Equal(t, "127.0.0.1:1812", client.User.GetX(ctx, usr.ID).Addr.String())
+
+	// Ensure sensitive fields are not marshalled.
+	f, ok := reflect.TypeOf(ent.User{}).FieldByName("Addr")
+	require.True(t, ok)
+	require.Equal(t, "-", f.Tag.Get("json"))
 }
 
 func Dirs(t *testing.T, client *ent.Client) {
