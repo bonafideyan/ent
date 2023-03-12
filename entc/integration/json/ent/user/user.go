@@ -19,6 +19,8 @@ const (
 	FieldT = "t"
 	// FieldURL holds the string denoting the url field in the database.
 	FieldURL = "url"
+	// FieldURLs holds the string denoting the urls field in the database.
+	FieldURLs = "urls"
 	// FieldRaw holds the string denoting the raw field in the database.
 	FieldRaw = "raw"
 	// FieldDirs holds the string denoting the dirs field in the database.
@@ -31,6 +33,8 @@ const (
 	FieldStrings = "strings"
 	// FieldAddr holds the string denoting the addr field in the database.
 	FieldAddr = "addr"
+	// FieldUnknown holds the string denoting the unknown field in the database.
+	FieldUnknown = "unknown"
 	// Table holds the table name of the user in the database.
 	Table = "users"
 )
@@ -40,12 +44,14 @@ var Columns = []string{
 	FieldID,
 	FieldT,
 	FieldURL,
+	FieldURLs,
 	FieldRaw,
 	FieldDirs,
 	FieldInts,
 	FieldFloats,
 	FieldStrings,
 	FieldAddr,
+	FieldUnknown,
 }
 
 // ValidColumn reports if the column name is valid (part of the table columns).

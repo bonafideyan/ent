@@ -102,14 +102,14 @@ func (s *Street) assignValues(columns []string, values []any) error {
 
 // QueryCity queries the "city" edge of the Street entity.
 func (s *Street) QueryCity() *CityQuery {
-	return (&StreetClient{config: s.config}).QueryCity(s)
+	return NewStreetClient(s.config).QueryCity(s)
 }
 
 // Update returns a builder for updating this Street.
 // Note that you need to call Street.Unwrap() before calling this method if this Street
 // was returned from a transaction, and the transaction was committed or rolled back.
 func (s *Street) Update() *StreetUpdateOne {
-	return (&StreetClient{config: s.config}).UpdateOne(s)
+	return NewStreetClient(s.config).UpdateOne(s)
 }
 
 // Unwrap unwraps the Street entity that was returned from a transaction after it was closed,
@@ -136,9 +136,3 @@ func (s *Street) String() string {
 
 // Streets is a parsable slice of Street.
 type Streets []*Street
-
-func (s Streets) config(cfg config) {
-	for _i := range s {
-		s[_i].config = cfg
-	}
-}

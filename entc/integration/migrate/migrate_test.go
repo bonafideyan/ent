@@ -19,9 +19,6 @@ import (
 	"testing"
 	"text/template"
 
-	"ariga.io/atlas/sql/migrate"
-	atlas "ariga.io/atlas/sql/schema"
-	"ariga.io/atlas/sql/sqltool"
 	"entgo.io/ent/dialect"
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/schema"
@@ -29,13 +26,22 @@ import (
 	migratev1 "entgo.io/ent/entc/integration/migrate/entv1/migrate"
 	userv1 "entgo.io/ent/entc/integration/migrate/entv1/user"
 	"entgo.io/ent/entc/integration/migrate/entv2"
+	"entgo.io/ent/entc/integration/migrate/entv2/blog"
 	"entgo.io/ent/entc/integration/migrate/entv2/conversion"
 	"entgo.io/ent/entc/integration/migrate/entv2/customtype"
+	"entgo.io/ent/entc/integration/migrate/entv2/media"
 	migratev2 "entgo.io/ent/entc/integration/migrate/entv2/migrate"
 	"entgo.io/ent/entc/integration/migrate/entv2/predicate"
 	"entgo.io/ent/entc/integration/migrate/entv2/user"
+	"entgo.io/ent/entc/integration/migrate/entv2/zoo"
 	"entgo.io/ent/entc/integration/migrate/versioned"
 	vmigrate "entgo.io/ent/entc/integration/migrate/versioned/migrate"
+
+	"ariga.io/atlas/sql/migrate"
+	"ariga.io/atlas/sql/postgres"
+	atlas "ariga.io/atlas/sql/schema"
+	"ariga.io/atlas/sql/sqltool"
+	"entgo.io/ent/schema/field"
 	_ "github.com/go-sql-driver/mysql"
 	_ "github.com/lib/pq"
 	_ "github.com/mattn/go-sqlite3"
@@ -62,9 +68,13 @@ func TestMySQL(t *testing.T) {
 			V1ToV2(t, drv.Dialect(), clientv1, clientv2)
 			if version == "8" {
 				CheckConstraint(t, clientv2)
+				DefaultExpr(t, drv, "SELECT column_default FROM information_schema.columns WHERE table_schema = 'migrate' AND table_name = 'users' AND column_name = ?", "lower(_utf8mb4\\'hello\\')", "to_base64(_utf8mb4\\'ent\\')")
+				PKDefault(t, drv, "SELECT column_default FROM information_schema.columns WHERE table_schema = 'migrate' AND table_name = 'zoos' AND column_name = ?", "floor((rand() * ~((1 << 31))))")
 			}
 			NicknameSearch(t, clientv2)
-			TimePrecision(t, drv, "SELECT datetime_precision FROM information_schema.columns WHERE table_name = ? AND column_name = ?")
+			TimePrecision(t, drv, "SELECT datetime_precision FROM information_schema.columns WHERE table_schema = 'migrate' AND table_name = ? AND column_name = ?")
+			ColumnComments(t, drv, "SELECT column_name as name, column_comment as comment FROM information_schema.columns WHERE table_schema = 'migrate' AND table_name = 'media' ORDER BY ordinal_position")
+			TableComment(t, drv, "SELECT table_comment FROM information_schema.tables WHERE table_schema = 'migrate' AND table_name = 'media'")
 
 			require.NoError(t, err, root.Exec(ctx, "DROP DATABASE IF EXISTS versioned_migrate", []any{}, new(sql.Result)))
 			require.NoError(t, root.Exec(ctx, "CREATE DATABASE IF NOT EXISTS versioned_migrate", []any{}, new(sql.Result)))
@@ -75,10 +85,9 @@ func TestMySQL(t *testing.T) {
 			vdrv, err := sql.Open("mysql", fmt.Sprintf("root:pass@tcp(localhost:%d)/versioned_migrate?parseTime=True", port))
 			require.NoError(t, err, "connecting to versioned migrate database")
 			defer vdrv.Close()
-			Versioned(t, vdrv,
-				fmt.Sprintf("mysql://root:pass@localhost:%d/versioned_migrate_dev?parseTime=True", port),
-				versioned.NewClient(versioned.Driver(vdrv)),
-			)
+			devURL := fmt.Sprintf("mysql://root:pass@localhost:%d/versioned_migrate_dev?parseTime=True", port)
+			Versioned(t, vdrv, devURL, versioned.NewClient(versioned.Driver(vdrv)))
+			ConsistentVersioned(t, devURL)
 		})
 	}
 }
@@ -91,38 +100,72 @@ func TestPostgres(t *testing.T) {
 			require.NoError(t, err)
 			defer root.Close()
 			ctx := context.Background()
-			err = root.Exec(ctx, "DROP DATABASE IF EXISTS migrate", []any{}, new(sql.Result))
+			err = root.Exec(ctx, "DROP DATABASE IF EXISTS migrate", []any{}, nil)
 			require.NoError(t, err)
-			err = root.Exec(ctx, "CREATE DATABASE migrate", []any{}, new(sql.Result))
+			err = root.Exec(ctx, "CREATE DATABASE migrate", []any{}, nil)
 			require.NoError(t, err, "creating database")
-			defer root.Exec(ctx, "DROP DATABASE migrate", []any{}, new(sql.Result))
+			defer root.Exec(ctx, "DROP DATABASE migrate", []any{}, nil)
 
 			drv, err := sql.Open(dialect.Postgres, dsn+" dbname=migrate")
 			require.NoError(t, err, "connecting to migrate database")
 			defer drv.Close()
 
-			err = drv.Exec(ctx, "CREATE TYPE customtype as range (subtype = time)", []any{}, new(sql.Result))
+			err = drv.Exec(ctx, "CREATE TYPE customtype as range (subtype = time)", []any{}, nil)
 			require.NoError(t, err, "creating custom type")
 
 			clientv1 := entv1.NewClient(entv1.Driver(drv))
 			clientv2 := entv2.NewClient(entv2.Driver(drv))
-			V1ToV2(t, drv.Dialect(), clientv1, clientv2)
+			V1ToV2(
+				t, drv.Dialect(), clientv1, clientv2,
+				// A diff hook to ensure foreign-keys that point to
+				// serial columns are configured to integer types.
+				func(next schema.Differ) schema.Differ {
+					return schema.DiffFunc(func(current, desired *atlas.Schema) ([]atlas.Change, error) {
+						blogs, ok := desired.Table(blog.Table)
+						require.True(t, ok)
+						id, ok := blogs.Column(blog.FieldID)
+						require.True(t, ok)
+						require.IsType(t, &postgres.SerialType{}, id.Type.Type)
+						users, ok := desired.Table(user.Table)
+						require.True(t, ok)
+						fk, ok := users.Column(blog.AdminsColumn)
+						require.True(t, ok)
+						require.IsType(t, &atlas.IntegerType{}, fk.Type.Type)
+						return next.Diff(current, desired)
+					})
+				},
+			)
 			CheckConstraint(t, clientv2)
 			TimePrecision(t, drv, "SELECT datetime_precision FROM information_schema.columns WHERE table_name = $1 AND column_name = $2")
-
+			PartialIndexes(t, drv, "select indexdef from pg_indexes where indexname=$1", "CREATE INDEX user_phone ON public.users USING btree (phone) WHERE active")
+			JSONDefault(t, drv, `SELECT column_default FROM information_schema.columns WHERE table_name = 'users' AND column_name = $1`)
+			DefaultExpr(t, drv, `SELECT column_default FROM information_schema.columns WHERE table_name = 'users' AND column_name = $1`, "lower('hello'::text)", "md5('ent'::text)")
+			PKDefault(t, drv, `SELECT column_default FROM information_schema.columns WHERE table_name = 'zoos' AND column_name = $1`, "floor((random() * ((~ (1 << 31)))::double precision))")
+			IndexOpClass(t, drv)
+			ColumnComments(t, drv, `SELECT column_name as name, col_description(table_name::regclass::oid, ordinal_position) as comment FROM information_schema.columns WHERE table_name = 'media' ORDER BY ordinal_position`)
+			TableComment(t, drv, "SELECT obj_description('media'::regclass::oid)")
+			if version != "10" {
+				IncludeColumns(t, drv)
+			}
+			SerialType(t, clientv2)
 			vdrv, err := sql.Open(dialect.Postgres, dsn+" dbname=versioned_migrate")
 			require.NoError(t, err, "connecting to versioned migrate database")
 			defer vdrv.Close()
-			require.NoError(t, root.Exec(ctx, "DROP DATABASE IF EXISTS versioned_migrate", []any{}, new(sql.Result)))
+			require.NoError(t, root.Exec(ctx, "DROP DATABASE IF EXISTS versioned_migrate", []any{}, nil))
 			require.NoError(t, root.Exec(ctx, "CREATE DATABASE versioned_migrate", []any{}, new(sql.Result)))
 			defer root.Exec(ctx, "DROP DATABASE versioned_migrate", []any{}, new(sql.Result))
-			require.NoError(t, root.Exec(ctx, "DROP DATABASE IF EXISTS versioned_migrate_dev", []any{}, new(sql.Result)))
+			require.NoError(t, root.Exec(ctx, "DROP DATABASE IF EXISTS versioned_migrate_dev", []any{}, nil))
 			require.NoError(t, root.Exec(ctx, "CREATE DATABASE versioned_migrate_dev", []any{}, new(sql.Result)))
 			defer root.Exec(ctx, "DROP DATABASE versioned_migrate_dev", []any{}, new(sql.Result))
-			Versioned(t, vdrv,
-				fmt.Sprintf("postgres://postgres:pass@localhost:%d/versioned_migrate_dev?sslmode=disable&search_path=public", port),
-				versioned.NewClient(versioned.Driver(vdrv)),
-			)
+			devURL := fmt.Sprintf("postgres://postgres:pass@localhost:%d/versioned_migrate_dev?sslmode=disable&search_path=public", port)
+			Versioned(t, vdrv, devURL, versioned.NewClient(versioned.Driver(vdrv)))
+			// Create the necessary custom types for the versioned schema.
+			dev, err := sql.Open(dialect.Postgres, dsn+" dbname=versioned_migrate_dev")
+			require.NoError(t, err, "connecting to versioned_migrate_dev database")
+			defer dev.Close()
+			err = dev.Exec(ctx, "CREATE TYPE customtype as range (subtype = time)", []any{}, nil)
+			require.NoError(t, err, "creating custom type on dev database")
+			ConsistentVersioned(t, devURL)
 		})
 	}
 }
@@ -131,7 +174,6 @@ func TestSQLite(t *testing.T) {
 	drv, err := sql.Open("sqlite3", "file:ent?mode=memory&cache=shared&_fk=1")
 	require.NoError(t, err)
 	defer drv.Close()
-
 	ctx := context.Background()
 	client := entv2.NewClient(entv2.Driver(drv))
 	require.NoError(
@@ -174,13 +216,18 @@ func TestSQLite(t *testing.T) {
 
 	SanityV2(t, drv.Dialect(), client)
 	u := client.User.Create().SetAge(1).SetName("x").SetNickname("x'").SetPhone("y").SaveX(ctx)
-	idRange(t, client.Car.Create().SetOwner(u).SaveX(ctx).ID, 0, 1<<32)
-	idRange(t, client.Conversion.Create().SaveX(ctx).ID, 1<<32-1, 2<<32)
-	idRange(t, client.CustomType.Create().SaveX(ctx).ID, 2<<32-1, 3<<32)
-	idRange(t, client.Group.Create().SaveX(ctx).ID, 3<<32-1, 4<<32)
-	idRange(t, client.Media.Create().SaveX(ctx).ID, 4<<32-1, 5<<32)
-	idRange(t, client.Pet.Create().SaveX(ctx).ID, 5<<32-1, 6<<32)
-	idRange(t, u.ID, 6<<32-1, 7<<32)
+	idRange(t, client.Blog.Create().SetOid(1).SaveX(ctx).ID, 0, 1<<32)
+	idRange(t, client.Car.Create().SetOwner(u).SaveX(ctx).ID, 1<<32-1, 2<<32)
+	idRange(t, client.Conversion.Create().SaveX(ctx).ID, 2<<32-1, 3<<32)
+	idRange(t, client.CustomType.Create().SaveX(ctx).ID, 3<<32-1, 4<<32)
+	idRange(t, client.Group.Create().SaveX(ctx).ID, 4<<32-1, 5<<32)
+	idRange(t, client.Media.Create().SaveX(ctx).ID, 5<<32-1, 6<<32)
+	idRange(t, client.Pet.Create().SaveX(ctx).ID, 6<<32-1, 7<<32)
+	idRange(t, u.ID, 7<<32-1, 8<<32)
+	PartialIndexes(t, drv, "select sql from sqlite_master where name=?", "CREATE INDEX `user_phone` ON `users` (`phone`) WHERE active")
+	JSONDefault(t, drv, "SELECT `dflt_value` FROM `pragma_table_info`('users') WHERE `name` = ?")
+	DefaultExpr(t, drv, "SELECT `dflt_value` FROM `pragma_table_info`('users') WHERE `name` = ?", "lower('hello')", "hex('ent')")
+	PKDefault(t, drv, "SELECT `dflt_value` FROM `pragma_table_info`('zoos') WHERE `name` = ?", "abs(random())")
 
 	// Override the default behavior of LIKE in SQLite.
 	// https://www.sqlite.org/pragma.html#pragma_case_sensitive_like
@@ -196,10 +243,105 @@ func TestSQLite(t *testing.T) {
 	Versioned(t, vdrv, "sqlite3://file?mode=memory&cache=shared&_fk=1", versioned.NewClient(versioned.Driver(vdrv)))
 }
 
+// https://github.com/ent/ent/issues/2954
+func TestSQLite_ForeignKeyTx(t *testing.T) {
+	var (
+		usersColumns = []*schema.Column{
+			{Name: "id", Type: field.TypeInt, Increment: true},
+			{Name: "name", Type: field.TypeString},
+		}
+		usersTable = &schema.Table{
+			Name:       "users",
+			Columns:    usersColumns,
+			PrimaryKey: []*schema.Column{usersColumns[0]},
+		}
+		userFollowingColumns = []*schema.Column{
+			{Name: "user_id", Type: field.TypeInt},
+			{Name: "follower_id", Type: field.TypeInt},
+		}
+		userFollowingTable = &schema.Table{
+			Name:       "user_following",
+			Columns:    userFollowingColumns,
+			PrimaryKey: []*schema.Column{userFollowingColumns[0], userFollowingColumns[1]},
+			ForeignKeys: []*schema.ForeignKey{
+				{
+					Symbol:     "user_following_user_id",
+					Columns:    []*schema.Column{userFollowingColumns[0]},
+					RefColumns: []*schema.Column{usersColumns[0]},
+					OnDelete:   schema.Cascade,
+				},
+				{
+					Symbol:     "user_following_follower_id",
+					Columns:    []*schema.Column{userFollowingColumns[1]},
+					RefColumns: []*schema.Column{usersColumns[0]},
+					OnDelete:   schema.Cascade,
+				},
+			},
+		}
+	)
+	userFollowingTable.ForeignKeys[0].RefTable = usersTable
+	userFollowingTable.ForeignKeys[1].RefTable = usersTable
+
+	drv, err := sql.Open("sqlite3", "file:ent?mode=memory&cache=shared&_fk=1")
+	require.NoError(t, err)
+	defer drv.Close()
+	ctx := context.Background()
+	m, err := schema.NewMigrate(drv)
+	require.NoError(t, err)
+
+	// Migrate once.
+	require.NoError(t, m.Create(ctx, usersTable, userFollowingTable))
+
+	// Add data.
+	var exec = func(stmt string) {
+		_, err := drv.DB().ExecContext(ctx, stmt)
+		require.NoError(t, err)
+	}
+	exec("INSERT INTO `users` (`id`, `name`) VALUES (1, 'Ariel'), (2, 'Jannik');")
+	exec("INSERT INTO `user_following` (`user_id`, `follower_id`) VALUES (1,2), (2,1);")
+	var n int
+	require.NoError(t, drv.DB().QueryRow("SELECT COUNT(*) FROM `user_following`").Scan(&n))
+	require.Equal(t, 2, n)
+
+	// Modify a column in the users table.
+	usersTable.Columns[1].Nullable = true
+	require.NoError(t, m.Create(ctx, usersTable, userFollowingTable))
+
+	// Ensure the data in the join table does still exist.
+	require.NoError(t, drv.DB().QueryRow("SELECT COUNT(*) FROM `user_following`").Scan(&n))
+	require.Equal(t, 2, n)
+}
+
 func TestStorageKey(t *testing.T) {
 	require.Equal(t, "user_pet_id", migratev2.PetsTable.ForeignKeys[0].Symbol)
 	require.Equal(t, "user_friend_id1", migratev2.FriendsTable.ForeignKeys[0].Symbol)
 	require.Equal(t, "user_friend_id2", migratev2.FriendsTable.ForeignKeys[1].Symbol)
+}
+
+func ConsistentVersioned(t *testing.T, devURL string) {
+	p := t.TempDir()
+	ctx := context.Background()
+	dir, err := migrate.NewLocalDir(p)
+	require.NoError(t, err)
+	opts := []schema.MigrateOption{
+		schema.WithDir(dir),                                 // provide migration directory
+		schema.WithMigrationMode(schema.ModeReplay),         // provide migration mode
+		schema.WithDialect(strings.Split(devURL, "://")[0]), // Ent dialect to use
+		schema.WithFormatter(migrate.DefaultFormatter),      // Default Atlas formatter
+	}
+	// Run diff should generate a single SQL file containing the diff.
+	err = migratev2.NamedDiff(ctx, devURL, "first", opts...)
+	require.NoError(t, err)
+	files, err := dir.Files()
+	require.NoError(t, err)
+	require.Len(t, files, 1)
+	require.NotEmpty(t, files[0].Bytes())
+	// Re-run diff should not generate any new files.
+	err = migratev2.NamedDiff(ctx, devURL, "second", opts...)
+	require.NoError(t, err)
+	files, err = dir.Files()
+	require.NoError(t, err)
+	require.Len(t, files, 1)
 }
 
 func Versioned(t *testing.T, drv sql.ExecQuerier, devURL string, client *versioned.Client) {
@@ -285,7 +427,7 @@ func Versioned(t *testing.T, drv sql.ExecQuerier, devURL string, client *version
 	hf, err := dir.Checksum()
 	require.NoError(t, err)
 	require.NoError(t, migrate.WriteSumFile(dir, hf))
-	require.ErrorAs(t, client.Schema.Diff(ctx, opts...), &migrate.NotCleanError{})
+	require.ErrorAs(t, client.Schema.Diff(ctx, opts...), new(*migrate.NotCleanError))
 
 	// Diffing by replaying should not create new files.
 	require.Equal(t, 2, countFiles(t, dir))
@@ -307,7 +449,7 @@ func Versioned(t *testing.T, drv sql.ExecQuerier, devURL string, client *version
 	require.Equal(t, string(f1), string(f2))
 }
 
-func V1ToV2(t *testing.T, dialect string, clientv1 *entv1.Client, clientv2 *entv2.Client) {
+func V1ToV2(t *testing.T, dialect string, clientv1 *entv1.Client, clientv2 *entv2.Client, hooks ...schema.DiffHook) {
 	ctx := context.Background()
 
 	// Run migration and execute queries on v1.
@@ -323,7 +465,7 @@ func V1ToV2(t *testing.T, dialect string, clientv1 *entv1.Client, clientv2 *entv
 	clientv1.Conversion.DeleteOne(c1).ExecX(ctx)
 
 	// Run migration and execute queries on v2.
-	require.NoError(t, clientv2.Schema.Create(ctx, migratev2.WithGlobalUniqueID(true), migratev2.WithDropIndex(true), migratev2.WithDropColumn(true), schema.WithDiffHook(renameTokenColumn), schema.WithApplyHook(fillNulls(dialect))))
+	require.NoError(t, clientv2.Schema.Create(ctx, migratev2.WithGlobalUniqueID(true), migratev2.WithDropIndex(true), migratev2.WithDropColumn(true), schema.WithDiffHook(append(hooks, renameTokenColumn)...), schema.WithApplyHook(fillNulls(dialect))))
 	require.NoError(t, clientv2.Schema.Create(ctx, migratev2.WithGlobalUniqueID(true), migratev2.WithDropIndex(true), migratev2.WithDropColumn(true)), "should not create additional resources on multiple runs")
 	SanityV2(t, dialect, clientv2)
 	clientv2.Conversion.CreateBulk(clientv2.Conversion.Create(), clientv2.Conversion.Create(), clientv2.Conversion.Create()).ExecX(ctx)
@@ -334,9 +476,9 @@ func V1ToV2(t *testing.T, dialect string, clientv1 *entv1.Client, clientv2 *entv
 	// Since "users" created in the migration of v1, it will occupy the range of 1<<32-1 ... 2<<32-1,
 	// even though they are ordered differently in the migration of v2 (groups, pets, users).
 	idRange(t, u.ID, 3<<32-1, 4<<32)
-	idRange(t, clientv2.Group.Create().SaveX(ctx).ID, 4<<32-1, 5<<32)
-	idRange(t, clientv2.Media.Create().SaveX(ctx).ID, 5<<32-1, 6<<32)
-	idRange(t, clientv2.Pet.Create().SaveX(ctx).ID, 6<<32-1, 7<<32)
+	idRange(t, clientv2.Group.Create().SaveX(ctx).ID, 5<<32-1, 6<<32)
+	idRange(t, clientv2.Media.Create().SaveX(ctx).ID, 6<<32-1, 7<<32)
+	idRange(t, clientv2.Pet.Create().SaveX(ctx).ID, 7<<32-1, 8<<32)
 
 	// SQL specific predicates.
 	EqualFold(t, clientv2)
@@ -560,6 +702,99 @@ func TimePrecision(t *testing.T, drv *sql.Driver, query string) {
 	require.NoError(t, err)
 	require.Equalf(t, 3, p, "custom_types field %q", customtype.FieldTz3)
 	require.NoError(t, rows.Close())
+}
+
+func JSONDefault(t *testing.T, drv *sql.Driver, query string) {
+	ctx := context.Background()
+	rows, err := drv.QueryContext(ctx, query, user.FieldRoles)
+	require.NoError(t, err)
+	s, err := sql.ScanString(rows)
+	require.NoError(t, err)
+	require.NoError(t, rows.Close())
+	require.NotEmpty(t, s)
+}
+
+func TableComment(t *testing.T, drv *sql.Driver, query string) {
+	ctx := context.Background()
+	rows, err := drv.QueryContext(ctx, query)
+	require.NoError(t, err)
+	comment, err := sql.ScanString(rows)
+	require.NoError(t, err)
+	require.NoError(t, rows.Close())
+	require.Equal(t, "Comment that appears in both the schema and the generated code", comment)
+}
+
+func ColumnComments(t *testing.T, drv *sql.Driver, query string) {
+	ctx := context.Background()
+	rows, err := drv.QueryContext(ctx, query)
+	require.NoError(t, err)
+	var n2c []struct{ Name, Comment string }
+	require.NoError(t, sql.ScanSlice(rows, &n2c))
+	require.NoError(t, rows.Close())
+	// 0 and 1 are "id" and "source".
+	require.Equal(t, media.FieldSourceURI, n2c[2].Name)
+	require.Empty(t, n2c[2].Comment, "source_uri is disabled using annotation")
+	require.Equal(t, media.FieldText, n2c[3].Name)
+	require.Equal(t, "media text", n2c[3].Comment)
+}
+
+func DefaultExpr(t *testing.T, drv *sql.Driver, query string, expected1, expected2 string) {
+	ctx := context.Background()
+	rows, err := drv.QueryContext(ctx, query, user.FieldDefaultExpr)
+	require.NoError(t, err)
+	s, err := sql.ScanString(rows)
+	require.NoError(t, err)
+	require.NoError(t, rows.Close())
+	require.Equal(t, expected1, s)
+	rows, err = drv.QueryContext(ctx, query, user.FieldDefaultExprs)
+	require.NoError(t, err)
+	s, err = sql.ScanString(rows)
+	require.NoError(t, err)
+	require.NoError(t, rows.Close())
+	require.Equal(t, expected2, s)
+}
+
+func PKDefault(t *testing.T, drv *sql.Driver, query string, expected string) {
+	ctx := context.Background()
+	rows, err := drv.QueryContext(ctx, query, zoo.FieldID)
+	require.NoError(t, err)
+	s, err := sql.ScanString(rows)
+	require.NoError(t, err)
+	require.NoError(t, rows.Close())
+	require.Equal(t, expected, s)
+}
+
+func IncludeColumns(t *testing.T, drv *sql.Driver) {
+	rows, err := drv.QueryContext(context.Background(), "select indexdef from pg_indexes where indexname='user_workplace'")
+	require.NoError(t, err)
+	d, err := sql.ScanString(rows)
+	require.NoError(t, err)
+	require.NoError(t, rows.Close())
+	require.Equal(t, d, "CREATE INDEX user_workplace ON public.users USING btree (workplace) INCLUDE (nickname)")
+}
+
+func IndexOpClass(t *testing.T, drv *sql.Driver) {
+	rows, err := drv.QueryContext(context.Background(), "select indexdef from pg_indexes where indexname='user_age_phone'")
+	require.NoError(t, err)
+	d, err := sql.ScanString(rows)
+	require.NoError(t, err)
+	require.NoError(t, rows.Close())
+	require.Equal(t, d, "CREATE INDEX user_age_phone ON public.users USING btree (age, phone bpchar_pattern_ops)")
+}
+
+func SerialType(t *testing.T, c *entv2.Client) {
+	ctx := context.Background()
+	c.Blog.Create().ExecX(ctx)
+	require.NotZero(t, c.Blog.Query().OnlyX(ctx).Oid)
+}
+
+func PartialIndexes(t *testing.T, drv *sql.Driver, query, def string) {
+	rows, err := drv.QueryContext(context.Background(), query, "user_phone")
+	require.NoError(t, err)
+	d, err := sql.ScanString(rows)
+	require.NoError(t, err)
+	require.NoError(t, rows.Close())
+	require.Equal(t, d, def)
 }
 
 func idRange(t *testing.T, id, l, h int) {

@@ -20,6 +20,8 @@ const (
 	FieldMixedString = "mixed_string"
 	// FieldMixedEnum holds the string denoting the mixed_enum field in the database.
 	FieldMixedEnum = "mixed_enum"
+	// FieldActive holds the string denoting the active field in the database.
+	FieldActive = "active"
 	// FieldAge holds the string denoting the age field in the database.
 	FieldAge = "age"
 	// FieldName holds the string denoting the name field in the database.
@@ -46,6 +48,12 @@ const (
 	FieldStatus = "status"
 	// FieldWorkplace holds the string denoting the workplace field in the database.
 	FieldWorkplace = "workplace"
+	// FieldRoles holds the string denoting the roles field in the database.
+	FieldRoles = "roles"
+	// FieldDefaultExpr holds the string denoting the default_expr field in the database.
+	FieldDefaultExpr = "default_expr"
+	// FieldDefaultExprs holds the string denoting the default_exprs field in the database.
+	FieldDefaultExprs = "default_exprs"
 	// FieldCreatedAt holds the string denoting the created_at field in the database.
 	FieldCreatedAt = "created_at"
 	// FieldDropOptional holds the string denoting the drop_optional field in the database.
@@ -85,6 +93,7 @@ var Columns = []string{
 	FieldID,
 	FieldMixedString,
 	FieldMixedEnum,
+	FieldActive,
 	FieldAge,
 	FieldName,
 	FieldDescription,
@@ -98,8 +107,17 @@ var Columns = []string{
 	FieldState,
 	FieldStatus,
 	FieldWorkplace,
+	FieldRoles,
+	FieldDefaultExpr,
+	FieldDefaultExprs,
 	FieldCreatedAt,
 	FieldDropOptional,
+}
+
+// ForeignKeys holds the SQL foreign-keys that are owned by the "users"
+// table and are not defined as standalone fields in the schema.
+var ForeignKeys = []string{
+	"blog_admins",
 }
 
 var (
@@ -115,12 +133,19 @@ func ValidColumn(column string) bool {
 			return true
 		}
 	}
+	for i := range ForeignKeys {
+		if column == ForeignKeys[i] {
+			return true
+		}
+	}
 	return false
 }
 
 var (
 	// DefaultMixedString holds the default value on creation for the "mixed_string" field.
 	DefaultMixedString string
+	// DefaultActive holds the default value on creation for the "active" field.
+	DefaultActive bool
 	// NicknameValidator is a validator for the "nickname" field. It is called by the builders before save.
 	NicknameValidator func(string) error
 	// DefaultPhone holds the default value on creation for the "phone" field.

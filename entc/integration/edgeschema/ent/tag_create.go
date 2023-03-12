@@ -13,6 +13,8 @@ import (
 
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
+	"entgo.io/ent/entc/integration/edgeschema/ent/group"
+	"entgo.io/ent/entc/integration/edgeschema/ent/grouptag"
 	"entgo.io/ent/entc/integration/edgeschema/ent/tag"
 	"entgo.io/ent/entc/integration/edgeschema/ent/tweet"
 	"entgo.io/ent/entc/integration/edgeschema/ent/tweettag"
@@ -49,6 +51,21 @@ func (tc *TagCreate) AddTweets(t ...*Tweet) *TagCreate {
 	return tc.AddTweetIDs(ids...)
 }
 
+// AddGroupIDs adds the "groups" edge to the Group entity by IDs.
+func (tc *TagCreate) AddGroupIDs(ids ...int) *TagCreate {
+	tc.mutation.AddGroupIDs(ids...)
+	return tc
+}
+
+// AddGroups adds the "groups" edges to the Group entity.
+func (tc *TagCreate) AddGroups(g ...*Group) *TagCreate {
+	ids := make([]int, len(g))
+	for i := range g {
+		ids[i] = g[i].ID
+	}
+	return tc.AddGroupIDs(ids...)
+}
+
 // AddTweetTagIDs adds the "tweet_tags" edge to the TweetTag entity by IDs.
 func (tc *TagCreate) AddTweetTagIDs(ids ...uuid.UUID) *TagCreate {
 	tc.mutation.AddTweetTagIDs(ids...)
@@ -64,6 +81,21 @@ func (tc *TagCreate) AddTweetTags(t ...*TweetTag) *TagCreate {
 	return tc.AddTweetTagIDs(ids...)
 }
 
+// AddGroupTagIDs adds the "group_tags" edge to the GroupTag entity by IDs.
+func (tc *TagCreate) AddGroupTagIDs(ids ...int) *TagCreate {
+	tc.mutation.AddGroupTagIDs(ids...)
+	return tc
+}
+
+// AddGroupTags adds the "group_tags" edges to the GroupTag entity.
+func (tc *TagCreate) AddGroupTags(g ...*GroupTag) *TagCreate {
+	ids := make([]int, len(g))
+	for i := range g {
+		ids[i] = g[i].ID
+	}
+	return tc.AddGroupTagIDs(ids...)
+}
+
 // Mutation returns the TagMutation object of the builder.
 func (tc *TagCreate) Mutation() *TagMutation {
 	return tc.mutation
@@ -71,49 +103,7 @@ func (tc *TagCreate) Mutation() *TagMutation {
 
 // Save creates the Tag in the database.
 func (tc *TagCreate) Save(ctx context.Context) (*Tag, error) {
-	var (
-		err  error
-		node *Tag
-	)
-	if len(tc.hooks) == 0 {
-		if err = tc.check(); err != nil {
-			return nil, err
-		}
-		node, err = tc.sqlSave(ctx)
-	} else {
-		var mut Mutator = MutateFunc(func(ctx context.Context, m Mutation) (Value, error) {
-			mutation, ok := m.(*TagMutation)
-			if !ok {
-				return nil, fmt.Errorf("unexpected mutation type %T", m)
-			}
-			if err = tc.check(); err != nil {
-				return nil, err
-			}
-			tc.mutation = mutation
-			if node, err = tc.sqlSave(ctx); err != nil {
-				return nil, err
-			}
-			mutation.id = &node.ID
-			mutation.done = true
-			return node, err
-		})
-		for i := len(tc.hooks) - 1; i >= 0; i-- {
-			if tc.hooks[i] == nil {
-				return nil, fmt.Errorf("ent: uninitialized hook (forgotten import ent/runtime?)")
-			}
-			mut = tc.hooks[i](mut)
-		}
-		v, err := mut.Mutate(ctx, tc.mutation)
-		if err != nil {
-			return nil, err
-		}
-		nv, ok := v.(*Tag)
-		if !ok {
-			return nil, fmt.Errorf("unexpected node type %T returned from TagMutation", v)
-		}
-		node = nv
-	}
-	return node, err
+	return withHooks[*Tag, TagMutation](ctx, tc.sqlSave, tc.mutation, tc.hooks)
 }
 
 // SaveX calls Save and panics if Save returns an error.
@@ -147,6 +137,9 @@ func (tc *TagCreate) check() error {
 }
 
 func (tc *TagCreate) sqlSave(ctx context.Context) (*Tag, error) {
+	if err := tc.check(); err != nil {
+		return nil, err
+	}
 	_node, _spec := tc.createSpec()
 	if err := sqlgraph.CreateNode(ctx, tc.driver, _spec); err != nil {
 		if sqlgraph.IsConstraintError(err) {
@@ -156,27 +149,19 @@ func (tc *TagCreate) sqlSave(ctx context.Context) (*Tag, error) {
 	}
 	id := _spec.ID.Value.(int64)
 	_node.ID = int(id)
+	tc.mutation.id = &_node.ID
+	tc.mutation.done = true
 	return _node, nil
 }
 
 func (tc *TagCreate) createSpec() (*Tag, *sqlgraph.CreateSpec) {
 	var (
 		_node = &Tag{config: tc.config}
-		_spec = &sqlgraph.CreateSpec{
-			Table: tag.Table,
-			ID: &sqlgraph.FieldSpec{
-				Type:   field.TypeInt,
-				Column: tag.FieldID,
-			},
-		}
+		_spec = sqlgraph.NewCreateSpec(tag.Table, sqlgraph.NewFieldSpec(tag.FieldID, field.TypeInt))
 	)
 	_spec.OnConflict = tc.conflict
 	if value, ok := tc.mutation.Value(); ok {
-		_spec.Fields = append(_spec.Fields, &sqlgraph.FieldSpec{
-			Type:   field.TypeString,
-			Value:  value,
-			Column: tag.FieldValue,
-		})
+		_spec.SetField(tag.FieldValue, field.TypeString, value)
 		_node.Value = value
 	}
 	if nodes := tc.mutation.TweetsIDs(); len(nodes) > 0 {
@@ -187,10 +172,7 @@ func (tc *TagCreate) createSpec() (*Tag, *sqlgraph.CreateSpec) {
 			Columns: tag.TweetsPrimaryKey,
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: &sqlgraph.FieldSpec{
-					Type:   field.TypeInt,
-					Column: tweet.FieldID,
-				},
+				IDSpec: sqlgraph.NewFieldSpec(tweet.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {
@@ -205,6 +187,22 @@ func (tc *TagCreate) createSpec() (*Tag, *sqlgraph.CreateSpec) {
 		}
 		_spec.Edges = append(_spec.Edges, edge)
 	}
+	if nodes := tc.mutation.GroupsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2M,
+			Inverse: false,
+			Table:   tag.GroupsTable,
+			Columns: tag.GroupsPrimaryKey,
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(group.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
 	if nodes := tc.mutation.TweetTagsIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
@@ -213,10 +211,23 @@ func (tc *TagCreate) createSpec() (*Tag, *sqlgraph.CreateSpec) {
 			Columns: []string{tag.TweetTagsColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: &sqlgraph.FieldSpec{
-					Type:   field.TypeUUID,
-					Column: tweettag.FieldID,
-				},
+				IDSpec: sqlgraph.NewFieldSpec(tweettag.FieldID, field.TypeUUID),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := tc.mutation.GroupTagsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: true,
+			Table:   tag.GroupTagsTable,
+			Columns: []string{tag.GroupTagsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(grouptag.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {

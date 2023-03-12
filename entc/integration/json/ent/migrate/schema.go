@@ -17,12 +17,14 @@ var (
 		{Name: "id", Type: field.TypeInt, Increment: true},
 		{Name: "t", Type: field.TypeJSON, Nullable: true},
 		{Name: "url", Type: field.TypeJSON, Nullable: true},
+		{Name: "urls", Type: field.TypeJSON, Nullable: true},
 		{Name: "raw", Type: field.TypeJSON, Nullable: true},
 		{Name: "dirs", Type: field.TypeJSON},
 		{Name: "ints", Type: field.TypeJSON, Nullable: true},
 		{Name: "floats", Type: field.TypeJSON, Nullable: true},
 		{Name: "strings", Type: field.TypeJSON, Nullable: true},
 		{Name: "addr", Type: field.TypeJSON, Nullable: true},
+		{Name: "unknown", Type: field.TypeJSON, Nullable: true},
 	}
 	// UsersTable holds the schema information for the "users" table.
 	UsersTable = &schema.Table{

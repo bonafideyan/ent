@@ -39,6 +39,12 @@ func (uc *UserCreate) SetURL(u *url.URL) *UserCreate {
 	return uc
 }
 
+// SetURLs sets the "URLs" field.
+func (uc *UserCreate) SetURLs(u []*url.URL) *UserCreate {
+	uc.mutation.SetURLs(u)
+	return uc
+}
+
 // SetRaw sets the "raw" field.
 func (uc *UserCreate) SetRaw(jm json.RawMessage) *UserCreate {
 	uc.mutation.SetRaw(jm)
@@ -83,6 +89,12 @@ func (uc *UserCreate) SetNillableAddr(s *schema.Addr) *UserCreate {
 	return uc
 }
 
+// SetUnknown sets the "unknown" field.
+func (uc *UserCreate) SetUnknown(a any) *UserCreate {
+	uc.mutation.SetUnknown(a)
+	return uc
+}
+
 // Mutation returns the UserMutation object of the builder.
 func (uc *UserCreate) Mutation() *UserMutation {
 	return uc.mutation
@@ -90,50 +102,8 @@ func (uc *UserCreate) Mutation() *UserMutation {
 
 // Save creates the User in the database.
 func (uc *UserCreate) Save(ctx context.Context) (*User, error) {
-	var (
-		err  error
-		node *User
-	)
 	uc.defaults()
-	if len(uc.hooks) == 0 {
-		if err = uc.check(); err != nil {
-			return nil, err
-		}
-		node, err = uc.sqlSave(ctx)
-	} else {
-		var mut Mutator = MutateFunc(func(ctx context.Context, m Mutation) (Value, error) {
-			mutation, ok := m.(*UserMutation)
-			if !ok {
-				return nil, fmt.Errorf("unexpected mutation type %T", m)
-			}
-			if err = uc.check(); err != nil {
-				return nil, err
-			}
-			uc.mutation = mutation
-			if node, err = uc.sqlSave(ctx); err != nil {
-				return nil, err
-			}
-			mutation.id = &node.ID
-			mutation.done = true
-			return node, err
-		})
-		for i := len(uc.hooks) - 1; i >= 0; i-- {
-			if uc.hooks[i] == nil {
-				return nil, fmt.Errorf("ent: uninitialized hook (forgotten import ent/runtime?)")
-			}
-			mut = uc.hooks[i](mut)
-		}
-		v, err := mut.Mutate(ctx, uc.mutation)
-		if err != nil {
-			return nil, err
-		}
-		nv, ok := v.(*User)
-		if !ok {
-			return nil, fmt.Errorf("unexpected node type %T returned from UserMutation", v)
-		}
-		node = nv
-	}
-	return node, err
+	return withHooks[*User, UserMutation](ctx, uc.sqlSave, uc.mutation, uc.hooks)
 }
 
 // SaveX calls Save and panics if Save returns an error.
@@ -179,6 +149,9 @@ func (uc *UserCreate) check() error {
 }
 
 func (uc *UserCreate) sqlSave(ctx context.Context) (*User, error) {
+	if err := uc.check(); err != nil {
+		return nil, err
+	}
 	_node, _spec := uc.createSpec()
 	if err := sqlgraph.CreateNode(ctx, uc.driver, _spec); err != nil {
 		if sqlgraph.IsConstraintError(err) {
@@ -188,83 +161,55 @@ func (uc *UserCreate) sqlSave(ctx context.Context) (*User, error) {
 	}
 	id := _spec.ID.Value.(int64)
 	_node.ID = int(id)
+	uc.mutation.id = &_node.ID
+	uc.mutation.done = true
 	return _node, nil
 }
 
 func (uc *UserCreate) createSpec() (*User, *sqlgraph.CreateSpec) {
 	var (
 		_node = &User{config: uc.config}
-		_spec = &sqlgraph.CreateSpec{
-			Table: user.Table,
-			ID: &sqlgraph.FieldSpec{
-				Type:   field.TypeInt,
-				Column: user.FieldID,
-			},
-		}
+		_spec = sqlgraph.NewCreateSpec(user.Table, sqlgraph.NewFieldSpec(user.FieldID, field.TypeInt))
 	)
 	if value, ok := uc.mutation.T(); ok {
-		_spec.Fields = append(_spec.Fields, &sqlgraph.FieldSpec{
-			Type:   field.TypeJSON,
-			Value:  value,
-			Column: user.FieldT,
-		})
+		_spec.SetField(user.FieldT, field.TypeJSON, value)
 		_node.T = value
 	}
 	if value, ok := uc.mutation.URL(); ok {
-		_spec.Fields = append(_spec.Fields, &sqlgraph.FieldSpec{
-			Type:   field.TypeJSON,
-			Value:  value,
-			Column: user.FieldURL,
-		})
+		_spec.SetField(user.FieldURL, field.TypeJSON, value)
 		_node.URL = value
 	}
+	if value, ok := uc.mutation.URLs(); ok {
+		_spec.SetField(user.FieldURLs, field.TypeJSON, value)
+		_node.URLs = value
+	}
 	if value, ok := uc.mutation.Raw(); ok {
-		_spec.Fields = append(_spec.Fields, &sqlgraph.FieldSpec{
-			Type:   field.TypeJSON,
-			Value:  value,
-			Column: user.FieldRaw,
-		})
+		_spec.SetField(user.FieldRaw, field.TypeJSON, value)
 		_node.Raw = value
 	}
 	if value, ok := uc.mutation.Dirs(); ok {
-		_spec.Fields = append(_spec.Fields, &sqlgraph.FieldSpec{
-			Type:   field.TypeJSON,
-			Value:  value,
-			Column: user.FieldDirs,
-		})
+		_spec.SetField(user.FieldDirs, field.TypeJSON, value)
 		_node.Dirs = value
 	}
 	if value, ok := uc.mutation.Ints(); ok {
-		_spec.Fields = append(_spec.Fields, &sqlgraph.FieldSpec{
-			Type:   field.TypeJSON,
-			Value:  value,
-			Column: user.FieldInts,
-		})
+		_spec.SetField(user.FieldInts, field.TypeJSON, value)
 		_node.Ints = value
 	}
 	if value, ok := uc.mutation.Floats(); ok {
-		_spec.Fields = append(_spec.Fields, &sqlgraph.FieldSpec{
-			Type:   field.TypeJSON,
-			Value:  value,
-			Column: user.FieldFloats,
-		})
+		_spec.SetField(user.FieldFloats, field.TypeJSON, value)
 		_node.Floats = value
 	}
 	if value, ok := uc.mutation.Strings(); ok {
-		_spec.Fields = append(_spec.Fields, &sqlgraph.FieldSpec{
-			Type:   field.TypeJSON,
-			Value:  value,
-			Column: user.FieldStrings,
-		})
+		_spec.SetField(user.FieldStrings, field.TypeJSON, value)
 		_node.Strings = value
 	}
 	if value, ok := uc.mutation.Addr(); ok {
-		_spec.Fields = append(_spec.Fields, &sqlgraph.FieldSpec{
-			Type:   field.TypeJSON,
-			Value:  value,
-			Column: user.FieldAddr,
-		})
+		_spec.SetField(user.FieldAddr, field.TypeJSON, value)
 		_node.Addr = value
+	}
+	if value, ok := uc.mutation.Unknown(); ok {
+		_spec.SetField(user.FieldUnknown, field.TypeJSON, value)
+		_node.Unknown = value
 	}
 	return _node, _spec
 }

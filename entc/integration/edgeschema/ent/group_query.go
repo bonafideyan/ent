@@ -15,7 +15,9 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/entc/integration/edgeschema/ent/group"
+	"entgo.io/ent/entc/integration/edgeschema/ent/grouptag"
 	"entgo.io/ent/entc/integration/edgeschema/ent/predicate"
+	"entgo.io/ent/entc/integration/edgeschema/ent/tag"
 	"entgo.io/ent/entc/integration/edgeschema/ent/user"
 	"entgo.io/ent/entc/integration/edgeschema/ent/usergroup"
 	"entgo.io/ent/schema/field"
@@ -24,14 +26,14 @@ import (
 // GroupQuery is the builder for querying Group entities.
 type GroupQuery struct {
 	config
-	limit           *int
-	offset          *int
-	unique          *bool
+	ctx             *QueryContext
 	order           []OrderFunc
-	fields          []string
+	inters          []Interceptor
 	predicates      []predicate.Group
 	withUsers       *UserQuery
+	withTags        *TagQuery
 	withJoinedUsers *UserGroupQuery
+	withGroupTags   *GroupTagQuery
 	// intermediate query (i.e. traversal path).
 	sql  *sql.Selector
 	path func(context.Context) (*sql.Selector, error)
@@ -43,26 +45,26 @@ func (gq *GroupQuery) Where(ps ...predicate.Group) *GroupQuery {
 	return gq
 }
 
-// Limit adds a limit step to the query.
+// Limit the number of records to be returned by this query.
 func (gq *GroupQuery) Limit(limit int) *GroupQuery {
-	gq.limit = &limit
+	gq.ctx.Limit = &limit
 	return gq
 }
 
-// Offset adds an offset step to the query.
+// Offset to start from.
 func (gq *GroupQuery) Offset(offset int) *GroupQuery {
-	gq.offset = &offset
+	gq.ctx.Offset = &offset
 	return gq
 }
 
 // Unique configures the query builder to filter duplicate records on query.
 // By default, unique is set to true, and can be disabled using this method.
 func (gq *GroupQuery) Unique(unique bool) *GroupQuery {
-	gq.unique = &unique
+	gq.ctx.Unique = &unique
 	return gq
 }
 
-// Order adds an order step to the query.
+// Order specifies how the records should be ordered.
 func (gq *GroupQuery) Order(o ...OrderFunc) *GroupQuery {
 	gq.order = append(gq.order, o...)
 	return gq
@@ -70,7 +72,7 @@ func (gq *GroupQuery) Order(o ...OrderFunc) *GroupQuery {
 
 // QueryUsers chains the current query on the "users" edge.
 func (gq *GroupQuery) QueryUsers() *UserQuery {
-	query := &UserQuery{config: gq.config}
+	query := (&UserClient{config: gq.config}).Query()
 	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
 		if err := gq.prepareQuery(ctx); err != nil {
 			return nil, err
@@ -90,9 +92,31 @@ func (gq *GroupQuery) QueryUsers() *UserQuery {
 	return query
 }
 
+// QueryTags chains the current query on the "tags" edge.
+func (gq *GroupQuery) QueryTags() *TagQuery {
+	query := (&TagClient{config: gq.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := gq.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := gq.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(group.Table, group.FieldID, selector),
+			sqlgraph.To(tag.Table, tag.FieldID),
+			sqlgraph.Edge(sqlgraph.M2M, true, group.TagsTable, group.TagsPrimaryKey...),
+		)
+		fromU = sqlgraph.SetNeighbors(gq.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
 // QueryJoinedUsers chains the current query on the "joined_users" edge.
 func (gq *GroupQuery) QueryJoinedUsers() *UserGroupQuery {
-	query := &UserGroupQuery{config: gq.config}
+	query := (&UserGroupClient{config: gq.config}).Query()
 	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
 		if err := gq.prepareQuery(ctx); err != nil {
 			return nil, err
@@ -112,10 +136,32 @@ func (gq *GroupQuery) QueryJoinedUsers() *UserGroupQuery {
 	return query
 }
 
+// QueryGroupTags chains the current query on the "group_tags" edge.
+func (gq *GroupQuery) QueryGroupTags() *GroupTagQuery {
+	query := (&GroupTagClient{config: gq.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := gq.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := gq.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(group.Table, group.FieldID, selector),
+			sqlgraph.To(grouptag.Table, grouptag.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, true, group.GroupTagsTable, group.GroupTagsColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(gq.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
 // First returns the first Group entity from the query.
 // Returns a *NotFoundError when no Group was found.
 func (gq *GroupQuery) First(ctx context.Context) (*Group, error) {
-	nodes, err := gq.Limit(1).All(ctx)
+	nodes, err := gq.Limit(1).All(setContextOp(ctx, gq.ctx, "First"))
 	if err != nil {
 		return nil, err
 	}
@@ -138,7 +184,7 @@ func (gq *GroupQuery) FirstX(ctx context.Context) *Group {
 // Returns a *NotFoundError when no Group ID was found.
 func (gq *GroupQuery) FirstID(ctx context.Context) (id int, err error) {
 	var ids []int
-	if ids, err = gq.Limit(1).IDs(ctx); err != nil {
+	if ids, err = gq.Limit(1).IDs(setContextOp(ctx, gq.ctx, "FirstID")); err != nil {
 		return
 	}
 	if len(ids) == 0 {
@@ -161,7 +207,7 @@ func (gq *GroupQuery) FirstIDX(ctx context.Context) int {
 // Returns a *NotSingularError when more than one Group entity is found.
 // Returns a *NotFoundError when no Group entities are found.
 func (gq *GroupQuery) Only(ctx context.Context) (*Group, error) {
-	nodes, err := gq.Limit(2).All(ctx)
+	nodes, err := gq.Limit(2).All(setContextOp(ctx, gq.ctx, "Only"))
 	if err != nil {
 		return nil, err
 	}
@@ -189,7 +235,7 @@ func (gq *GroupQuery) OnlyX(ctx context.Context) *Group {
 // Returns a *NotFoundError when no entities are found.
 func (gq *GroupQuery) OnlyID(ctx context.Context) (id int, err error) {
 	var ids []int
-	if ids, err = gq.Limit(2).IDs(ctx); err != nil {
+	if ids, err = gq.Limit(2).IDs(setContextOp(ctx, gq.ctx, "OnlyID")); err != nil {
 		return
 	}
 	switch len(ids) {
@@ -214,10 +260,12 @@ func (gq *GroupQuery) OnlyIDX(ctx context.Context) int {
 
 // All executes the query and returns a list of Groups.
 func (gq *GroupQuery) All(ctx context.Context) ([]*Group, error) {
+	ctx = setContextOp(ctx, gq.ctx, "All")
 	if err := gq.prepareQuery(ctx); err != nil {
 		return nil, err
 	}
-	return gq.sqlAll(ctx)
+	qr := querierAll[[]*Group, *GroupQuery]()
+	return withInterceptors[[]*Group](ctx, gq, qr, gq.inters)
 }
 
 // AllX is like All, but panics if an error occurs.
@@ -230,9 +278,12 @@ func (gq *GroupQuery) AllX(ctx context.Context) []*Group {
 }
 
 // IDs executes the query and returns a list of Group IDs.
-func (gq *GroupQuery) IDs(ctx context.Context) ([]int, error) {
-	var ids []int
-	if err := gq.Select(group.FieldID).Scan(ctx, &ids); err != nil {
+func (gq *GroupQuery) IDs(ctx context.Context) (ids []int, err error) {
+	if gq.ctx.Unique == nil && gq.path != nil {
+		gq.Unique(true)
+	}
+	ctx = setContextOp(ctx, gq.ctx, "IDs")
+	if err = gq.Select(group.FieldID).Scan(ctx, &ids); err != nil {
 		return nil, err
 	}
 	return ids, nil
@@ -249,10 +300,11 @@ func (gq *GroupQuery) IDsX(ctx context.Context) []int {
 
 // Count returns the count of the given query.
 func (gq *GroupQuery) Count(ctx context.Context) (int, error) {
+	ctx = setContextOp(ctx, gq.ctx, "Count")
 	if err := gq.prepareQuery(ctx); err != nil {
 		return 0, err
 	}
-	return gq.sqlCount(ctx)
+	return withInterceptors[int](ctx, gq, querierCount[*GroupQuery](), gq.inters)
 }
 
 // CountX is like Count, but panics if an error occurs.
@@ -266,10 +318,15 @@ func (gq *GroupQuery) CountX(ctx context.Context) int {
 
 // Exist returns true if the query has elements in the graph.
 func (gq *GroupQuery) Exist(ctx context.Context) (bool, error) {
-	if err := gq.prepareQuery(ctx); err != nil {
-		return false, err
+	ctx = setContextOp(ctx, gq.ctx, "Exist")
+	switch _, err := gq.FirstID(ctx); {
+	case IsNotFound(err):
+		return false, nil
+	case err != nil:
+		return false, fmt.Errorf("ent: check existence: %w", err)
+	default:
+		return true, nil
 	}
-	return gq.sqlExist(ctx)
 }
 
 // ExistX is like Exist, but panics if an error occurs.
@@ -289,23 +346,24 @@ func (gq *GroupQuery) Clone() *GroupQuery {
 	}
 	return &GroupQuery{
 		config:          gq.config,
-		limit:           gq.limit,
-		offset:          gq.offset,
+		ctx:             gq.ctx.Clone(),
 		order:           append([]OrderFunc{}, gq.order...),
+		inters:          append([]Interceptor{}, gq.inters...),
 		predicates:      append([]predicate.Group{}, gq.predicates...),
 		withUsers:       gq.withUsers.Clone(),
+		withTags:        gq.withTags.Clone(),
 		withJoinedUsers: gq.withJoinedUsers.Clone(),
+		withGroupTags:   gq.withGroupTags.Clone(),
 		// clone intermediate query.
-		sql:    gq.sql.Clone(),
-		path:   gq.path,
-		unique: gq.unique,
+		sql:  gq.sql.Clone(),
+		path: gq.path,
 	}
 }
 
 // WithUsers tells the query-builder to eager-load the nodes that are connected to
 // the "users" edge. The optional arguments are used to configure the query builder of the edge.
 func (gq *GroupQuery) WithUsers(opts ...func(*UserQuery)) *GroupQuery {
-	query := &UserQuery{config: gq.config}
+	query := (&UserClient{config: gq.config}).Query()
 	for _, opt := range opts {
 		opt(query)
 	}
@@ -313,14 +371,36 @@ func (gq *GroupQuery) WithUsers(opts ...func(*UserQuery)) *GroupQuery {
 	return gq
 }
 
+// WithTags tells the query-builder to eager-load the nodes that are connected to
+// the "tags" edge. The optional arguments are used to configure the query builder of the edge.
+func (gq *GroupQuery) WithTags(opts ...func(*TagQuery)) *GroupQuery {
+	query := (&TagClient{config: gq.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	gq.withTags = query
+	return gq
+}
+
 // WithJoinedUsers tells the query-builder to eager-load the nodes that are connected to
 // the "joined_users" edge. The optional arguments are used to configure the query builder of the edge.
 func (gq *GroupQuery) WithJoinedUsers(opts ...func(*UserGroupQuery)) *GroupQuery {
-	query := &UserGroupQuery{config: gq.config}
+	query := (&UserGroupClient{config: gq.config}).Query()
 	for _, opt := range opts {
 		opt(query)
 	}
 	gq.withJoinedUsers = query
+	return gq
+}
+
+// WithGroupTags tells the query-builder to eager-load the nodes that are connected to
+// the "group_tags" edge. The optional arguments are used to configure the query builder of the edge.
+func (gq *GroupQuery) WithGroupTags(opts ...func(*GroupTagQuery)) *GroupQuery {
+	query := (&GroupTagClient{config: gq.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	gq.withGroupTags = query
 	return gq
 }
 
@@ -339,16 +419,11 @@ func (gq *GroupQuery) WithJoinedUsers(opts ...func(*UserGroupQuery)) *GroupQuery
 //		Aggregate(ent.Count()).
 //		Scan(ctx, &v)
 func (gq *GroupQuery) GroupBy(field string, fields ...string) *GroupGroupBy {
-	grbuild := &GroupGroupBy{config: gq.config}
-	grbuild.fields = append([]string{field}, fields...)
-	grbuild.path = func(ctx context.Context) (prev *sql.Selector, err error) {
-		if err := gq.prepareQuery(ctx); err != nil {
-			return nil, err
-		}
-		return gq.sqlQuery(ctx), nil
-	}
+	gq.ctx.Fields = append([]string{field}, fields...)
+	grbuild := &GroupGroupBy{build: gq}
+	grbuild.flds = &gq.ctx.Fields
 	grbuild.label = group.Label
-	grbuild.flds, grbuild.scan = &grbuild.fields, grbuild.Scan
+	grbuild.scan = grbuild.Scan
 	return grbuild
 }
 
@@ -365,15 +440,30 @@ func (gq *GroupQuery) GroupBy(field string, fields ...string) *GroupGroupBy {
 //		Select(group.FieldName).
 //		Scan(ctx, &v)
 func (gq *GroupQuery) Select(fields ...string) *GroupSelect {
-	gq.fields = append(gq.fields, fields...)
-	selbuild := &GroupSelect{GroupQuery: gq}
-	selbuild.label = group.Label
-	selbuild.flds, selbuild.scan = &gq.fields, selbuild.Scan
-	return selbuild
+	gq.ctx.Fields = append(gq.ctx.Fields, fields...)
+	sbuild := &GroupSelect{GroupQuery: gq}
+	sbuild.label = group.Label
+	sbuild.flds, sbuild.scan = &gq.ctx.Fields, sbuild.Scan
+	return sbuild
+}
+
+// Aggregate returns a GroupSelect configured with the given aggregations.
+func (gq *GroupQuery) Aggregate(fns ...AggregateFunc) *GroupSelect {
+	return gq.Select().Aggregate(fns...)
 }
 
 func (gq *GroupQuery) prepareQuery(ctx context.Context) error {
-	for _, f := range gq.fields {
+	for _, inter := range gq.inters {
+		if inter == nil {
+			return fmt.Errorf("ent: uninitialized interceptor (forgotten import ent/runtime?)")
+		}
+		if trv, ok := inter.(Traverser); ok {
+			if err := trv.Traverse(ctx, gq); err != nil {
+				return err
+			}
+		}
+	}
+	for _, f := range gq.ctx.Fields {
 		if !group.ValidColumn(f) {
 			return &ValidationError{Name: f, err: fmt.Errorf("ent: invalid field %q for query", f)}
 		}
@@ -392,9 +482,11 @@ func (gq *GroupQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Group,
 	var (
 		nodes       = []*Group{}
 		_spec       = gq.querySpec()
-		loadedTypes = [2]bool{
+		loadedTypes = [4]bool{
 			gq.withUsers != nil,
+			gq.withTags != nil,
 			gq.withJoinedUsers != nil,
+			gq.withGroupTags != nil,
 		}
 	)
 	_spec.ScanValues = func(columns []string) ([]any, error) {
@@ -422,10 +514,24 @@ func (gq *GroupQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Group,
 			return nil, err
 		}
 	}
+	if query := gq.withTags; query != nil {
+		if err := gq.loadTags(ctx, query, nodes,
+			func(n *Group) { n.Edges.Tags = []*Tag{} },
+			func(n *Group, e *Tag) { n.Edges.Tags = append(n.Edges.Tags, e) }); err != nil {
+			return nil, err
+		}
+	}
 	if query := gq.withJoinedUsers; query != nil {
 		if err := gq.loadJoinedUsers(ctx, query, nodes,
 			func(n *Group) { n.Edges.JoinedUsers = []*UserGroup{} },
 			func(n *Group, e *UserGroup) { n.Edges.JoinedUsers = append(n.Edges.JoinedUsers, e) }); err != nil {
+			return nil, err
+		}
+	}
+	if query := gq.withGroupTags; query != nil {
+		if err := gq.loadGroupTags(ctx, query, nodes,
+			func(n *Group) { n.Edges.GroupTags = []*GroupTag{} },
+			func(n *Group, e *GroupTag) { n.Edges.GroupTags = append(n.Edges.GroupTags, e) }); err != nil {
 			return nil, err
 		}
 	}
@@ -455,27 +561,30 @@ func (gq *GroupQuery) loadUsers(ctx context.Context, query *UserQuery, nodes []*
 	if err := query.prepareQuery(ctx); err != nil {
 		return err
 	}
-	neighbors, err := query.sqlAll(ctx, func(_ context.Context, spec *sqlgraph.QuerySpec) {
-		assign := spec.Assign
-		values := spec.ScanValues
-		spec.ScanValues = func(columns []string) ([]any, error) {
-			values, err := values(columns[1:])
-			if err != nil {
-				return nil, err
+	qr := QuerierFunc(func(ctx context.Context, q Query) (Value, error) {
+		return query.sqlAll(ctx, func(_ context.Context, spec *sqlgraph.QuerySpec) {
+			assign := spec.Assign
+			values := spec.ScanValues
+			spec.ScanValues = func(columns []string) ([]any, error) {
+				values, err := values(columns[1:])
+				if err != nil {
+					return nil, err
+				}
+				return append([]any{new(sql.NullInt64)}, values...), nil
 			}
-			return append([]any{new(sql.NullInt64)}, values...), nil
-		}
-		spec.Assign = func(columns []string, values []any) error {
-			outValue := int(values[0].(*sql.NullInt64).Int64)
-			inValue := int(values[1].(*sql.NullInt64).Int64)
-			if nids[inValue] == nil {
-				nids[inValue] = map[*Group]struct{}{byID[outValue]: struct{}{}}
-				return assign(columns[1:], values[1:])
+			spec.Assign = func(columns []string, values []any) error {
+				outValue := int(values[0].(*sql.NullInt64).Int64)
+				inValue := int(values[1].(*sql.NullInt64).Int64)
+				if nids[inValue] == nil {
+					nids[inValue] = map[*Group]struct{}{byID[outValue]: {}}
+					return assign(columns[1:], values[1:])
+				}
+				nids[inValue][byID[outValue]] = struct{}{}
+				return nil
 			}
-			nids[inValue][byID[outValue]] = struct{}{}
-			return nil
-		}
+		})
 	})
+	neighbors, err := withInterceptors[[]*User](ctx, query, qr, query.inters)
 	if err != nil {
 		return err
 	}
@@ -483,6 +592,67 @@ func (gq *GroupQuery) loadUsers(ctx context.Context, query *UserQuery, nodes []*
 		nodes, ok := nids[n.ID]
 		if !ok {
 			return fmt.Errorf(`unexpected "users" node returned %v`, n.ID)
+		}
+		for kn := range nodes {
+			assign(kn, n)
+		}
+	}
+	return nil
+}
+func (gq *GroupQuery) loadTags(ctx context.Context, query *TagQuery, nodes []*Group, init func(*Group), assign func(*Group, *Tag)) error {
+	edgeIDs := make([]driver.Value, len(nodes))
+	byID := make(map[int]*Group)
+	nids := make(map[int]map[*Group]struct{})
+	for i, node := range nodes {
+		edgeIDs[i] = node.ID
+		byID[node.ID] = node
+		if init != nil {
+			init(node)
+		}
+	}
+	query.Where(func(s *sql.Selector) {
+		joinT := sql.Table(group.TagsTable)
+		s.Join(joinT).On(s.C(tag.FieldID), joinT.C(group.TagsPrimaryKey[0]))
+		s.Where(sql.InValues(joinT.C(group.TagsPrimaryKey[1]), edgeIDs...))
+		columns := s.SelectedColumns()
+		s.Select(joinT.C(group.TagsPrimaryKey[1]))
+		s.AppendSelect(columns...)
+		s.SetDistinct(false)
+	})
+	if err := query.prepareQuery(ctx); err != nil {
+		return err
+	}
+	qr := QuerierFunc(func(ctx context.Context, q Query) (Value, error) {
+		return query.sqlAll(ctx, func(_ context.Context, spec *sqlgraph.QuerySpec) {
+			assign := spec.Assign
+			values := spec.ScanValues
+			spec.ScanValues = func(columns []string) ([]any, error) {
+				values, err := values(columns[1:])
+				if err != nil {
+					return nil, err
+				}
+				return append([]any{new(sql.NullInt64)}, values...), nil
+			}
+			spec.Assign = func(columns []string, values []any) error {
+				outValue := int(values[0].(*sql.NullInt64).Int64)
+				inValue := int(values[1].(*sql.NullInt64).Int64)
+				if nids[inValue] == nil {
+					nids[inValue] = map[*Group]struct{}{byID[outValue]: {}}
+					return assign(columns[1:], values[1:])
+				}
+				nids[inValue][byID[outValue]] = struct{}{}
+				return nil
+			}
+		})
+	})
+	neighbors, err := withInterceptors[[]*Tag](ctx, query, qr, query.inters)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		nodes, ok := nids[n.ID]
+		if !ok {
+			return fmt.Errorf(`unexpected "tags" node returned %v`, n.ID)
 		}
 		for kn := range nodes {
 			assign(kn, n)
@@ -517,41 +687,52 @@ func (gq *GroupQuery) loadJoinedUsers(ctx context.Context, query *UserGroupQuery
 	}
 	return nil
 }
+func (gq *GroupQuery) loadGroupTags(ctx context.Context, query *GroupTagQuery, nodes []*Group, init func(*Group), assign func(*Group, *GroupTag)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[int]*Group)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	query.Where(predicate.GroupTag(func(s *sql.Selector) {
+		s.Where(sql.InValues(group.GroupTagsColumn, fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.GroupID
+		node, ok := nodeids[fk]
+		if !ok {
+			return fmt.Errorf(`unexpected foreign-key "group_id" returned %v for node %v`, fk, n.ID)
+		}
+		assign(node, n)
+	}
+	return nil
+}
 
 func (gq *GroupQuery) sqlCount(ctx context.Context) (int, error) {
 	_spec := gq.querySpec()
-	_spec.Node.Columns = gq.fields
-	if len(gq.fields) > 0 {
-		_spec.Unique = gq.unique != nil && *gq.unique
+	_spec.Node.Columns = gq.ctx.Fields
+	if len(gq.ctx.Fields) > 0 {
+		_spec.Unique = gq.ctx.Unique != nil && *gq.ctx.Unique
 	}
 	return sqlgraph.CountNodes(ctx, gq.driver, _spec)
 }
 
-func (gq *GroupQuery) sqlExist(ctx context.Context) (bool, error) {
-	n, err := gq.sqlCount(ctx)
-	if err != nil {
-		return false, fmt.Errorf("ent: check existence: %w", err)
-	}
-	return n > 0, nil
-}
-
 func (gq *GroupQuery) querySpec() *sqlgraph.QuerySpec {
-	_spec := &sqlgraph.QuerySpec{
-		Node: &sqlgraph.NodeSpec{
-			Table:   group.Table,
-			Columns: group.Columns,
-			ID: &sqlgraph.FieldSpec{
-				Type:   field.TypeInt,
-				Column: group.FieldID,
-			},
-		},
-		From:   gq.sql,
-		Unique: true,
-	}
-	if unique := gq.unique; unique != nil {
+	_spec := sqlgraph.NewQuerySpec(group.Table, group.Columns, sqlgraph.NewFieldSpec(group.FieldID, field.TypeInt))
+	_spec.From = gq.sql
+	if unique := gq.ctx.Unique; unique != nil {
 		_spec.Unique = *unique
+	} else if gq.path != nil {
+		_spec.Unique = true
 	}
-	if fields := gq.fields; len(fields) > 0 {
+	if fields := gq.ctx.Fields; len(fields) > 0 {
 		_spec.Node.Columns = make([]string, 0, len(fields))
 		_spec.Node.Columns = append(_spec.Node.Columns, group.FieldID)
 		for i := range fields {
@@ -567,10 +748,10 @@ func (gq *GroupQuery) querySpec() *sqlgraph.QuerySpec {
 			}
 		}
 	}
-	if limit := gq.limit; limit != nil {
+	if limit := gq.ctx.Limit; limit != nil {
 		_spec.Limit = *limit
 	}
-	if offset := gq.offset; offset != nil {
+	if offset := gq.ctx.Offset; offset != nil {
 		_spec.Offset = *offset
 	}
 	if ps := gq.order; len(ps) > 0 {
@@ -586,7 +767,7 @@ func (gq *GroupQuery) querySpec() *sqlgraph.QuerySpec {
 func (gq *GroupQuery) sqlQuery(ctx context.Context) *sql.Selector {
 	builder := sql.Dialect(gq.driver.Dialect())
 	t1 := builder.Table(group.Table)
-	columns := gq.fields
+	columns := gq.ctx.Fields
 	if len(columns) == 0 {
 		columns = group.Columns
 	}
@@ -595,7 +776,7 @@ func (gq *GroupQuery) sqlQuery(ctx context.Context) *sql.Selector {
 		selector = gq.sql
 		selector.Select(selector.Columns(columns...)...)
 	}
-	if gq.unique != nil && *gq.unique {
+	if gq.ctx.Unique != nil && *gq.ctx.Unique {
 		selector.Distinct()
 	}
 	for _, p := range gq.predicates {
@@ -604,12 +785,12 @@ func (gq *GroupQuery) sqlQuery(ctx context.Context) *sql.Selector {
 	for _, p := range gq.order {
 		p(selector)
 	}
-	if offset := gq.offset; offset != nil {
+	if offset := gq.ctx.Offset; offset != nil {
 		// limit is mandatory for offset clause. We start
 		// with default value, and override it below if needed.
 		selector.Offset(*offset).Limit(math.MaxInt32)
 	}
-	if limit := gq.limit; limit != nil {
+	if limit := gq.ctx.Limit; limit != nil {
 		selector.Limit(*limit)
 	}
 	return selector
@@ -617,13 +798,8 @@ func (gq *GroupQuery) sqlQuery(ctx context.Context) *sql.Selector {
 
 // GroupGroupBy is the group-by builder for Group entities.
 type GroupGroupBy struct {
-	config
 	selector
-	fields []string
-	fns    []AggregateFunc
-	// intermediate query (i.e. traversal path).
-	sql  *sql.Selector
-	path func(context.Context) (*sql.Selector, error)
+	build *GroupQuery
 }
 
 // Aggregate adds the given aggregation functions to the group-by query.
@@ -632,74 +808,77 @@ func (ggb *GroupGroupBy) Aggregate(fns ...AggregateFunc) *GroupGroupBy {
 	return ggb
 }
 
-// Scan applies the group-by query and scans the result into the given value.
+// Scan applies the selector query and scans the result into the given value.
 func (ggb *GroupGroupBy) Scan(ctx context.Context, v any) error {
-	query, err := ggb.path(ctx)
-	if err != nil {
+	ctx = setContextOp(ctx, ggb.build.ctx, "GroupBy")
+	if err := ggb.build.prepareQuery(ctx); err != nil {
 		return err
 	}
-	ggb.sql = query
-	return ggb.sqlScan(ctx, v)
+	return scanWithInterceptors[*GroupQuery, *GroupGroupBy](ctx, ggb.build, ggb, ggb.build.inters, v)
 }
 
-func (ggb *GroupGroupBy) sqlScan(ctx context.Context, v any) error {
-	for _, f := range ggb.fields {
-		if !group.ValidColumn(f) {
-			return &ValidationError{Name: f, err: fmt.Errorf("invalid field %q for group-by", f)}
-		}
+func (ggb *GroupGroupBy) sqlScan(ctx context.Context, root *GroupQuery, v any) error {
+	selector := root.sqlQuery(ctx).Select()
+	aggregation := make([]string, 0, len(ggb.fns))
+	for _, fn := range ggb.fns {
+		aggregation = append(aggregation, fn(selector))
 	}
-	selector := ggb.sqlQuery()
+	if len(selector.SelectedColumns()) == 0 {
+		columns := make([]string, 0, len(*ggb.flds)+len(ggb.fns))
+		for _, f := range *ggb.flds {
+			columns = append(columns, selector.C(f))
+		}
+		columns = append(columns, aggregation...)
+		selector.Select(columns...)
+	}
+	selector.GroupBy(selector.Columns(*ggb.flds...)...)
 	if err := selector.Err(); err != nil {
 		return err
 	}
 	rows := &sql.Rows{}
 	query, args := selector.Query()
-	if err := ggb.driver.Query(ctx, query, args, rows); err != nil {
+	if err := ggb.build.driver.Query(ctx, query, args, rows); err != nil {
 		return err
 	}
 	defer rows.Close()
 	return sql.ScanSlice(rows, v)
 }
 
-func (ggb *GroupGroupBy) sqlQuery() *sql.Selector {
-	selector := ggb.sql.Select()
-	aggregation := make([]string, 0, len(ggb.fns))
-	for _, fn := range ggb.fns {
-		aggregation = append(aggregation, fn(selector))
-	}
-	// If no columns were selected in a custom aggregation function, the default
-	// selection is the fields used for "group-by", and the aggregation functions.
-	if len(selector.SelectedColumns()) == 0 {
-		columns := make([]string, 0, len(ggb.fields)+len(ggb.fns))
-		for _, f := range ggb.fields {
-			columns = append(columns, selector.C(f))
-		}
-		columns = append(columns, aggregation...)
-		selector.Select(columns...)
-	}
-	return selector.GroupBy(selector.Columns(ggb.fields...)...)
-}
-
 // GroupSelect is the builder for selecting fields of Group entities.
 type GroupSelect struct {
 	*GroupQuery
 	selector
-	// intermediate query (i.e. traversal path).
-	sql *sql.Selector
+}
+
+// Aggregate adds the given aggregation functions to the selector query.
+func (gs *GroupSelect) Aggregate(fns ...AggregateFunc) *GroupSelect {
+	gs.fns = append(gs.fns, fns...)
+	return gs
 }
 
 // Scan applies the selector query and scans the result into the given value.
 func (gs *GroupSelect) Scan(ctx context.Context, v any) error {
+	ctx = setContextOp(ctx, gs.ctx, "Select")
 	if err := gs.prepareQuery(ctx); err != nil {
 		return err
 	}
-	gs.sql = gs.GroupQuery.sqlQuery(ctx)
-	return gs.sqlScan(ctx, v)
+	return scanWithInterceptors[*GroupQuery, *GroupSelect](ctx, gs.GroupQuery, gs, gs.inters, v)
 }
 
-func (gs *GroupSelect) sqlScan(ctx context.Context, v any) error {
+func (gs *GroupSelect) sqlScan(ctx context.Context, root *GroupQuery, v any) error {
+	selector := root.sqlQuery(ctx)
+	aggregation := make([]string, 0, len(gs.fns))
+	for _, fn := range gs.fns {
+		aggregation = append(aggregation, fn(selector))
+	}
+	switch n := len(*gs.selector.flds); {
+	case n == 0 && len(aggregation) > 0:
+		selector.Select(aggregation...)
+	case n != 0 && len(aggregation) > 0:
+		selector.AppendSelect(aggregation...)
+	}
 	rows := &sql.Rows{}
-	query, args := gs.sql.Query()
+	query, args := selector.Query()
 	if err := gs.driver.Query(ctx, query, args, rows); err != nil {
 		return err
 	}

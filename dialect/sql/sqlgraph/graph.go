@@ -332,6 +332,20 @@ type (
 	}
 )
 
+// NewFieldSpec creates a new FieldSpec with its required fields.
+func NewFieldSpec(column string, typ field.Type) *FieldSpec {
+	return &FieldSpec{Column: column, Type: typ}
+}
+
+// FieldValues returns the values of additional fields that were set on the join-table.
+func (e *EdgeTarget) FieldValues() []any {
+	vs := make([]any, len(e.Fields))
+	for i, f := range e.Fields {
+		vs[i] = f.Value
+	}
+	return vs
+}
+
 type (
 	// CreateSpec holds the information for creating
 	// a node in the graph.
@@ -371,6 +385,20 @@ type (
 		OnConflict []sql.ConflictOption
 	}
 )
+
+// NewCreateSpec creates a new node creation spec.
+func NewCreateSpec(table string, id *FieldSpec) *CreateSpec {
+	return &CreateSpec{Table: table, ID: id}
+}
+
+// SetField appends a new field setter to the creation spec.
+func (u *CreateSpec) SetField(column string, t field.Type, value driver.Value) {
+	u.Fields = append(u.Fields, &FieldSpec{
+		Column: column,
+		Type:   t,
+		Value:  value,
+	})
+}
 
 // CreateNode applies the CreateSpec on the graph. The operation creates a new
 // record in the database, and connects it to other nodes specified in spec.Edges.
@@ -415,6 +443,56 @@ type (
 	}
 )
 
+// NewUpdateSpec creates a new node update spec.
+func NewUpdateSpec(table string, columns []string, id ...*FieldSpec) *UpdateSpec {
+	spec := &UpdateSpec{
+		Node: &NodeSpec{Table: table, Columns: columns},
+	}
+	switch {
+	case len(id) == 1:
+		spec.Node.ID = id[0]
+	case len(id) > 1:
+		spec.Node.CompositeID = id
+	}
+	return spec
+}
+
+// AddModifier adds a new statement modifier to the spec.
+func (u *UpdateSpec) AddModifier(m func(*sql.UpdateBuilder)) {
+	u.Modifiers = append(u.Modifiers, m)
+}
+
+// AddModifiers adds a list of statement modifiers to the spec.
+func (u *UpdateSpec) AddModifiers(m ...func(*sql.UpdateBuilder)) {
+	u.Modifiers = append(u.Modifiers, m...)
+}
+
+// SetField appends a new field setter to the update spec.
+func (u *UpdateSpec) SetField(column string, t field.Type, value driver.Value) {
+	u.Fields.Set = append(u.Fields.Set, &FieldSpec{
+		Column: column,
+		Type:   t,
+		Value:  value,
+	})
+}
+
+// AddField appends a new field adder to the update spec.
+func (u *UpdateSpec) AddField(column string, t field.Type, value driver.Value) {
+	u.Fields.Add = append(u.Fields.Add, &FieldSpec{
+		Column: column,
+		Type:   t,
+		Value:  value,
+	})
+}
+
+// ClearField appends a new field cleaner (set to NULL) to the update spec.
+func (u *UpdateSpec) ClearField(column string, t field.Type) {
+	u.Fields.Clear = append(u.Fields.Clear, &FieldSpec{
+		Column: column,
+		Type:   t,
+	})
+}
+
 // UpdateNode applies the UpdateSpec on one node in the graph.
 func UpdateNode(ctx context.Context, drv dialect.Driver, spec *UpdateSpec) error {
 	tx, err := drv.Tx(ctx)
@@ -452,6 +530,11 @@ func (e *NotFoundError) Error() string {
 type DeleteSpec struct {
 	Node      *NodeSpec
 	Predicate func(*sql.Selector)
+}
+
+// NewDeleteSpec creates a new node deletion spec.
+func NewDeleteSpec(table string, id *FieldSpec) *DeleteSpec {
+	return &DeleteSpec{Node: &NodeSpec{Table: table, ID: id}}
 }
 
 // DeleteNodes applies the DeleteSpec on the graph.
@@ -492,6 +575,17 @@ type QuerySpec struct {
 
 	ScanValues func(columns []string) ([]any, error)
 	Assign     func(columns []string, values []any) error
+}
+
+// NewQuerySpec creates a new node query spec.
+func NewQuerySpec(table string, columns []string, id *FieldSpec) *QuerySpec {
+	return &QuerySpec{
+		Node: &NodeSpec{
+			ID:      id,
+			Table:   table,
+			Columns: columns,
+		},
+	}
 }
 
 // QueryNodes queries the nodes in the graph query and scans them to the given values.
@@ -590,6 +684,11 @@ func (q *query) count(ctx context.Context, drv dialect.Driver) (int, error) {
 	selector, err := q.selector(ctx)
 	if err != nil {
 		return 0, err
+	}
+	// Remove any ORDER BY clauses present in the COUNT query as
+	// they are not allowed in some databases, such as PostgreSQL.
+	if q.Order != nil {
+		selector.ClearOrder()
 	}
 	// If no columns were selected in count,
 	// the default selection is by node ids.
@@ -741,10 +840,27 @@ func (u *updater) nodes(ctx context.Context, drv dialect.Driver) (int, error) {
 		clearEdges = EdgeSpecs(u.Edges.Clear).GroupRel()
 		multiple   = hasExternalEdges(addEdges, clearEdges)
 		update     = u.builder.Update(u.Node.Table).Schema(u.Node.Schema)
-		selector   = u.builder.Select(u.Node.ID.Column).
+		selector   = u.builder.Select().
 				From(u.builder.Table(u.Node.Table).Schema(u.Node.Schema)).
 				WithContext(ctx)
 	)
+	switch {
+	// In case it is not an edge schema, the id holds the PK of
+	// the returned nodes are used for updating external tables.
+	case u.Node.ID != nil:
+		selector.Select(u.Node.ID.Column)
+	case len(u.Node.CompositeID) == 2:
+		// Other edge-schemas (M2M tables) cannot be updated by this operation.
+		// Also, in case there is a need to update an external foreign-key, it must
+		// be a single value and the user should use the "update by id" API instead.
+		if multiple {
+			return 0, fmt.Errorf("sql/sqlgraph: update edge schema table %q cannot update external tables", u.Node.Table)
+		}
+	case len(u.Node.CompositeID) != 2:
+		return 0, fmt.Errorf("sql/sqlgraph: invalid composite id for update table %q", u.Node.Table)
+	default:
+		return 0, fmt.Errorf("sql/sqlgraph: missing node id for update table %q", u.Node.Table)
+	}
 	if err := u.setTableColumns(update, addEdges, clearEdges); err != nil {
 		return 0, err
 	}
@@ -945,7 +1061,10 @@ func (c *creator) node(ctx context.Context, drv dialect.Driver) error {
 		// we interact with an edge-schema with composite primary key.
 		if c.ID == nil {
 			c.ensureConflict(insert)
-			query, args := insert.Query()
+			query, args, err := insert.QueryErr()
+			if err != nil {
+				return err
+			}
 			return c.tx.Exec(ctx, query, args, nil)
 		}
 		if err := c.insert(ctx, insert); err != nil {
@@ -991,7 +1110,10 @@ func (c *creator) insert(ctx context.Context, insert *sql.InsertBuilder) error {
 		// In case of "ON CONFLICT", the record may exist in the
 		// database, and we need to get back the database id field.
 		if len(c.CreateSpec.OnConflict) == 0 {
-			query, args := insert.Query()
+			query, args, err := insert.QueryErr()
+			if err != nil {
+				return err
+			}
 			return c.tx.Exec(ctx, query, args, nil)
 		}
 	}
@@ -1225,7 +1347,8 @@ func (g *graph) addM2MEdges(ctx context.Context, ids []driver.Value, edges EdgeS
 			columns = edges[0].Columns
 			values  = make([]any, 0, len(edges[0].Target.Fields))
 		)
-		// Specs are generated equally for all edges from the same type.
+		// Additional fields, such as edge-schema fields. Note, we use the first index,
+		// because Ent generates the same spec fields for all edges from the same type.
 		for _, f := range edges[0].Target.Fields {
 			values = append(values, f.Value)
 			columns = append(columns, f.Column)
@@ -1248,6 +1371,11 @@ func (g *graph) addM2MEdges(ctx context.Context, ids []driver.Value, edges EdgeS
 				}
 			}
 		}
+		// Ignore conflicts only if edges do not contain extra fields, because these fields
+		// can hold different values on different insertions (e.g. time.Now() or uuid.New()).
+		if len(edges[0].Target.Fields) == 0 {
+			insert.OnConflict(sql.DoNothing())
+		}
 		query, args := insert.Query()
 		if err := g.tx.Exec(ctx, query, args, nil); err != nil {
 			return fmt.Errorf("add m2m edge for table %s: %w", table, err)
@@ -1260,29 +1388,39 @@ func (g *graph) batchAddM2M(ctx context.Context, spec *BatchCreateSpec) error {
 	tables := make(map[string]*sql.InsertBuilder)
 	for _, node := range spec.Nodes {
 		edges := EdgeSpecs(node.Edges).FilterRel(M2M)
-		for t, edges := range edges.GroupTable() {
-			insert, ok := tables[t]
-			if !ok {
-				insert = g.builder.Insert(t).Columns(edges[0].Columns...)
-				if edges[0].Schema != "" {
-					// If the Schema field was provided to the EdgeSpec (by the
-					// generated code), it should be the same for all EdgeSpecs.
-					insert.Schema(edges[0].Schema)
-				}
-			}
-			tables[t] = insert
+		for name, edges := range edges.GroupTable() {
 			if len(edges) != 1 {
 				return fmt.Errorf("expect exactly 1 edge-spec per table, but got %d", len(edges))
 			}
 			edge := edges[0]
+			insert, ok := tables[name]
+			if !ok {
+				columns := edge.Columns
+				// Additional fields, such as edge-schema fields.
+				for _, f := range edge.Target.Fields {
+					columns = append(columns, f.Column)
+				}
+				insert = g.builder.Insert(name).Columns(columns...)
+				if edge.Schema != "" {
+					// If the Schema field was provided to the EdgeSpec (by the
+					// generated code), it should be the same for all EdgeSpecs.
+					insert.Schema(edge.Schema)
+				}
+				// Ignore conflicts only if edges do not contain extra fields, because these fields
+				// can hold different values on different insertions (e.g. time.Now() or uuid.New()).
+				if len(edge.Target.Fields) == 0 {
+					insert.OnConflict(sql.DoNothing())
+				}
+			}
+			tables[name] = insert
 			pk1, pk2 := []driver.Value{node.ID.Value}, edge.Target.Nodes
 			if edge.Inverse {
 				pk1, pk2 = pk2, pk1
 			}
 			for _, pair := range product(pk1, pk2) {
-				insert.Values(pair[0], pair[1])
+				insert.Values(append([]any{pair[0], pair[1]}, edge.Target.FieldValues()...)...)
 				if edge.Bidi {
-					insert.Values(pair[1], pair[0])
+					insert.Values(append([]any{pair[1], pair[0]}, edge.Target.FieldValues()...)...)
 				}
 			}
 		}
@@ -1348,8 +1486,8 @@ func (g *graph) addFKEdges(ctx context.Context, ids []driver.Value, edges []*Edg
 		if err != nil {
 			return err
 		}
-		// Setting the FK value of the "other" table
-		// without clearing it before, is not allowed.
+		// Setting the FK value of the "other" table without clearing it before, is not allowed.
+		// Including no-op (same id), because we rely on "affected" to determine if the FK set.
 		if ids := edge.Target.Nodes; int(affected) < len(ids) {
 			return &ConstraintError{msg: fmt.Sprintf("one of %v is already connected to a different %s", ids, edge.Columns[0])}
 		}
@@ -1408,8 +1546,8 @@ func setTableColumns(fields []*FieldSpec, edges map[Rel][]*EdgeSpec, set func(st
 
 // insertLastID invokes the insert query on the transaction and returns the LastInsertID.
 func (c *creator) insertLastID(ctx context.Context, insert *sql.InsertBuilder) error {
-	query, args := insert.Query()
-	if err := insert.Err(); err != nil {
+	query, args, err := insert.QueryErr()
+	if err != nil {
 		return err
 	}
 	// MySQL does not support the "RETURNING" clause.
@@ -1456,8 +1594,8 @@ func (c *creator) insertLastID(ctx context.Context, insert *sql.InsertBuilder) e
 
 // insertLastIDs invokes the batch insert query on the transaction and returns the LastInsertID of all entities.
 func (c *batchCreator) insertLastIDs(ctx context.Context, tx dialect.ExecQuerier, insert *sql.InsertBuilder) error {
-	query, args := insert.Query()
-	if err := insert.Err(); err != nil {
+	query, args, err := insert.QueryErr()
+	if err != nil {
 		return err
 	}
 	// MySQL does not support the "RETURNING" clause.

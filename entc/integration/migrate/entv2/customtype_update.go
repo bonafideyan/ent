@@ -99,34 +99,7 @@ func (ctu *CustomTypeUpdate) Mutation() *CustomTypeMutation {
 
 // Save executes the query and returns the number of nodes affected by the update operation.
 func (ctu *CustomTypeUpdate) Save(ctx context.Context) (int, error) {
-	var (
-		err      error
-		affected int
-	)
-	if len(ctu.hooks) == 0 {
-		affected, err = ctu.sqlSave(ctx)
-	} else {
-		var mut Mutator = MutateFunc(func(ctx context.Context, m Mutation) (Value, error) {
-			mutation, ok := m.(*CustomTypeMutation)
-			if !ok {
-				return nil, fmt.Errorf("unexpected mutation type %T", m)
-			}
-			ctu.mutation = mutation
-			affected, err = ctu.sqlSave(ctx)
-			mutation.done = true
-			return affected, err
-		})
-		for i := len(ctu.hooks) - 1; i >= 0; i-- {
-			if ctu.hooks[i] == nil {
-				return 0, fmt.Errorf("entv2: uninitialized hook (forgotten import entv2/runtime?)")
-			}
-			mut = ctu.hooks[i](mut)
-		}
-		if _, err := mut.Mutate(ctx, ctu.mutation); err != nil {
-			return 0, err
-		}
-	}
-	return affected, err
+	return withHooks[int, CustomTypeMutation](ctx, ctu.sqlSave, ctu.mutation, ctu.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
@@ -152,16 +125,7 @@ func (ctu *CustomTypeUpdate) ExecX(ctx context.Context) {
 }
 
 func (ctu *CustomTypeUpdate) sqlSave(ctx context.Context) (n int, err error) {
-	_spec := &sqlgraph.UpdateSpec{
-		Node: &sqlgraph.NodeSpec{
-			Table:   customtype.Table,
-			Columns: customtype.Columns,
-			ID: &sqlgraph.FieldSpec{
-				Type:   field.TypeInt,
-				Column: customtype.FieldID,
-			},
-		},
-	}
+	_spec := sqlgraph.NewUpdateSpec(customtype.Table, customtype.Columns, sqlgraph.NewFieldSpec(customtype.FieldID, field.TypeInt))
 	if ps := ctu.mutation.predicates; len(ps) > 0 {
 		_spec.Predicate = func(selector *sql.Selector) {
 			for i := range ps {
@@ -170,43 +134,22 @@ func (ctu *CustomTypeUpdate) sqlSave(ctx context.Context) (n int, err error) {
 		}
 	}
 	if value, ok := ctu.mutation.Custom(); ok {
-		_spec.Fields.Set = append(_spec.Fields.Set, &sqlgraph.FieldSpec{
-			Type:   field.TypeString,
-			Value:  value,
-			Column: customtype.FieldCustom,
-		})
+		_spec.SetField(customtype.FieldCustom, field.TypeString, value)
 	}
 	if ctu.mutation.CustomCleared() {
-		_spec.Fields.Clear = append(_spec.Fields.Clear, &sqlgraph.FieldSpec{
-			Type:   field.TypeString,
-			Column: customtype.FieldCustom,
-		})
+		_spec.ClearField(customtype.FieldCustom, field.TypeString)
 	}
 	if value, ok := ctu.mutation.Tz0(); ok {
-		_spec.Fields.Set = append(_spec.Fields.Set, &sqlgraph.FieldSpec{
-			Type:   field.TypeTime,
-			Value:  value,
-			Column: customtype.FieldTz0,
-		})
+		_spec.SetField(customtype.FieldTz0, field.TypeTime, value)
 	}
 	if ctu.mutation.Tz0Cleared() {
-		_spec.Fields.Clear = append(_spec.Fields.Clear, &sqlgraph.FieldSpec{
-			Type:   field.TypeTime,
-			Column: customtype.FieldTz0,
-		})
+		_spec.ClearField(customtype.FieldTz0, field.TypeTime)
 	}
 	if value, ok := ctu.mutation.Tz3(); ok {
-		_spec.Fields.Set = append(_spec.Fields.Set, &sqlgraph.FieldSpec{
-			Type:   field.TypeTime,
-			Value:  value,
-			Column: customtype.FieldTz3,
-		})
+		_spec.SetField(customtype.FieldTz3, field.TypeTime, value)
 	}
 	if ctu.mutation.Tz3Cleared() {
-		_spec.Fields.Clear = append(_spec.Fields.Clear, &sqlgraph.FieldSpec{
-			Type:   field.TypeTime,
-			Column: customtype.FieldTz3,
-		})
+		_spec.ClearField(customtype.FieldTz3, field.TypeTime)
 	}
 	if n, err = sqlgraph.UpdateNodes(ctx, ctu.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
@@ -216,6 +159,7 @@ func (ctu *CustomTypeUpdate) sqlSave(ctx context.Context) (n int, err error) {
 		}
 		return 0, err
 	}
+	ctu.mutation.done = true
 	return n, nil
 }
 
@@ -292,6 +236,12 @@ func (ctuo *CustomTypeUpdateOne) Mutation() *CustomTypeMutation {
 	return ctuo.mutation
 }
 
+// Where appends a list predicates to the CustomTypeUpdate builder.
+func (ctuo *CustomTypeUpdateOne) Where(ps ...predicate.CustomType) *CustomTypeUpdateOne {
+	ctuo.mutation.Where(ps...)
+	return ctuo
+}
+
 // Select allows selecting one or more fields (columns) of the returned entity.
 // The default is selecting all fields defined in the entity schema.
 func (ctuo *CustomTypeUpdateOne) Select(field string, fields ...string) *CustomTypeUpdateOne {
@@ -301,40 +251,7 @@ func (ctuo *CustomTypeUpdateOne) Select(field string, fields ...string) *CustomT
 
 // Save executes the query and returns the updated CustomType entity.
 func (ctuo *CustomTypeUpdateOne) Save(ctx context.Context) (*CustomType, error) {
-	var (
-		err  error
-		node *CustomType
-	)
-	if len(ctuo.hooks) == 0 {
-		node, err = ctuo.sqlSave(ctx)
-	} else {
-		var mut Mutator = MutateFunc(func(ctx context.Context, m Mutation) (Value, error) {
-			mutation, ok := m.(*CustomTypeMutation)
-			if !ok {
-				return nil, fmt.Errorf("unexpected mutation type %T", m)
-			}
-			ctuo.mutation = mutation
-			node, err = ctuo.sqlSave(ctx)
-			mutation.done = true
-			return node, err
-		})
-		for i := len(ctuo.hooks) - 1; i >= 0; i-- {
-			if ctuo.hooks[i] == nil {
-				return nil, fmt.Errorf("entv2: uninitialized hook (forgotten import entv2/runtime?)")
-			}
-			mut = ctuo.hooks[i](mut)
-		}
-		v, err := mut.Mutate(ctx, ctuo.mutation)
-		if err != nil {
-			return nil, err
-		}
-		nv, ok := v.(*CustomType)
-		if !ok {
-			return nil, fmt.Errorf("unexpected node type %T returned from CustomTypeMutation", v)
-		}
-		node = nv
-	}
-	return node, err
+	return withHooks[*CustomType, CustomTypeMutation](ctx, ctuo.sqlSave, ctuo.mutation, ctuo.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
@@ -360,16 +277,7 @@ func (ctuo *CustomTypeUpdateOne) ExecX(ctx context.Context) {
 }
 
 func (ctuo *CustomTypeUpdateOne) sqlSave(ctx context.Context) (_node *CustomType, err error) {
-	_spec := &sqlgraph.UpdateSpec{
-		Node: &sqlgraph.NodeSpec{
-			Table:   customtype.Table,
-			Columns: customtype.Columns,
-			ID: &sqlgraph.FieldSpec{
-				Type:   field.TypeInt,
-				Column: customtype.FieldID,
-			},
-		},
-	}
+	_spec := sqlgraph.NewUpdateSpec(customtype.Table, customtype.Columns, sqlgraph.NewFieldSpec(customtype.FieldID, field.TypeInt))
 	id, ok := ctuo.mutation.ID()
 	if !ok {
 		return nil, &ValidationError{Name: "id", err: errors.New(`entv2: missing "CustomType.id" for update`)}
@@ -395,43 +303,22 @@ func (ctuo *CustomTypeUpdateOne) sqlSave(ctx context.Context) (_node *CustomType
 		}
 	}
 	if value, ok := ctuo.mutation.Custom(); ok {
-		_spec.Fields.Set = append(_spec.Fields.Set, &sqlgraph.FieldSpec{
-			Type:   field.TypeString,
-			Value:  value,
-			Column: customtype.FieldCustom,
-		})
+		_spec.SetField(customtype.FieldCustom, field.TypeString, value)
 	}
 	if ctuo.mutation.CustomCleared() {
-		_spec.Fields.Clear = append(_spec.Fields.Clear, &sqlgraph.FieldSpec{
-			Type:   field.TypeString,
-			Column: customtype.FieldCustom,
-		})
+		_spec.ClearField(customtype.FieldCustom, field.TypeString)
 	}
 	if value, ok := ctuo.mutation.Tz0(); ok {
-		_spec.Fields.Set = append(_spec.Fields.Set, &sqlgraph.FieldSpec{
-			Type:   field.TypeTime,
-			Value:  value,
-			Column: customtype.FieldTz0,
-		})
+		_spec.SetField(customtype.FieldTz0, field.TypeTime, value)
 	}
 	if ctuo.mutation.Tz0Cleared() {
-		_spec.Fields.Clear = append(_spec.Fields.Clear, &sqlgraph.FieldSpec{
-			Type:   field.TypeTime,
-			Column: customtype.FieldTz0,
-		})
+		_spec.ClearField(customtype.FieldTz0, field.TypeTime)
 	}
 	if value, ok := ctuo.mutation.Tz3(); ok {
-		_spec.Fields.Set = append(_spec.Fields.Set, &sqlgraph.FieldSpec{
-			Type:   field.TypeTime,
-			Value:  value,
-			Column: customtype.FieldTz3,
-		})
+		_spec.SetField(customtype.FieldTz3, field.TypeTime, value)
 	}
 	if ctuo.mutation.Tz3Cleared() {
-		_spec.Fields.Clear = append(_spec.Fields.Clear, &sqlgraph.FieldSpec{
-			Type:   field.TypeTime,
-			Column: customtype.FieldTz3,
-		})
+		_spec.ClearField(customtype.FieldTz3, field.TypeTime)
 	}
 	_node = &CustomType{config: ctuo.config}
 	_spec.Assign = _node.assignValues
@@ -444,5 +331,6 @@ func (ctuo *CustomTypeUpdateOne) sqlSave(ctx context.Context) (_node *CustomType
 		}
 		return nil, err
 	}
+	ctuo.mutation.done = true
 	return _node, nil
 }

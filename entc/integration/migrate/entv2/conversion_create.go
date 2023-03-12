@@ -155,49 +155,7 @@ func (cc *ConversionCreate) Mutation() *ConversionMutation {
 
 // Save creates the Conversion in the database.
 func (cc *ConversionCreate) Save(ctx context.Context) (*Conversion, error) {
-	var (
-		err  error
-		node *Conversion
-	)
-	if len(cc.hooks) == 0 {
-		if err = cc.check(); err != nil {
-			return nil, err
-		}
-		node, err = cc.sqlSave(ctx)
-	} else {
-		var mut Mutator = MutateFunc(func(ctx context.Context, m Mutation) (Value, error) {
-			mutation, ok := m.(*ConversionMutation)
-			if !ok {
-				return nil, fmt.Errorf("unexpected mutation type %T", m)
-			}
-			if err = cc.check(); err != nil {
-				return nil, err
-			}
-			cc.mutation = mutation
-			if node, err = cc.sqlSave(ctx); err != nil {
-				return nil, err
-			}
-			mutation.id = &node.ID
-			mutation.done = true
-			return node, err
-		})
-		for i := len(cc.hooks) - 1; i >= 0; i-- {
-			if cc.hooks[i] == nil {
-				return nil, fmt.Errorf("entv2: uninitialized hook (forgotten import entv2/runtime?)")
-			}
-			mut = cc.hooks[i](mut)
-		}
-		v, err := mut.Mutate(ctx, cc.mutation)
-		if err != nil {
-			return nil, err
-		}
-		nv, ok := v.(*Conversion)
-		if !ok {
-			return nil, fmt.Errorf("unexpected node type %T returned from ConversionMutation", v)
-		}
-		node = nv
-	}
-	return node, err
+	return withHooks[*Conversion, ConversionMutation](ctx, cc.sqlSave, cc.mutation, cc.hooks)
 }
 
 // SaveX calls Save and panics if Save returns an error.
@@ -228,6 +186,9 @@ func (cc *ConversionCreate) check() error {
 }
 
 func (cc *ConversionCreate) sqlSave(ctx context.Context) (*Conversion, error) {
+	if err := cc.check(); err != nil {
+		return nil, err
+	}
 	_node, _spec := cc.createSpec()
 	if err := sqlgraph.CreateNode(ctx, cc.driver, _spec); err != nil {
 		if sqlgraph.IsConstraintError(err) {
@@ -237,90 +198,50 @@ func (cc *ConversionCreate) sqlSave(ctx context.Context) (*Conversion, error) {
 	}
 	id := _spec.ID.Value.(int64)
 	_node.ID = int(id)
+	cc.mutation.id = &_node.ID
+	cc.mutation.done = true
 	return _node, nil
 }
 
 func (cc *ConversionCreate) createSpec() (*Conversion, *sqlgraph.CreateSpec) {
 	var (
 		_node = &Conversion{config: cc.config}
-		_spec = &sqlgraph.CreateSpec{
-			Table: conversion.Table,
-			ID: &sqlgraph.FieldSpec{
-				Type:   field.TypeInt,
-				Column: conversion.FieldID,
-			},
-		}
+		_spec = sqlgraph.NewCreateSpec(conversion.Table, sqlgraph.NewFieldSpec(conversion.FieldID, field.TypeInt))
 	)
 	if value, ok := cc.mutation.Name(); ok {
-		_spec.Fields = append(_spec.Fields, &sqlgraph.FieldSpec{
-			Type:   field.TypeString,
-			Value:  value,
-			Column: conversion.FieldName,
-		})
+		_spec.SetField(conversion.FieldName, field.TypeString, value)
 		_node.Name = value
 	}
 	if value, ok := cc.mutation.Int8ToString(); ok {
-		_spec.Fields = append(_spec.Fields, &sqlgraph.FieldSpec{
-			Type:   field.TypeString,
-			Value:  value,
-			Column: conversion.FieldInt8ToString,
-		})
+		_spec.SetField(conversion.FieldInt8ToString, field.TypeString, value)
 		_node.Int8ToString = value
 	}
 	if value, ok := cc.mutation.Uint8ToString(); ok {
-		_spec.Fields = append(_spec.Fields, &sqlgraph.FieldSpec{
-			Type:   field.TypeString,
-			Value:  value,
-			Column: conversion.FieldUint8ToString,
-		})
+		_spec.SetField(conversion.FieldUint8ToString, field.TypeString, value)
 		_node.Uint8ToString = value
 	}
 	if value, ok := cc.mutation.Int16ToString(); ok {
-		_spec.Fields = append(_spec.Fields, &sqlgraph.FieldSpec{
-			Type:   field.TypeString,
-			Value:  value,
-			Column: conversion.FieldInt16ToString,
-		})
+		_spec.SetField(conversion.FieldInt16ToString, field.TypeString, value)
 		_node.Int16ToString = value
 	}
 	if value, ok := cc.mutation.Uint16ToString(); ok {
-		_spec.Fields = append(_spec.Fields, &sqlgraph.FieldSpec{
-			Type:   field.TypeString,
-			Value:  value,
-			Column: conversion.FieldUint16ToString,
-		})
+		_spec.SetField(conversion.FieldUint16ToString, field.TypeString, value)
 		_node.Uint16ToString = value
 	}
 	if value, ok := cc.mutation.Int32ToString(); ok {
-		_spec.Fields = append(_spec.Fields, &sqlgraph.FieldSpec{
-			Type:   field.TypeString,
-			Value:  value,
-			Column: conversion.FieldInt32ToString,
-		})
+		_spec.SetField(conversion.FieldInt32ToString, field.TypeString, value)
 		_node.Int32ToString = value
 	}
 	if value, ok := cc.mutation.Uint32ToString(); ok {
-		_spec.Fields = append(_spec.Fields, &sqlgraph.FieldSpec{
-			Type:   field.TypeString,
-			Value:  value,
-			Column: conversion.FieldUint32ToString,
-		})
+		_spec.SetField(conversion.FieldUint32ToString, field.TypeString, value)
 		_node.Uint32ToString = value
 	}
 	if value, ok := cc.mutation.Int64ToString(); ok {
-		_spec.Fields = append(_spec.Fields, &sqlgraph.FieldSpec{
-			Type:   field.TypeString,
-			Value:  value,
-			Column: conversion.FieldInt64ToString,
-		})
+		_spec.SetField(conversion.FieldInt64ToString, field.TypeString, value)
 		_node.Int64ToString = value
 	}
 	if value, ok := cc.mutation.Uint64ToString(); ok {
-		_spec.Fields = append(_spec.Fields, &sqlgraph.FieldSpec{
-			Type:   field.TypeString,
-			Value:  value,
-			Column: conversion.FieldUint64ToString,
-		})
+		_spec.SetField(conversion.FieldUint64ToString, field.TypeString, value)
 		_node.Uint64ToString = value
 	}
 	return _node, _spec

@@ -38,6 +38,7 @@ import (
 	"entgo.io/ent/entc/integration/ent/node"
 	"entgo.io/ent/entc/integration/ent/pet"
 	"entgo.io/ent/entc/integration/ent/schema"
+	"entgo.io/ent/entc/integration/ent/schema/task"
 	enttask "entgo.io/ent/entc/integration/ent/task"
 	"entgo.io/ent/entc/integration/ent/user"
 
@@ -98,7 +99,7 @@ func TestMaria(t *testing.T) {
 }
 
 func TestPostgres(t *testing.T) {
-	for version, port := range map[string]int{"10": 5430, "11": 5431, "12": 5432, "13": 5433, "14": 5434} {
+	for version, port := range map[string]int{"10": 5430, "11": 5431, "12": 5432, "13": 5433, "14": 5434, "15": 5435} {
 		addr := fmt.Sprintf("host=localhost port=%d user=postgres dbname=test password=pass sslmode=disable", port)
 		t.Run(version, func(t *testing.T) {
 			t.Parallel()
@@ -121,6 +122,7 @@ var (
 		migrate.WithDropColumn(true),
 	)
 	tests = [...]func(*testing.T, *ent.Client){
+		Sanity,
 		NoSchemaChanges,
 		Tx,
 		Lock,
@@ -128,9 +130,9 @@ var (
 		Types,
 		Clone,
 		EntQL,
-		Sanity,
 		Paging,
 		Select,
+		Aggregate,
 		Delete,
 		Upsert,
 		Relation,
@@ -476,6 +478,18 @@ func Upsert(t *testing.T, client *ent.Client) {
 		ExecX(ctx)
 	require.Empty(t, client.Card.GetX(ctx, c3.ID).Name, "existing name fields should be cleared when not set (= set to nil)")
 	require.NotEmpty(t, client.Card.Query().Where(card.Number("708090")).OnlyX(ctx).Name, "new record should set their name")
+
+	// Conflict on a composite unique index.
+	t1 := client.Task.Create().SetName("todo1").SetOwner("a8m").SetPriority(task.PriorityLow).SaveX(ctx)
+	tid := client.Task.Create().
+		SetName("todo1").
+		SetOwner("a8m").
+		SetPriority(task.PriorityHigh).
+		OnConflictColumns(enttask.FieldName, enttask.FieldOwner).
+		UpdatePriority().
+		IDX(ctx)
+	require.Equal(t, t1.ID, tid)
+	require.Equal(t, task.PriorityHigh, client.Task.GetX(ctx, tid).Priority)
 }
 
 func Clone(t *testing.T, client *ent.Client) {
@@ -758,6 +772,59 @@ func Select(t *testing.T, client *ent.Client) {
 	require.True(allUpper(), "at names must be upper-cased")
 }
 
+func Aggregate(t *testing.T, client *ent.Client) {
+	ctx := context.Background()
+	a8m := client.User.Create().SetAge(1).SetName("a8m").SaveX(ctx)
+	nat := client.User.Create().SetAge(1).SetName("nati").SetSpouse(a8m).SaveX(ctx)
+	owners := []*ent.User{a8m, nat}
+	for i := 1; i <= 10; i++ {
+		client.Pet.Create().SetName(fmt.Sprintf("pet%d", i)).SetAge(float64(i)).SetOwner(owners[i%2]).SaveX(ctx)
+	}
+	s1 := client.Pet.Query().Aggregate(ent.Sum(pet.FieldAge)).IntX(ctx)
+	require.Equal(t, 55, s1)
+	s2 := client.Pet.Query().Where(pet.HasOwner()).Aggregate(ent.Sum(pet.FieldAge)).IntX(ctx)
+	require.Equal(t, s1, s2)
+
+	// Aggregate traversals.
+	require.Equal(t, 30, a8m.QueryPets().Aggregate(ent.Sum(pet.FieldAge)).IntX(ctx))
+	require.Equal(t, 25, nat.QueryPets().Aggregate(ent.Sum(pet.FieldAge)).IntX(ctx))
+	require.Equal(t, 25, a8m.QuerySpouse().QueryPets().Aggregate(ent.Sum(pet.FieldAge)).IntX(ctx))
+	require.Equal(t, 30, nat.QuerySpouse().QueryPets().Aggregate(ent.Sum(pet.FieldAge)).IntX(ctx))
+
+	// Aggregate 2 fields.
+	var vs1 []struct{ Sum, Count int }
+	client.Pet.Query().
+		Aggregate(
+			ent.Sum(pet.FieldAge),
+			ent.Count(),
+		).
+		ScanX(ctx, &vs1)
+	require.Len(t, vs1, 1)
+	require.Equal(t, 55, vs1[0].Sum)
+	require.Equal(t, 10, vs1[0].Count)
+
+	// Aggregate 4 fields.
+	var vs2 []struct {
+		Sum, Min, Max, Count int
+		Avg                  float64
+	}
+	client.Pet.Query().
+		Aggregate(
+			ent.Sum(pet.FieldAge),
+			ent.Min(pet.FieldAge),
+			ent.Max(pet.FieldAge),
+			ent.Mean(pet.FieldAge),
+			ent.Count(),
+		).
+		ScanX(ctx, &vs2)
+	require.Len(t, vs2, 1)
+	require.Equal(t, 55, vs2[0].Sum)
+	require.Equal(t, 1, vs2[0].Min)
+	require.Equal(t, 10, vs2[0].Max)
+	require.Equal(t, 10, vs2[0].Count)
+	require.Equal(t, 5.5, vs2[0].Avg)
+}
+
 func ExecQuery(t *testing.T, client *ent.Client) {
 	require := require.New(t)
 	ctx := context.Background()
@@ -931,9 +998,37 @@ func Delete(t *testing.T, client *ent.Client) {
 	require.Equal(3, affected)
 
 	info := client.GroupInfo.Create().SetDesc("group info").SaveX(ctx)
-	client.Group.Create().SetInfo(info).SetName("GitHub").SetExpire(time.Now().Add(time.Hour)).ExecX(ctx)
+	hub := client.Group.Create().SetInfo(info).SetName("GitHub").SetExpire(time.Now().Add(time.Hour)).SaveX(ctx)
 	err = client.GroupInfo.DeleteOne(info).Exec(ctx)
 	require.True(ent.IsConstraintError(err))
+
+	// Group.DeleteOneID(id).Where(...), is identical to Group.Delete().Where(group.ID(id), ...),
+	// but, in case the OpDelete is not an allowed operation, the DeleteOne can be used with Where.
+	n, err := client.Group.Delete().
+		Where(
+			group.ID(hub.ID),
+			group.ExpireLT(time.Now()), // Expired.
+		).Exec(ctx)
+	require.Zero(n)
+	require.NoError(err)
+
+	err = client.Group.DeleteOne(hub).
+		Where(group.ExpireLT(time.Now())).
+		Exec(ctx)
+	require.True(ent.IsNotFound(err))
+	hub.Update().SetExpire(time.Now().Add(-time.Hour)).ExecX(ctx)
+	client.Group.DeleteOne(hub).
+		Where(group.ExpireLT(time.Now())).
+		ExecX(ctx)
+
+	// The behavior described above it also applied to UpdateOne.
+	hub = client.Group.Create().SetInfo(info).SetName("GitHub").SetExpire(time.Now().Add(time.Hour)).SaveX(ctx)
+	err = hub.Update().
+		SetActive(false).
+		SetExpire(time.Time{}).
+		Where(group.ExpireLT(time.Now())). // Expired.
+		Exec(ctx)
+	require.True(ent.IsNotFound(err))
 }
 
 func Relation(t *testing.T, client *ent.Client) {
@@ -1092,7 +1187,7 @@ func Relation(t *testing.T, client *ent.Client) {
 	_, err = client.Group.Query().Select("unknown_field").String(ctx)
 	require.EqualError(err, "ent: invalid field \"unknown_field\" for query")
 	_, err = client.Group.Query().GroupBy("unknown_field").String(ctx)
-	require.EqualError(err, "invalid field \"unknown_field\" for group-by")
+	require.EqualError(err, "ent: invalid field \"unknown_field\" for query")
 	_, err = client.User.Query().Order(ent.Asc("invalid")).Only(ctx)
 	require.EqualError(err, "ent: unknown column \"invalid\" for table \"users\"")
 	_, err = client.User.Query().Order(ent.Asc("invalid")).QueryFollowing().Only(ctx)
@@ -1128,6 +1223,8 @@ func Relation(t *testing.T, client *ent.Client) {
 	require.Equal(neta.Name, usr.QueryGroups().Where(group.Name("Github")).QueryUsers().QuerySpouse().OnlyX(ctx).Name)
 	require.Empty(client.GroupInfo.Query().Where(groupinfo.Desc("group info")).QueryGroups().Where(group.Name("boring")).AllX(ctx))
 	require.Equal(child.Name, client.GroupInfo.Query().Where(groupinfo.Desc("group info")).QueryGroups().Where(group.Name("Github")).QueryUsers().QueryChildren().FirstX(ctx).Name)
+	neta.Update().AddGroups(grp).ExecX(ctx)
+	require.Equal(grp.ID, client.User.Query().QueryGroups().OnlyIDX(ctx))
 
 	t.Log("query using string predicate")
 	require.Len(client.User.Query().Where(user.NameIn("a8m", "neta", "pedro")).AllX(ctx), 3)
@@ -1579,6 +1676,14 @@ func DefaultValue(t *testing.T, client *ent.Client) {
 		SetName("dario").
 		SaveX(ctx)
 	require.Equal(t, usr.Role, user.Role("user"))
+
+	b := time.Now().Add(-time.Hour)
+	n1 := client.Node.Create().SetValue(1).SetUpdatedAt(b).SaveX(ctx)
+	require.NotNil(t, n1.UpdatedAt)
+	require.WithinDuration(t, b, *n1.UpdatedAt, time.Second)
+	n1 = n1.Update().SetValue(2).SaveX(ctx)
+	require.NotNil(t, n1.UpdatedAt)
+	require.False(t, b.Equal(*n1.UpdatedAt))
 }
 
 func ImmutableValue(t *testing.T, client *ent.Client) {
@@ -1939,7 +2044,18 @@ func (f writerFunc) Write(p []byte) (int, error) { return f(p) }
 func NoSchemaChanges(t *testing.T, client *ent.Client) {
 	w := writerFunc(func(p []byte) (int, error) {
 		stmt := strings.Trim(string(p), "\n;")
-		if stmt != "BEGIN" && stmt != "COMMIT" {
+		ok := []string{"BEGIN", "COMMIT"}
+		if strings.Contains(t.Name(), "SQLite") {
+			ok = append(ok, "PRAGMA foreign_keys = off", "PRAGMA foreign_keys = on")
+		}
+		if !func() bool {
+			for _, s := range ok {
+				if s == stmt {
+					return true
+				}
+			}
+			return false
+		}() {
 			t.Errorf("expect no statement to execute. got: %q", stmt)
 		}
 		return len(p), nil

@@ -15,9 +15,8 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/entc/integration/ent/schema/task"
-	"entgo.io/ent/schema/field"
-
 	enttask "entgo.io/ent/entc/integration/ent/task"
+	"entgo.io/ent/schema/field"
 )
 
 // TaskCreate is the builder for creating a Task entity.
@@ -62,6 +61,34 @@ func (tc *TaskCreate) SetNillableCreatedAt(t *time.Time) *TaskCreate {
 	return tc
 }
 
+// SetName sets the "name" field.
+func (tc *TaskCreate) SetName(s string) *TaskCreate {
+	tc.mutation.SetName(s)
+	return tc
+}
+
+// SetNillableName sets the "name" field if the given value is not nil.
+func (tc *TaskCreate) SetNillableName(s *string) *TaskCreate {
+	if s != nil {
+		tc.SetName(*s)
+	}
+	return tc
+}
+
+// SetOwner sets the "owner" field.
+func (tc *TaskCreate) SetOwner(s string) *TaskCreate {
+	tc.mutation.SetOwner(s)
+	return tc
+}
+
+// SetNillableOwner sets the "owner" field if the given value is not nil.
+func (tc *TaskCreate) SetNillableOwner(s *string) *TaskCreate {
+	if s != nil {
+		tc.SetOwner(*s)
+	}
+	return tc
+}
+
 // Mutation returns the TaskMutation object of the builder.
 func (tc *TaskCreate) Mutation() *TaskMutation {
 	return tc.mutation
@@ -69,50 +96,8 @@ func (tc *TaskCreate) Mutation() *TaskMutation {
 
 // Save creates the Task in the database.
 func (tc *TaskCreate) Save(ctx context.Context) (*Task, error) {
-	var (
-		err  error
-		node *Task
-	)
 	tc.defaults()
-	if len(tc.hooks) == 0 {
-		if err = tc.check(); err != nil {
-			return nil, err
-		}
-		node, err = tc.sqlSave(ctx)
-	} else {
-		var mut Mutator = MutateFunc(func(ctx context.Context, m Mutation) (Value, error) {
-			mutation, ok := m.(*TaskMutation)
-			if !ok {
-				return nil, fmt.Errorf("unexpected mutation type %T", m)
-			}
-			if err = tc.check(); err != nil {
-				return nil, err
-			}
-			tc.mutation = mutation
-			if node, err = tc.sqlSave(ctx); err != nil {
-				return nil, err
-			}
-			mutation.id = &node.ID
-			mutation.done = true
-			return node, err
-		})
-		for i := len(tc.hooks) - 1; i >= 0; i-- {
-			if tc.hooks[i] == nil {
-				return nil, fmt.Errorf("ent: uninitialized hook (forgotten import ent/runtime?)")
-			}
-			mut = tc.hooks[i](mut)
-		}
-		v, err := mut.Mutate(ctx, tc.mutation)
-		if err != nil {
-			return nil, err
-		}
-		nv, ok := v.(*Task)
-		if !ok {
-			return nil, fmt.Errorf("unexpected node type %T returned from TaskMutation", v)
-		}
-		node = nv
-	}
-	return node, err
+	return withHooks[*Task, TaskMutation](ctx, tc.sqlSave, tc.mutation, tc.hooks)
 }
 
 // SaveX calls Save and panics if Save returns an error.
@@ -155,7 +140,7 @@ func (tc *TaskCreate) check() error {
 		return &ValidationError{Name: "priority", err: errors.New(`ent: missing required field "Task.priority"`)}
 	}
 	if v, ok := tc.mutation.Priority(); ok {
-		if err := enttask.PriorityValidator(int(v)); err != nil {
+		if err := v.Validate(); err != nil {
 			return &ValidationError{Name: "priority", err: fmt.Errorf(`ent: validator failed for field "Task.priority": %w`, err)}
 		}
 	}
@@ -166,6 +151,9 @@ func (tc *TaskCreate) check() error {
 }
 
 func (tc *TaskCreate) sqlSave(ctx context.Context) (*Task, error) {
+	if err := tc.check(); err != nil {
+		return nil, err
+	}
 	_node, _spec := tc.createSpec()
 	if err := sqlgraph.CreateNode(ctx, tc.driver, _spec); err != nil {
 		if sqlgraph.IsConstraintError(err) {
@@ -175,44 +163,36 @@ func (tc *TaskCreate) sqlSave(ctx context.Context) (*Task, error) {
 	}
 	id := _spec.ID.Value.(int64)
 	_node.ID = int(id)
+	tc.mutation.id = &_node.ID
+	tc.mutation.done = true
 	return _node, nil
 }
 
 func (tc *TaskCreate) createSpec() (*Task, *sqlgraph.CreateSpec) {
 	var (
 		_node = &Task{config: tc.config}
-		_spec = &sqlgraph.CreateSpec{
-			Table: enttask.Table,
-			ID: &sqlgraph.FieldSpec{
-				Type:   field.TypeInt,
-				Column: enttask.FieldID,
-			},
-		}
+		_spec = sqlgraph.NewCreateSpec(enttask.Table, sqlgraph.NewFieldSpec(enttask.FieldID, field.TypeInt))
 	)
 	_spec.OnConflict = tc.conflict
 	if value, ok := tc.mutation.Priority(); ok {
-		_spec.Fields = append(_spec.Fields, &sqlgraph.FieldSpec{
-			Type:   field.TypeInt,
-			Value:  value,
-			Column: enttask.FieldPriority,
-		})
+		_spec.SetField(enttask.FieldPriority, field.TypeInt, value)
 		_node.Priority = value
 	}
 	if value, ok := tc.mutation.Priorities(); ok {
-		_spec.Fields = append(_spec.Fields, &sqlgraph.FieldSpec{
-			Type:   field.TypeJSON,
-			Value:  value,
-			Column: enttask.FieldPriorities,
-		})
+		_spec.SetField(enttask.FieldPriorities, field.TypeJSON, value)
 		_node.Priorities = value
 	}
 	if value, ok := tc.mutation.CreatedAt(); ok {
-		_spec.Fields = append(_spec.Fields, &sqlgraph.FieldSpec{
-			Type:   field.TypeTime,
-			Value:  value,
-			Column: enttask.FieldCreatedAt,
-		})
+		_spec.SetField(enttask.FieldCreatedAt, field.TypeTime, value)
 		_node.CreatedAt = &value
+	}
+	if value, ok := tc.mutation.Name(); ok {
+		_spec.SetField(enttask.FieldName, field.TypeString, value)
+		_node.Name = value
+	}
+	if value, ok := tc.mutation.Owner(); ok {
+		_spec.SetField(enttask.FieldOwner, field.TypeString, value)
+		_node.Owner = value
 	}
 	return _node, _spec
 }
@@ -302,6 +282,42 @@ func (u *TaskUpsert) ClearPriorities() *TaskUpsert {
 	return u
 }
 
+// SetName sets the "name" field.
+func (u *TaskUpsert) SetName(v string) *TaskUpsert {
+	u.Set(enttask.FieldName, v)
+	return u
+}
+
+// UpdateName sets the "name" field to the value that was provided on create.
+func (u *TaskUpsert) UpdateName() *TaskUpsert {
+	u.SetExcluded(enttask.FieldName)
+	return u
+}
+
+// ClearName clears the value of the "name" field.
+func (u *TaskUpsert) ClearName() *TaskUpsert {
+	u.SetNull(enttask.FieldName)
+	return u
+}
+
+// SetOwner sets the "owner" field.
+func (u *TaskUpsert) SetOwner(v string) *TaskUpsert {
+	u.Set(enttask.FieldOwner, v)
+	return u
+}
+
+// UpdateOwner sets the "owner" field to the value that was provided on create.
+func (u *TaskUpsert) UpdateOwner() *TaskUpsert {
+	u.SetExcluded(enttask.FieldOwner)
+	return u
+}
+
+// ClearOwner clears the value of the "owner" field.
+func (u *TaskUpsert) ClearOwner() *TaskUpsert {
+	u.SetNull(enttask.FieldOwner)
+	return u
+}
+
 // UpdateNewValues updates the mutable fields using the new values that were set on create.
 // Using this option is equivalent to using:
 //
@@ -386,6 +402,48 @@ func (u *TaskUpsertOne) UpdatePriorities() *TaskUpsertOne {
 func (u *TaskUpsertOne) ClearPriorities() *TaskUpsertOne {
 	return u.Update(func(s *TaskUpsert) {
 		s.ClearPriorities()
+	})
+}
+
+// SetName sets the "name" field.
+func (u *TaskUpsertOne) SetName(v string) *TaskUpsertOne {
+	return u.Update(func(s *TaskUpsert) {
+		s.SetName(v)
+	})
+}
+
+// UpdateName sets the "name" field to the value that was provided on create.
+func (u *TaskUpsertOne) UpdateName() *TaskUpsertOne {
+	return u.Update(func(s *TaskUpsert) {
+		s.UpdateName()
+	})
+}
+
+// ClearName clears the value of the "name" field.
+func (u *TaskUpsertOne) ClearName() *TaskUpsertOne {
+	return u.Update(func(s *TaskUpsert) {
+		s.ClearName()
+	})
+}
+
+// SetOwner sets the "owner" field.
+func (u *TaskUpsertOne) SetOwner(v string) *TaskUpsertOne {
+	return u.Update(func(s *TaskUpsert) {
+		s.SetOwner(v)
+	})
+}
+
+// UpdateOwner sets the "owner" field to the value that was provided on create.
+func (u *TaskUpsertOne) UpdateOwner() *TaskUpsertOne {
+	return u.Update(func(s *TaskUpsert) {
+		s.UpdateOwner()
+	})
+}
+
+// ClearOwner clears the value of the "owner" field.
+func (u *TaskUpsertOne) ClearOwner() *TaskUpsertOne {
+	return u.Update(func(s *TaskUpsert) {
+		s.ClearOwner()
 	})
 }
 
@@ -635,6 +693,48 @@ func (u *TaskUpsertBulk) UpdatePriorities() *TaskUpsertBulk {
 func (u *TaskUpsertBulk) ClearPriorities() *TaskUpsertBulk {
 	return u.Update(func(s *TaskUpsert) {
 		s.ClearPriorities()
+	})
+}
+
+// SetName sets the "name" field.
+func (u *TaskUpsertBulk) SetName(v string) *TaskUpsertBulk {
+	return u.Update(func(s *TaskUpsert) {
+		s.SetName(v)
+	})
+}
+
+// UpdateName sets the "name" field to the value that was provided on create.
+func (u *TaskUpsertBulk) UpdateName() *TaskUpsertBulk {
+	return u.Update(func(s *TaskUpsert) {
+		s.UpdateName()
+	})
+}
+
+// ClearName clears the value of the "name" field.
+func (u *TaskUpsertBulk) ClearName() *TaskUpsertBulk {
+	return u.Update(func(s *TaskUpsert) {
+		s.ClearName()
+	})
+}
+
+// SetOwner sets the "owner" field.
+func (u *TaskUpsertBulk) SetOwner(v string) *TaskUpsertBulk {
+	return u.Update(func(s *TaskUpsert) {
+		s.SetOwner(v)
+	})
+}
+
+// UpdateOwner sets the "owner" field to the value that was provided on create.
+func (u *TaskUpsertBulk) UpdateOwner() *TaskUpsertBulk {
+	return u.Update(func(s *TaskUpsert) {
+		s.UpdateOwner()
+	})
+}
+
+// ClearOwner clears the value of the "owner" field.
+func (u *TaskUpsertBulk) ClearOwner() *TaskUpsertBulk {
+	return u.Update(func(s *TaskUpsert) {
+		s.ClearOwner()
 	})
 }
 

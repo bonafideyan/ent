@@ -7,17 +7,17 @@ package schema
 import (
 	"time"
 
-	"github.com/google/uuid"
-
-	"entgo.io/ent/schema"
-
 	"entgo.io/ent"
 	"entgo.io/ent/dialect"
 	"entgo.io/ent/dialect/entsql"
+	"entgo.io/ent/schema"
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
 	"entgo.io/ent/schema/index"
 	"entgo.io/ent/schema/mixin"
+
+	"ariga.io/atlas/sql/postgres"
+	"github.com/google/uuid"
 )
 
 type Mixin struct {
@@ -50,6 +50,9 @@ func (User) Fields() []ent.Field {
 	return []ent.Field{
 		field.Int("id").
 			StorageKey("oid"),
+		// add a new column.
+		field.Bool("active").
+			Default(true),
 		// changing the type of the field.
 		field.Int("age"),
 		// extending name field to longtext.
@@ -96,6 +99,20 @@ func (User) Fields() []ent.Field {
 		// remove the max-length constraint from varchar.
 		field.String("workplace").
 			Optional(),
+		// JSON field with database-default value.
+		field.Strings("roles").
+			Optional().
+			Annotations(entsql.Default(`[]`)),
+		field.String("default_expr").
+			Optional().
+			Annotations(entsql.DefaultExpr("lower('hello')")),
+		field.String("default_exprs").
+			Optional().
+			Annotations(entsql.DefaultExprs(map[string]string{
+				dialect.MySQL:    "TO_BASE64('ent')",
+				dialect.SQLite:   "hex('ent')",
+				dialect.Postgres: "md5('ent')",
+			})),
 		// add a new column with generated values by the database.
 		field.Time("created_at").
 			Default(time.Now).
@@ -148,6 +165,21 @@ func (User) Indexes() []ent.Index {
 					dialect.MySQL: "FULLTEXT",
 				}),
 			),
+		// For PostgreSQL, we can include in the index non-key columns.
+		index.Fields("workplace").
+			Annotations(
+				entsql.IncludeColumns("nickname"),
+			),
+		// For PostgreSQL and SQLite, users can define partial indexes.
+		index.Fields("phone").
+			Annotations(
+				entsql.IndexWhere("active"),
+			),
+		// For PostgreSQL, operator classes can be configured for each field.
+		index.Fields("age", "phone").
+			Annotations(
+				entsql.OpClassColumn("phone", "bpchar_pattern_ops"),
+			),
 	}
 }
 
@@ -183,6 +215,28 @@ func (Car) Edges() []ent.Edge {
 
 // Group schema.
 type Group struct{ ent.Schema }
+
+// Blog schema.
+type Blog struct{ ent.Schema }
+
+func (Blog) Fields() []ent.Field {
+	return []ent.Field{
+		field.Int("id").
+			SchemaType(map[string]string{
+				dialect.Postgres: postgres.TypeSerial,
+			}),
+		field.Int("oid").
+			SchemaType(map[string]string{
+				dialect.Postgres: postgres.TypeSerial,
+			}),
+	}
+}
+
+func (Blog) Edges() []ent.Edge {
+	return []ent.Edge{
+		edge.To("admins", User.Type),
+	}
+}
 
 // Pet schema.
 type Pet struct {

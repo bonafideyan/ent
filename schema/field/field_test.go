@@ -282,6 +282,9 @@ func TestBytes_DefaultFunc(t *testing.T) {
 	f4 := func() net.IPMask { return net.IPMask("ffff:ff80::") }
 	fd = field.Bytes("ip").GoType(net.IP("127.0.0.1")).DefaultFunc(f4).Descriptor()
 	assert.Error(t, fd.Err, "`var _ net.IP = f4()` should fail")
+
+	fd = field.Bytes("ip").GoType(net.IP("127.0.0.1")).DefaultFunc(net.IP("127.0.0.1")).Descriptor()
+	assert.EqualError(t, fd.Err, `field.Bytes("ip").DefaultFunc expects func but got slice`)
 }
 
 func TestString_DefaultFunc(t *testing.T) {
@@ -304,6 +307,9 @@ func TestString_DefaultFunc(t *testing.T) {
 	f4 := func() S { return "" }
 	fd = field.String("str").GoType(http.Dir("/tmp")).DefaultFunc(f4).Descriptor()
 	assert.Error(t, fd.Err, "`var _ http.Dir = f4()` should fail")
+
+	fd = field.String("str").GoType(http.Dir("/tmp")).DefaultFunc("/tmp").Descriptor()
+	assert.EqualError(t, fd.Err, `field.String("str").DefaultFunc expects func but got string`)
 }
 
 type VString string
@@ -506,6 +512,13 @@ func TestJSON(t *testing.T) {
 		Descriptor()
 	assert.Error(t, fd.Err)
 
+	fd = field.Any("unknown").
+		Descriptor()
+	assert.NoError(t, fd.Err)
+	assert.Equal(t, field.TypeJSON, fd.Info.Type)
+	assert.Equal(t, "unknown", fd.Name)
+	assert.Equal(t, "any", fd.Info.String())
+
 	fd = field.JSON("values", &url.Values{}).Descriptor()
 	assert.Equal(t, "net/url", fd.Info.PkgPath)
 	assert.Equal(t, "url", fd.Info.PkgName)
@@ -522,7 +535,7 @@ func TestJSON(t *testing.T) {
 	assert.Equal(t, "net/url", fd.Info.PkgPath)
 	assert.Equal(t, "url", fd.Info.PkgName)
 	fd = field.JSON("addr", net.Addr(nil)).Descriptor()
-	assert.EqualError(t, fd.Err, "expect a Go value as JSON type, but got nil")
+	assert.EqualError(t, fd.Err, "expect a Go value as JSON type but got nil")
 }
 
 func TestField_Tag(t *testing.T) {

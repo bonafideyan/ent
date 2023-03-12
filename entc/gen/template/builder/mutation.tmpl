@@ -15,12 +15,10 @@ import (
 	"context"
 	"fmt"
 	"sync"
-
 	{{- range $n := $.Nodes }}
 		{{ $n.PackageAlias }} "{{ $.Config.Package }}/{{ $n.PackageDir }}"
 		{{- template "import/types" $n }}
 	{{- end }}
-
 	"entgo.io/ent"
 )
 
@@ -34,7 +32,7 @@ const (
 
 	// Node types.
 	{{- range $n := $.Nodes }}
-		Type{{ $n.Name }} = "{{ $n.Name }}"
+		{{ $n.TypeName }} = "{{ $n.Name }}"
 	{{- end }}
 )
 
@@ -53,6 +51,9 @@ type {{ $mutation }} struct {
 		{{ $f.BuilderField }} *{{ $f.Type }}
 		{{- if $f.SupportsMutationAdd }}
 			add{{ $f.BuilderField }} *{{ $f.SignedType }}
+		{{- end }}
+		{{- if $f.SupportsMutationAppend }}
+			append{{ $f.BuilderField }} {{ $f.Type }}
 		{{- end }}
 	{{- end }}
 	clearedFields map[string]struct{}
@@ -81,7 +82,7 @@ func new{{ $mutation }}(c config, op Op, opts ...{{ $mutationOption }}) *{{ $mut
 	m := &{{ $mutation }}{
 		config: c,
 		op: op,
-		typ: Type{{ $n.Name }},
+		typ: {{ $n.TypeName }},
 		clearedFields: make(map[string]struct{}),
 	}
 	for _, opt := range opts {
@@ -190,9 +191,13 @@ func (m {{ $mutation }}) Tx() (*Tx, error) {
 	// {{ $func }} sets the "{{ $f.Name }}" field.
 	func (m *{{ $mutation }}) {{ $func }}({{ $p }} {{ $f.Type }}) {
 		m.{{ $f.BuilderField }} = &{{ $p }}
-		{{- /* setting numeric type override previous calls to Add. */}}
+		{{- /* Setting numeric type override previous calls to Add. */}}
 		{{- if $f.SupportsMutationAdd }}
 			m.add{{ $f.BuilderField }} = nil
+		{{- end }}
+		{{- /* Setting JSON type override previous calls to Append. */}}
+		{{- if $f.SupportsMutationAppend }}
+			m.append{{ $f.BuilderField }} = nil
 		{{- end }}
 	}
 
@@ -225,9 +230,8 @@ func (m {{ $mutation }}) Tx() (*Tx, error) {
 	{{ end }}
 
 	{{ if $f.SupportsMutationAdd }}
-		{{ $func := print "Add" $f.StructField }}
-		// {{ $func }} adds {{ $p }} to the "{{ $f.Name }}" field.
-		func (m *{{ $mutation }}) {{ $func }}({{ $p }} {{ $f.SignedType }}) {
+		// {{ $f.MutationAdd }} adds {{ $p }} to the "{{ $f.Name }}" field.
+		func (m *{{ $mutation }}) {{ $f.MutationAdd }}({{ $p }} {{ $f.SignedType }}) {
 			{{- $structField := print "m.add" $f.BuilderField }}
 			if {{ $structField }} != nil {
 				{{ $f.MutationAddAssignExpr $structField $p }}
@@ -236,13 +240,29 @@ func (m {{ $mutation }}) Tx() (*Tx, error) {
 			}
 		}
 
-		// Added{{ $f.StructField }} returns the value that was added to the "{{ $f.Name }}" field in this mutation.
-		func (m *{{ $mutation }}) Added{{ $f.StructField }}() (r {{ $f.SignedType }}, exists bool) {
+		// {{ $f.MutationAdded }} returns the value that was added to the "{{ $f.Name }}" field in this mutation.
+		func (m *{{ $mutation }}) {{ $f.MutationAdded }}() (r {{ $f.SignedType }}, exists bool) {
 			v := m.add{{ $f.BuilderField }}
 			if v == nil {
 				return
 			}
 			return *v, true
+		}
+	{{ end }}
+
+	{{ if $f.SupportsMutationAppend }}
+		{{- $structField := print "m.append" $f.BuilderField }}
+		// {{ $f.MutationAppend }} adds {{ $p }} to the "{{ $f.Name }}" field.
+		func (m *{{ $mutation }}) {{ $f.MutationAppend }}({{ $p }} {{ $f.Type }}) {
+			{{ $structField }} = append({{ $structField }}, {{ $p }}...)
+		}
+
+		// {{ $f.MutationAppended }} returns the list of values that were appended to the "{{ $f.Name }}" field in this mutation.
+		func (m *{{ $mutation }}) {{ $f.MutationAppended }}() ({{ $f.Type }}, bool) {
+			if len({{ $structField }}) == 0 {
+				return nil, false
+			}
+			return {{ $structField }}, true
 		}
 	{{ end }}
 
@@ -253,6 +273,9 @@ func (m {{ $mutation }}) Tx() (*Tx, error) {
 			m.{{ $f.BuilderField }} = nil
 			{{- if $f.SupportsMutationAdd }}
 				m.add{{ $f.BuilderField }} = nil
+			{{- end }}
+			{{- if $f.SupportsMutationAppend }}
+				m.append{{ $f.BuilderField }} = nil
 			{{- end }}
 			m.clearedFields[{{ $const }}] = struct{}{}
 		}
@@ -271,6 +294,9 @@ func (m {{ $mutation }}) Tx() (*Tx, error) {
 		m.{{ $f.BuilderField }} = nil
 		{{- if $f.SupportsMutationAdd }}
 			m.add{{ $f.BuilderField }} = nil
+		{{- end }}
+		{{- if $f.SupportsMutationAppend }}
+			m.append{{ $f.BuilderField }} = nil
 		{{- end }}
 		{{- if $f.Optional }}
 			delete(m.clearedFields, {{ $const }})
@@ -378,9 +404,24 @@ func (m *{{ $mutation }}) Where(ps ...predicate.{{ $n.Name }}) {
 	m.predicates = append(m.predicates, ps...)
 }
 
+// WhereP appends storage-level predicates to the {{ $mutation }} builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *{{ $mutation }}) WhereP(ps ...func({{ $.Storage.Builder }})) {
+	p := make([]predicate.{{ $n.Name }}, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
 // Op returns the operation name.
 func (m *{{ $mutation }}) Op() Op {
 	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *{{ $mutation }}) SetOp(op Op) {
+	m.op = op
 }
 
 // Type returns the node type of this mutation ({{ $n.Name }}).
@@ -451,7 +492,7 @@ func (m *{{ $mutation }}) SetField(name string, value ent.Value) error {
 			if !ok {
 				return fmt.Errorf("unexpected type %T for field %s", value, name)
 			}
-			m.Set{{ $f.StructField }}(v)
+			m.{{ $f.MutationSet }}(v)
 			return nil
 	{{- end }}
 	}

@@ -27,6 +27,8 @@ type User struct {
 	T *schema.T `json:"t,omitempty"`
 	// URL holds the value of the "url" field.
 	URL *url.URL `json:"url,omitempty"`
+	// URLs holds the value of the "URLs" field.
+	URLs []*url.URL `json:"urls,omitempty"`
 	// Raw holds the value of the "raw" field.
 	Raw json.RawMessage `json:"raw,omitempty"`
 	// Dirs holds the value of the "dirs" field.
@@ -39,6 +41,8 @@ type User struct {
 	Strings []string `json:"strings,omitempty"`
 	// Addr holds the value of the "addr" field.
 	Addr schema.Addr `json:"-"`
+	// Unknown holds the value of the "unknown" field.
+	Unknown any `json:"unknown,omitempty"`
 }
 
 // scanValues returns the types for scanning values from sql.Rows.
@@ -46,7 +50,7 @@ func (*User) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case user.FieldT, user.FieldURL, user.FieldRaw, user.FieldDirs, user.FieldInts, user.FieldFloats, user.FieldStrings, user.FieldAddr:
+		case user.FieldT, user.FieldURL, user.FieldURLs, user.FieldRaw, user.FieldDirs, user.FieldInts, user.FieldFloats, user.FieldStrings, user.FieldAddr, user.FieldUnknown:
 			values[i] = new([]byte)
 		case user.FieldID:
 			values[i] = new(sql.NullInt64)
@@ -85,6 +89,14 @@ func (u *User) assignValues(columns []string, values []any) error {
 			} else if value != nil && len(*value) > 0 {
 				if err := json.Unmarshal(*value, &u.URL); err != nil {
 					return fmt.Errorf("unmarshal field url: %w", err)
+				}
+			}
+		case user.FieldURLs:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field URLs", values[i])
+			} else if value != nil && len(*value) > 0 {
+				if err := json.Unmarshal(*value, &u.URLs); err != nil {
+					return fmt.Errorf("unmarshal field URLs: %w", err)
 				}
 			}
 		case user.FieldRaw:
@@ -135,6 +147,14 @@ func (u *User) assignValues(columns []string, values []any) error {
 					return fmt.Errorf("unmarshal field addr: %w", err)
 				}
 			}
+		case user.FieldUnknown:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field unknown", values[i])
+			} else if value != nil && len(*value) > 0 {
+				if err := json.Unmarshal(*value, &u.Unknown); err != nil {
+					return fmt.Errorf("unmarshal field unknown: %w", err)
+				}
+			}
 		}
 	}
 	return nil
@@ -144,7 +164,7 @@ func (u *User) assignValues(columns []string, values []any) error {
 // Note that you need to call User.Unwrap() before calling this method if this User
 // was returned from a transaction, and the transaction was committed or rolled back.
 func (u *User) Update() *UserUpdateOne {
-	return (&UserClient{config: u.config}).UpdateOne(u)
+	return NewUserClient(u.config).UpdateOne(u)
 }
 
 // Unwrap unwraps the User entity that was returned from a transaction after it was closed,
@@ -169,6 +189,9 @@ func (u *User) String() string {
 	builder.WriteString("url=")
 	builder.WriteString(fmt.Sprintf("%v", u.URL))
 	builder.WriteString(", ")
+	builder.WriteString("URLs=")
+	builder.WriteString(fmt.Sprintf("%v", u.URLs))
+	builder.WriteString(", ")
 	builder.WriteString("raw=")
 	builder.WriteString(fmt.Sprintf("%v", u.Raw))
 	builder.WriteString(", ")
@@ -185,15 +208,12 @@ func (u *User) String() string {
 	builder.WriteString(fmt.Sprintf("%v", u.Strings))
 	builder.WriteString(", ")
 	builder.WriteString("addr=<sensitive>")
+	builder.WriteString(", ")
+	builder.WriteString("unknown=")
+	builder.WriteString(fmt.Sprintf("%v", u.Unknown))
 	builder.WriteByte(')')
 	return builder.String()
 }
 
 // Users is a parsable slice of User.
 type Users []*User
-
-func (u Users) config(cfg config) {
-	for _i := range u {
-		u[_i].config = cfg
-	}
-}

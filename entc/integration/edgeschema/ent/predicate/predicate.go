@@ -10,11 +10,23 @@ import (
 	"entgo.io/ent/dialect/sql"
 )
 
+// AttachedFile is the predicate function for attachedfile builders.
+type AttachedFile func(*sql.Selector)
+
+// File is the predicate function for file builders.
+type File func(*sql.Selector)
+
 // Friendship is the predicate function for friendship builders.
 type Friendship func(*sql.Selector)
 
 // Group is the predicate function for group builders.
 type Group func(*sql.Selector)
+
+// GroupTag is the predicate function for grouptag builders.
+type GroupTag func(*sql.Selector)
+
+// Process is the predicate function for process builders.
+type Process func(*sql.Selector)
 
 // Relationship is the predicate function for relationship builders.
 type Relationship func(*sql.Selector)

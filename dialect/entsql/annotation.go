@@ -35,18 +35,43 @@ type Annotation struct {
 	//
 	Collation string `json:"collation,omitempty"`
 
-	// Default specifies the default value of a column. Note that using this option
-	// will override the default behavior of the code-generation. For example:
+	// Default specifies a literal default value of a column. Note that using
+	// this option overrides the default behavior of the code-generation.
 	//
 	//	entsql.Annotation{
-	//		Default: "CURRENT_TIMESTAMP",
-	//	}
-	//
-	//	entsql.Annotation{
-	//		Default: "uuid_generate_v4()",
+	//		Default: `{"key":"value"}`,
 	//	}
 	//
 	Default string `json:"default,omitempty"`
+
+	// DefaultExpr specifies an expression default value of a column. Using this option,
+	// users can define custom expressions to be set as database default values. Note that
+	// using this option overrides the default behavior of the code-generation.
+	//
+	//	entsql.Annotation{
+	//		DefaultExpr: "CURRENT_TIMESTAMP",
+	//	}
+	//
+	//	entsql.Annotation{
+	//		DefaultExpr: "uuid_generate_v4()",
+	//	}
+	//
+	//	entsql.Annotation{
+	//		DefaultExpr: "(a + b)",
+	//	}
+	//
+	DefaultExpr string `json:"default_expr,omitempty"`
+
+	// DefaultExpr specifies an expression default value of a column per dialect.
+	// See, DefaultExpr for full doc.
+	//
+	//	entsql.Annotation{
+	//		DefaultExprs: map[string]string{
+	//			dialect.MySQL:    "uuid()",
+	//			dialect.Postgres: "uuid_generate_v4",
+	//		}
+	//
+	DefaultExprs map[string]string `json:"default_exprs,omitempty"`
 
 	// Options defines the additional table options. For example:
 	//
@@ -63,6 +88,16 @@ type Annotation struct {
 	//	}
 	//
 	Size int64 `json:"size,omitempty"`
+
+	// WithComments specifies whether fields' comments should
+	// be stored in the database schema as column comments.
+	//
+	//  withCommentsEnabled := true
+	//	entsql.WithComments{
+	//		WithComments: &withCommentsEnabled,
+	//	}
+	//
+	WithComments *bool `json:"with_comments,omitempty"`
 
 	// Incremental defines the auto-incremental behavior of a column. For example:
 	//
@@ -111,6 +146,89 @@ func (Annotation) Name() string {
 	return "EntSQL"
 }
 
+// Check allows injecting custom "DDL" for setting an unnamed "CHECK" clause in "CREATE TABLE".
+//
+//	entsql.Annotation{
+//		Check: "(`age` < 10)",
+//	}
+func Check(c string) *Annotation {
+	return &Annotation{
+		Check: c,
+	}
+}
+
+// Checks allows injecting custom "DDL" for setting named "CHECK" clauses in "CREATE TABLE".
+//
+//	entsql.Annotation{
+//		Checks: map[string]string{
+//			"valid_discount": "price > discount_price",
+//		},
+//	}
+func Checks(c map[string]string) *Annotation {
+	return &Annotation{
+		Checks: c,
+	}
+}
+
+// Default specifies a literal default value of a column. Note that using
+// this option overrides the default behavior of the code-generation.
+//
+//	entsql.Annotation{
+//		Default: `{"key":"value"}`,
+//	}
+func Default(literal string) *Annotation {
+	return &Annotation{
+		Default: literal,
+	}
+}
+
+// DefaultExpr specifies an expression default value for the annotated column.
+// Using this option, users can define custom expressions to be set as database
+// default values.Note that using this option overrides the default behavior of
+// the code-generation.
+//
+//	field.UUID("id", uuid.Nil).
+//		Default(uuid.New).
+//		Annotations(
+//			entsql.DefaultExpr("uuid_generate_v4()"),
+//		)
+func DefaultExpr(expr string) *Annotation {
+	return &Annotation{
+		DefaultExpr: expr,
+	}
+}
+
+// DefaultExprs specifies an expression default value for the annotated
+// column per dialect. See, DefaultExpr for full doc.
+//
+//	field.UUID("id", uuid.Nil).
+//		Default(uuid.New).
+//		Annotations(
+//			entsql.DefaultExprs(map[string]string{
+//				dialect.MySQL:    "uuid()",
+//				dialect.Postgres: "uuid_generate_v4()",
+//			}),
+//		)
+func DefaultExprs(exprs map[string]string) *Annotation {
+	return &Annotation{
+		DefaultExprs: exprs,
+	}
+}
+
+// WithComments specifies whether fields' comments should
+// be stored in the database schema as column comments.
+//
+//	func (T) Annotations() []schema.Annotation {
+//		return []schema.Annotation{
+//			entsql.WithComments(true),
+//		}
+//	}
+func WithComments(b bool) *Annotation {
+	return &Annotation{
+		WithComments: &b,
+	}
+}
+
 // Merge implements the schema.Merger interface.
 func (a Annotation) Merge(other schema.Annotation) schema.Annotation {
 	var ant Annotation
@@ -133,11 +251,28 @@ func (a Annotation) Merge(other schema.Annotation) schema.Annotation {
 	if c := ant.Collation; c != "" {
 		a.Collation = c
 	}
+	if d := ant.Default; d != "" {
+		a.Default = d
+	}
+	if d := ant.DefaultExpr; d != "" {
+		a.DefaultExpr = d
+	}
+	if d := ant.DefaultExprs; d != nil {
+		if a.DefaultExprs == nil {
+			a.DefaultExprs = make(map[string]string)
+		}
+		for dialect, x := range d {
+			a.DefaultExprs[dialect] = x
+		}
+	}
 	if o := ant.Options; o != "" {
 		a.Options = o
 	}
 	if s := ant.Size; s != 0 {
 		a.Size = s
+	}
+	if b := ant.WithComments; b != nil {
+		a.WithComments = b
 	}
 	if i := ant.Incremental; i != nil {
 		a.Incremental = i
@@ -213,7 +348,7 @@ type IndexAnnotation struct {
 	//
 	Desc bool
 
-	// DescColumns defines the DESC clause for columns in a multi column index.
+	// DescColumns defines the DESC clause for columns in multi-column index.
 	// In MySQL, the following annotation maps to:
 	//
 	//	index.Fields("c1", "c2", "c3").
@@ -224,6 +359,18 @@ type IndexAnnotation struct {
 	//	CREATE INDEX `table_c1_c2_c3` ON `table`(`c1` DESC, `c2` DESC, `c3`)
 	//
 	DescColumns map[string]bool
+
+	// IncludeColumns defines the INCLUDE clause for the index.
+	// Works only in Postgres and its definition is as follows:
+	//
+	//	index.Fields("c1").
+	//		Annotation(
+	//			entsql.IncludeColumns("c2"),
+	//		)
+	//
+	//	CREATE INDEX "table_column" ON "table"("c1") INCLUDE ("c2")
+	//
+	IncludeColumns []string
 
 	// Type defines the type of the index.
 	// In MySQL, the following annotation maps to:
@@ -248,6 +395,47 @@ type IndexAnnotation struct {
 	//		)
 	//
 	Types map[string]string
+
+	// OpClass defines the operator class for a single string column index.
+	// In PostgreSQL, the following annotation maps to:
+	//
+	//	index.Fields("column").
+	//		Annotation(
+	//			entsql.IndexType("BRIN"),
+	//			entsql.OpClass("int8_bloom_ops"),
+	//		)
+	//
+	//	CREATE INDEX "table_column" ON "table" USING BRIN ("column" int8_bloom_ops)
+	//
+	OpClass string
+
+	// OpClassColumns defines operator-classes for a multi-column index.
+	// In PostgreSQL, the following annotation maps to:
+	//
+	//	index.Fields("c1", "c2", "c3").
+	//		Annotation(
+	//			entsql.IndexType("BRIN"),
+	//			entsql.OpClassColumn("c1", "int8_bloom_ops"),
+	//			entsql.OpClassColumn("c2", "int8_minmax_multi_ops(values_per_range=8)"),
+	//		)
+	//
+	//	CREATE INDEX "table_column" ON "table" USING BRIN ("c1" int8_bloom_ops, "c2" int8_minmax_multi_ops(values_per_range=8), "c3")
+	//
+	OpClassColumns map[string]string
+
+	// IndexWhere allows configuring partial indexes in SQLite and PostgreSQL.
+	// Read more: https://postgresql.org/docs/current/indexes-partial.html.
+	//
+	// Note that the `WHERE` clause should be defined exactly like it is
+	// stored in the database (i.e. normal form). Read more about this on
+	// the Atlas website: https://atlasgo.io/concepts/dev-database#diffing.
+	//
+	//	index.Fields("a").
+	//		Annotations(
+	//			entsql.IndexWhere("b AND c > 0"),
+	//		)
+	//	CREATE INDEX "table_a" ON "table"("a") WHERE (b AND c > 0)
+	Where string
 }
 
 // Prefix returns a new index annotation with a single string column index.
@@ -257,7 +445,6 @@ type IndexAnnotation struct {
 //		Annotation(entsql.Prefix(100))
 //
 //	CREATE INDEX `table_column` ON `table`(`column`(100))
-//
 func Prefix(prefix uint) *IndexAnnotation {
 	return &IndexAnnotation{
 		Prefix: prefix,
@@ -274,11 +461,45 @@ func Prefix(prefix uint) *IndexAnnotation {
 //		)
 //
 //	CREATE INDEX `table_c1_c2_c3` ON `table`(`c1`(100), `c2`(200), `c3`)
-//
 func PrefixColumn(name string, prefix uint) *IndexAnnotation {
 	return &IndexAnnotation{
 		PrefixColumns: map[string]uint{
 			name: prefix,
+		},
+	}
+}
+
+// OpClass defines the operator class for a single string column index.
+// In PostgreSQL, the following annotation maps to:
+//
+//	index.Fields("column").
+//		Annotation(
+//			entsql.IndexType("BRIN"),
+//			entsql.OpClass("int8_bloom_ops"),
+//		)
+//
+//	CREATE INDEX "table_column" ON "table" USING BRIN ("column" int8_bloom_ops)
+func OpClass(op string) *IndexAnnotation {
+	return &IndexAnnotation{
+		OpClass: op,
+	}
+}
+
+// OpClassColumn returns a new index annotation with column operator
+// class for multi-column indexes. In PostgreSQL, the following annotation maps to:
+//
+//	index.Fields("c1", "c2", "c3").
+//		Annotation(
+//			entsql.IndexType("BRIN"),
+//			entsql.OpClassColumn("c1", "int8_bloom_ops"),
+//			entsql.OpClassColumn("c2", "int8_minmax_multi_ops(values_per_range=8)"),
+//		)
+//
+//	CREATE INDEX "table_column" ON "table" USING BRIN ("c1" int8_bloom_ops, "c2" int8_minmax_multi_ops(values_per_range=8), "c3")
+func OpClassColumn(name, op string) *IndexAnnotation {
+	return &IndexAnnotation{
+		OpClassColumns: map[string]string{
+			name: op,
 		},
 	}
 }
@@ -290,7 +511,6 @@ func PrefixColumn(name string, prefix uint) *IndexAnnotation {
 //		Annotation(entsql.Desc())
 //
 //	CREATE INDEX `table_column` ON `table`(`column` DESC)
-//
 func Desc() *IndexAnnotation {
 	return &IndexAnnotation{
 		Desc: true,
@@ -306,7 +526,6 @@ func Desc() *IndexAnnotation {
 //		)
 //
 //	CREATE INDEX `table_c1_c2_c3` ON `table`(`c1` DESC, `c2` DESC, `c3`)
-//
 func DescColumns(names ...string) *IndexAnnotation {
 	ant := &IndexAnnotation{
 		DescColumns: make(map[string]bool, len(names)),
@@ -317,7 +536,20 @@ func DescColumns(names ...string) *IndexAnnotation {
 	return ant
 }
 
-// Type defines the type of the index.
+// IncludeColumns defines the INCLUDE clause for the index.
+// Works only in Postgres and its definition is as follows:
+//
+//	index.Fields("c1").
+//		Annotation(
+//			entsql.IncludeColumns("c2"),
+//		)
+//
+//	CREATE INDEX "table_column" ON "table"("c1") INCLUDE ("c2")
+func IncludeColumns(names ...string) *IndexAnnotation {
+	return &IndexAnnotation{IncludeColumns: names}
+}
+
+// IndexType defines the type of the index.
 // In MySQL, the following annotation maps to:
 //
 //	index.Fields("c1").
@@ -326,12 +558,11 @@ func DescColumns(names ...string) *IndexAnnotation {
 //		)
 //
 //	CREATE FULLTEXT INDEX `table_c1` ON `table`(`c1`)
-//
 func IndexType(t string) *IndexAnnotation {
 	return &IndexAnnotation{Type: t}
 }
 
-// Types is like the Type option but allows mapping an index-type per dialect.
+// IndexTypes is like the Type option but allows mapping an index-type per dialect.
 //
 //	index.Fields("c1").
 //		Annotations(
@@ -340,9 +571,24 @@ func IndexType(t string) *IndexAnnotation {
 //				dialect.Postgres: "GIN",
 //			}),
 //		)
-//
 func IndexTypes(types map[string]string) *IndexAnnotation {
 	return &IndexAnnotation{Types: types}
+}
+
+// IndexWhere allows configuring partial indexes in SQLite and PostgreSQL.
+// Read more: https://postgresql.org/docs/current/indexes-partial.html.
+//
+// Note that the `WHERE` clause should be defined exactly like it is
+// stored in the database (i.e. normal form). Read more about this on the
+// Atlas website: https://atlasgo.io/concepts/dev-database#diffing.
+//
+//	index.Fields("a").
+//		Annotations(
+//			entsql.IndexWhere("b AND c > 0"),
+//		)
+//	CREATE INDEX "table_a" ON "table"("a") WHERE (b AND c > 0)
+func IndexWhere(pred string) *IndexAnnotation {
+	return &IndexAnnotation{Where: pred}
 }
 
 // Name describes the annotation name.
@@ -374,6 +620,17 @@ func (a IndexAnnotation) Merge(other schema.Annotation) schema.Annotation {
 			a.PrefixColumns[column] = prefix
 		}
 	}
+	if ant.OpClass != "" {
+		a.OpClass = ant.OpClass
+	}
+	if ant.OpClassColumns != nil {
+		if a.OpClassColumns == nil {
+			a.OpClassColumns = make(map[string]string)
+		}
+		for column, op := range ant.OpClassColumns {
+			a.OpClassColumns[column] = op
+		}
+	}
 	if ant.Desc {
 		a.Desc = ant.Desc
 	}
@@ -385,16 +642,27 @@ func (a IndexAnnotation) Merge(other schema.Annotation) schema.Annotation {
 			a.DescColumns[column] = desc
 		}
 	}
+	if ant.IncludeColumns != nil {
+		a.IncludeColumns = append(a.IncludeColumns, ant.IncludeColumns...)
+	}
 	if ant.Type != "" {
 		a.Type = ant.Type
 	}
 	if ant.Types != nil {
-		a.Types = ant.Types
+		if a.Types == nil {
+			a.Types = make(map[string]string)
+		}
+		for dialect, t := range ant.Types {
+			a.Types[dialect] = t
+		}
+	}
+	if ant.Where != "" {
+		a.Where = ant.Where
 	}
 	return a
 }
 
-var (
-	_ schema.Annotation = (*IndexAnnotation)(nil)
-	_ schema.Merger     = (*IndexAnnotation)(nil)
-)
+var _ interface {
+	schema.Annotation
+	schema.Merger
+} = (*IndexAnnotation)(nil)

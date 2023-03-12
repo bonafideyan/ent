@@ -110,40 +110,7 @@ func (ftu *FileTypeUpdate) RemoveFiles(f ...*File) *FileTypeUpdate {
 
 // Save executes the query and returns the number of nodes affected by the update operation.
 func (ftu *FileTypeUpdate) Save(ctx context.Context) (int, error) {
-	var (
-		err      error
-		affected int
-	)
-	if len(ftu.hooks) == 0 {
-		if err = ftu.check(); err != nil {
-			return 0, err
-		}
-		affected, err = ftu.sqlSave(ctx)
-	} else {
-		var mut Mutator = MutateFunc(func(ctx context.Context, m Mutation) (Value, error) {
-			mutation, ok := m.(*FileTypeMutation)
-			if !ok {
-				return nil, fmt.Errorf("unexpected mutation type %T", m)
-			}
-			if err = ftu.check(); err != nil {
-				return 0, err
-			}
-			ftu.mutation = mutation
-			affected, err = ftu.sqlSave(ctx)
-			mutation.done = true
-			return affected, err
-		})
-		for i := len(ftu.hooks) - 1; i >= 0; i-- {
-			if ftu.hooks[i] == nil {
-				return 0, fmt.Errorf("ent: uninitialized hook (forgotten import ent/runtime?)")
-			}
-			mut = ftu.hooks[i](mut)
-		}
-		if _, err := mut.Mutate(ctx, ftu.mutation); err != nil {
-			return 0, err
-		}
-	}
-	return affected, err
+	return withHooks[int, FileTypeMutation](ctx, ftu.sqlSave, ftu.mutation, ftu.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
@@ -190,16 +157,10 @@ func (ftu *FileTypeUpdate) Modify(modifiers ...func(u *sql.UpdateBuilder)) *File
 }
 
 func (ftu *FileTypeUpdate) sqlSave(ctx context.Context) (n int, err error) {
-	_spec := &sqlgraph.UpdateSpec{
-		Node: &sqlgraph.NodeSpec{
-			Table:   filetype.Table,
-			Columns: filetype.Columns,
-			ID: &sqlgraph.FieldSpec{
-				Type:   field.TypeInt,
-				Column: filetype.FieldID,
-			},
-		},
+	if err := ftu.check(); err != nil {
+		return n, err
 	}
+	_spec := sqlgraph.NewUpdateSpec(filetype.Table, filetype.Columns, sqlgraph.NewFieldSpec(filetype.FieldID, field.TypeInt))
 	if ps := ftu.mutation.predicates; len(ps) > 0 {
 		_spec.Predicate = func(selector *sql.Selector) {
 			for i := range ps {
@@ -208,25 +169,13 @@ func (ftu *FileTypeUpdate) sqlSave(ctx context.Context) (n int, err error) {
 		}
 	}
 	if value, ok := ftu.mutation.Name(); ok {
-		_spec.Fields.Set = append(_spec.Fields.Set, &sqlgraph.FieldSpec{
-			Type:   field.TypeString,
-			Value:  value,
-			Column: filetype.FieldName,
-		})
+		_spec.SetField(filetype.FieldName, field.TypeString, value)
 	}
 	if value, ok := ftu.mutation.GetType(); ok {
-		_spec.Fields.Set = append(_spec.Fields.Set, &sqlgraph.FieldSpec{
-			Type:   field.TypeEnum,
-			Value:  value,
-			Column: filetype.FieldType,
-		})
+		_spec.SetField(filetype.FieldType, field.TypeEnum, value)
 	}
 	if value, ok := ftu.mutation.State(); ok {
-		_spec.Fields.Set = append(_spec.Fields.Set, &sqlgraph.FieldSpec{
-			Type:   field.TypeEnum,
-			Value:  value,
-			Column: filetype.FieldState,
-		})
+		_spec.SetField(filetype.FieldState, field.TypeEnum, value)
 	}
 	if ftu.mutation.FilesCleared() {
 		edge := &sqlgraph.EdgeSpec{
@@ -236,10 +185,7 @@ func (ftu *FileTypeUpdate) sqlSave(ctx context.Context) (n int, err error) {
 			Columns: []string{filetype.FilesColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: &sqlgraph.FieldSpec{
-					Type:   field.TypeInt,
-					Column: file.FieldID,
-				},
+				IDSpec: sqlgraph.NewFieldSpec(file.FieldID, field.TypeInt),
 			},
 		}
 		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
@@ -252,10 +198,7 @@ func (ftu *FileTypeUpdate) sqlSave(ctx context.Context) (n int, err error) {
 			Columns: []string{filetype.FilesColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: &sqlgraph.FieldSpec{
-					Type:   field.TypeInt,
-					Column: file.FieldID,
-				},
+				IDSpec: sqlgraph.NewFieldSpec(file.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {
@@ -271,10 +214,7 @@ func (ftu *FileTypeUpdate) sqlSave(ctx context.Context) (n int, err error) {
 			Columns: []string{filetype.FilesColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: &sqlgraph.FieldSpec{
-					Type:   field.TypeInt,
-					Column: file.FieldID,
-				},
+				IDSpec: sqlgraph.NewFieldSpec(file.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {
@@ -282,7 +222,7 @@ func (ftu *FileTypeUpdate) sqlSave(ctx context.Context) (n int, err error) {
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
-	_spec.Modifiers = ftu.modifiers
+	_spec.AddModifiers(ftu.modifiers...)
 	if n, err = sqlgraph.UpdateNodes(ctx, ftu.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{filetype.Label}
@@ -291,6 +231,7 @@ func (ftu *FileTypeUpdate) sqlSave(ctx context.Context) (n int, err error) {
 		}
 		return 0, err
 	}
+	ftu.mutation.done = true
 	return n, nil
 }
 
@@ -378,6 +319,12 @@ func (ftuo *FileTypeUpdateOne) RemoveFiles(f ...*File) *FileTypeUpdateOne {
 	return ftuo.RemoveFileIDs(ids...)
 }
 
+// Where appends a list predicates to the FileTypeUpdate builder.
+func (ftuo *FileTypeUpdateOne) Where(ps ...predicate.FileType) *FileTypeUpdateOne {
+	ftuo.mutation.Where(ps...)
+	return ftuo
+}
+
 // Select allows selecting one or more fields (columns) of the returned entity.
 // The default is selecting all fields defined in the entity schema.
 func (ftuo *FileTypeUpdateOne) Select(field string, fields ...string) *FileTypeUpdateOne {
@@ -387,46 +334,7 @@ func (ftuo *FileTypeUpdateOne) Select(field string, fields ...string) *FileTypeU
 
 // Save executes the query and returns the updated FileType entity.
 func (ftuo *FileTypeUpdateOne) Save(ctx context.Context) (*FileType, error) {
-	var (
-		err  error
-		node *FileType
-	)
-	if len(ftuo.hooks) == 0 {
-		if err = ftuo.check(); err != nil {
-			return nil, err
-		}
-		node, err = ftuo.sqlSave(ctx)
-	} else {
-		var mut Mutator = MutateFunc(func(ctx context.Context, m Mutation) (Value, error) {
-			mutation, ok := m.(*FileTypeMutation)
-			if !ok {
-				return nil, fmt.Errorf("unexpected mutation type %T", m)
-			}
-			if err = ftuo.check(); err != nil {
-				return nil, err
-			}
-			ftuo.mutation = mutation
-			node, err = ftuo.sqlSave(ctx)
-			mutation.done = true
-			return node, err
-		})
-		for i := len(ftuo.hooks) - 1; i >= 0; i-- {
-			if ftuo.hooks[i] == nil {
-				return nil, fmt.Errorf("ent: uninitialized hook (forgotten import ent/runtime?)")
-			}
-			mut = ftuo.hooks[i](mut)
-		}
-		v, err := mut.Mutate(ctx, ftuo.mutation)
-		if err != nil {
-			return nil, err
-		}
-		nv, ok := v.(*FileType)
-		if !ok {
-			return nil, fmt.Errorf("unexpected node type %T returned from FileTypeMutation", v)
-		}
-		node = nv
-	}
-	return node, err
+	return withHooks[*FileType, FileTypeMutation](ctx, ftuo.sqlSave, ftuo.mutation, ftuo.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
@@ -473,16 +381,10 @@ func (ftuo *FileTypeUpdateOne) Modify(modifiers ...func(u *sql.UpdateBuilder)) *
 }
 
 func (ftuo *FileTypeUpdateOne) sqlSave(ctx context.Context) (_node *FileType, err error) {
-	_spec := &sqlgraph.UpdateSpec{
-		Node: &sqlgraph.NodeSpec{
-			Table:   filetype.Table,
-			Columns: filetype.Columns,
-			ID: &sqlgraph.FieldSpec{
-				Type:   field.TypeInt,
-				Column: filetype.FieldID,
-			},
-		},
+	if err := ftuo.check(); err != nil {
+		return _node, err
 	}
+	_spec := sqlgraph.NewUpdateSpec(filetype.Table, filetype.Columns, sqlgraph.NewFieldSpec(filetype.FieldID, field.TypeInt))
 	id, ok := ftuo.mutation.ID()
 	if !ok {
 		return nil, &ValidationError{Name: "id", err: errors.New(`ent: missing "FileType.id" for update`)}
@@ -508,25 +410,13 @@ func (ftuo *FileTypeUpdateOne) sqlSave(ctx context.Context) (_node *FileType, er
 		}
 	}
 	if value, ok := ftuo.mutation.Name(); ok {
-		_spec.Fields.Set = append(_spec.Fields.Set, &sqlgraph.FieldSpec{
-			Type:   field.TypeString,
-			Value:  value,
-			Column: filetype.FieldName,
-		})
+		_spec.SetField(filetype.FieldName, field.TypeString, value)
 	}
 	if value, ok := ftuo.mutation.GetType(); ok {
-		_spec.Fields.Set = append(_spec.Fields.Set, &sqlgraph.FieldSpec{
-			Type:   field.TypeEnum,
-			Value:  value,
-			Column: filetype.FieldType,
-		})
+		_spec.SetField(filetype.FieldType, field.TypeEnum, value)
 	}
 	if value, ok := ftuo.mutation.State(); ok {
-		_spec.Fields.Set = append(_spec.Fields.Set, &sqlgraph.FieldSpec{
-			Type:   field.TypeEnum,
-			Value:  value,
-			Column: filetype.FieldState,
-		})
+		_spec.SetField(filetype.FieldState, field.TypeEnum, value)
 	}
 	if ftuo.mutation.FilesCleared() {
 		edge := &sqlgraph.EdgeSpec{
@@ -536,10 +426,7 @@ func (ftuo *FileTypeUpdateOne) sqlSave(ctx context.Context) (_node *FileType, er
 			Columns: []string{filetype.FilesColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: &sqlgraph.FieldSpec{
-					Type:   field.TypeInt,
-					Column: file.FieldID,
-				},
+				IDSpec: sqlgraph.NewFieldSpec(file.FieldID, field.TypeInt),
 			},
 		}
 		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
@@ -552,10 +439,7 @@ func (ftuo *FileTypeUpdateOne) sqlSave(ctx context.Context) (_node *FileType, er
 			Columns: []string{filetype.FilesColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: &sqlgraph.FieldSpec{
-					Type:   field.TypeInt,
-					Column: file.FieldID,
-				},
+				IDSpec: sqlgraph.NewFieldSpec(file.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {
@@ -571,10 +455,7 @@ func (ftuo *FileTypeUpdateOne) sqlSave(ctx context.Context) (_node *FileType, er
 			Columns: []string{filetype.FilesColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: &sqlgraph.FieldSpec{
-					Type:   field.TypeInt,
-					Column: file.FieldID,
-				},
+				IDSpec: sqlgraph.NewFieldSpec(file.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {
@@ -582,7 +463,7 @@ func (ftuo *FileTypeUpdateOne) sqlSave(ctx context.Context) (_node *FileType, er
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
-	_spec.Modifiers = ftuo.modifiers
+	_spec.AddModifiers(ftuo.modifiers...)
 	_node = &FileType{config: ftuo.config}
 	_spec.Assign = _node.assignValues
 	_spec.ScanValues = _node.scanValues
@@ -594,5 +475,6 @@ func (ftuo *FileTypeUpdateOne) sqlSave(ctx context.Context) (_node *FileType, er
 		}
 		return nil, err
 	}
+	ftuo.mutation.done = true
 	return _node, nil
 }

@@ -15,9 +15,8 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/entc/integration/ent/predicate"
 	"entgo.io/ent/entc/integration/ent/schema/task"
-	"entgo.io/ent/schema/field"
-
 	enttask "entgo.io/ent/entc/integration/ent/task"
+	"entgo.io/ent/schema/field"
 )
 
 // TaskUpdate is the builder for updating Task entities.
@@ -67,6 +66,46 @@ func (tu *TaskUpdate) ClearPriorities() *TaskUpdate {
 	return tu
 }
 
+// SetName sets the "name" field.
+func (tu *TaskUpdate) SetName(s string) *TaskUpdate {
+	tu.mutation.SetName(s)
+	return tu
+}
+
+// SetNillableName sets the "name" field if the given value is not nil.
+func (tu *TaskUpdate) SetNillableName(s *string) *TaskUpdate {
+	if s != nil {
+		tu.SetName(*s)
+	}
+	return tu
+}
+
+// ClearName clears the value of the "name" field.
+func (tu *TaskUpdate) ClearName() *TaskUpdate {
+	tu.mutation.ClearName()
+	return tu
+}
+
+// SetOwner sets the "owner" field.
+func (tu *TaskUpdate) SetOwner(s string) *TaskUpdate {
+	tu.mutation.SetOwner(s)
+	return tu
+}
+
+// SetNillableOwner sets the "owner" field if the given value is not nil.
+func (tu *TaskUpdate) SetNillableOwner(s *string) *TaskUpdate {
+	if s != nil {
+		tu.SetOwner(*s)
+	}
+	return tu
+}
+
+// ClearOwner clears the value of the "owner" field.
+func (tu *TaskUpdate) ClearOwner() *TaskUpdate {
+	tu.mutation.ClearOwner()
+	return tu
+}
+
 // Mutation returns the TaskMutation object of the builder.
 func (tu *TaskUpdate) Mutation() *TaskMutation {
 	return tu.mutation
@@ -74,40 +113,7 @@ func (tu *TaskUpdate) Mutation() *TaskMutation {
 
 // Save executes the query and returns the number of nodes affected by the update operation.
 func (tu *TaskUpdate) Save(ctx context.Context) (int, error) {
-	var (
-		err      error
-		affected int
-	)
-	if len(tu.hooks) == 0 {
-		if err = tu.check(); err != nil {
-			return 0, err
-		}
-		affected, err = tu.sqlSave(ctx)
-	} else {
-		var mut Mutator = MutateFunc(func(ctx context.Context, m Mutation) (Value, error) {
-			mutation, ok := m.(*TaskMutation)
-			if !ok {
-				return nil, fmt.Errorf("unexpected mutation type %T", m)
-			}
-			if err = tu.check(); err != nil {
-				return 0, err
-			}
-			tu.mutation = mutation
-			affected, err = tu.sqlSave(ctx)
-			mutation.done = true
-			return affected, err
-		})
-		for i := len(tu.hooks) - 1; i >= 0; i-- {
-			if tu.hooks[i] == nil {
-				return 0, fmt.Errorf("ent: uninitialized hook (forgotten import ent/runtime?)")
-			}
-			mut = tu.hooks[i](mut)
-		}
-		if _, err := mut.Mutate(ctx, tu.mutation); err != nil {
-			return 0, err
-		}
-	}
-	return affected, err
+	return withHooks[int, TaskMutation](ctx, tu.sqlSave, tu.mutation, tu.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
@@ -132,16 +138,6 @@ func (tu *TaskUpdate) ExecX(ctx context.Context) {
 	}
 }
 
-// check runs all checks and user-defined validators on the builder.
-func (tu *TaskUpdate) check() error {
-	if v, ok := tu.mutation.Priority(); ok {
-		if err := enttask.PriorityValidator(int(v)); err != nil {
-			return &ValidationError{Name: "priority", err: fmt.Errorf(`ent: validator failed for field "Task.priority": %w`, err)}
-		}
-	}
-	return nil
-}
-
 // Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
 func (tu *TaskUpdate) Modify(modifiers ...func(u *sql.UpdateBuilder)) *TaskUpdate {
 	tu.modifiers = append(tu.modifiers, modifiers...)
@@ -149,16 +145,7 @@ func (tu *TaskUpdate) Modify(modifiers ...func(u *sql.UpdateBuilder)) *TaskUpdat
 }
 
 func (tu *TaskUpdate) sqlSave(ctx context.Context) (n int, err error) {
-	_spec := &sqlgraph.UpdateSpec{
-		Node: &sqlgraph.NodeSpec{
-			Table:   enttask.Table,
-			Columns: enttask.Columns,
-			ID: &sqlgraph.FieldSpec{
-				Type:   field.TypeInt,
-				Column: enttask.FieldID,
-			},
-		},
-	}
+	_spec := sqlgraph.NewUpdateSpec(enttask.Table, enttask.Columns, sqlgraph.NewFieldSpec(enttask.FieldID, field.TypeInt))
 	if ps := tu.mutation.predicates; len(ps) > 0 {
 		_spec.Predicate = func(selector *sql.Selector) {
 			for i := range ps {
@@ -167,33 +154,30 @@ func (tu *TaskUpdate) sqlSave(ctx context.Context) (n int, err error) {
 		}
 	}
 	if value, ok := tu.mutation.Priority(); ok {
-		_spec.Fields.Set = append(_spec.Fields.Set, &sqlgraph.FieldSpec{
-			Type:   field.TypeInt,
-			Value:  value,
-			Column: enttask.FieldPriority,
-		})
+		_spec.SetField(enttask.FieldPriority, field.TypeInt, value)
 	}
 	if value, ok := tu.mutation.AddedPriority(); ok {
-		_spec.Fields.Add = append(_spec.Fields.Add, &sqlgraph.FieldSpec{
-			Type:   field.TypeInt,
-			Value:  value,
-			Column: enttask.FieldPriority,
-		})
+		_spec.AddField(enttask.FieldPriority, field.TypeInt, value)
 	}
 	if value, ok := tu.mutation.Priorities(); ok {
-		_spec.Fields.Set = append(_spec.Fields.Set, &sqlgraph.FieldSpec{
-			Type:   field.TypeJSON,
-			Value:  value,
-			Column: enttask.FieldPriorities,
-		})
+		_spec.SetField(enttask.FieldPriorities, field.TypeJSON, value)
 	}
 	if tu.mutation.PrioritiesCleared() {
-		_spec.Fields.Clear = append(_spec.Fields.Clear, &sqlgraph.FieldSpec{
-			Type:   field.TypeJSON,
-			Column: enttask.FieldPriorities,
-		})
+		_spec.ClearField(enttask.FieldPriorities, field.TypeJSON)
 	}
-	_spec.Modifiers = tu.modifiers
+	if value, ok := tu.mutation.Name(); ok {
+		_spec.SetField(enttask.FieldName, field.TypeString, value)
+	}
+	if tu.mutation.NameCleared() {
+		_spec.ClearField(enttask.FieldName, field.TypeString)
+	}
+	if value, ok := tu.mutation.Owner(); ok {
+		_spec.SetField(enttask.FieldOwner, field.TypeString, value)
+	}
+	if tu.mutation.OwnerCleared() {
+		_spec.ClearField(enttask.FieldOwner, field.TypeString)
+	}
+	_spec.AddModifiers(tu.modifiers...)
 	if n, err = sqlgraph.UpdateNodes(ctx, tu.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{enttask.Label}
@@ -202,6 +186,7 @@ func (tu *TaskUpdate) sqlSave(ctx context.Context) (n int, err error) {
 		}
 		return 0, err
 	}
+	tu.mutation.done = true
 	return n, nil
 }
 
@@ -247,9 +232,55 @@ func (tuo *TaskUpdateOne) ClearPriorities() *TaskUpdateOne {
 	return tuo
 }
 
+// SetName sets the "name" field.
+func (tuo *TaskUpdateOne) SetName(s string) *TaskUpdateOne {
+	tuo.mutation.SetName(s)
+	return tuo
+}
+
+// SetNillableName sets the "name" field if the given value is not nil.
+func (tuo *TaskUpdateOne) SetNillableName(s *string) *TaskUpdateOne {
+	if s != nil {
+		tuo.SetName(*s)
+	}
+	return tuo
+}
+
+// ClearName clears the value of the "name" field.
+func (tuo *TaskUpdateOne) ClearName() *TaskUpdateOne {
+	tuo.mutation.ClearName()
+	return tuo
+}
+
+// SetOwner sets the "owner" field.
+func (tuo *TaskUpdateOne) SetOwner(s string) *TaskUpdateOne {
+	tuo.mutation.SetOwner(s)
+	return tuo
+}
+
+// SetNillableOwner sets the "owner" field if the given value is not nil.
+func (tuo *TaskUpdateOne) SetNillableOwner(s *string) *TaskUpdateOne {
+	if s != nil {
+		tuo.SetOwner(*s)
+	}
+	return tuo
+}
+
+// ClearOwner clears the value of the "owner" field.
+func (tuo *TaskUpdateOne) ClearOwner() *TaskUpdateOne {
+	tuo.mutation.ClearOwner()
+	return tuo
+}
+
 // Mutation returns the TaskMutation object of the builder.
 func (tuo *TaskUpdateOne) Mutation() *TaskMutation {
 	return tuo.mutation
+}
+
+// Where appends a list predicates to the TaskUpdate builder.
+func (tuo *TaskUpdateOne) Where(ps ...predicate.Task) *TaskUpdateOne {
+	tuo.mutation.Where(ps...)
+	return tuo
 }
 
 // Select allows selecting one or more fields (columns) of the returned entity.
@@ -261,46 +292,7 @@ func (tuo *TaskUpdateOne) Select(field string, fields ...string) *TaskUpdateOne 
 
 // Save executes the query and returns the updated Task entity.
 func (tuo *TaskUpdateOne) Save(ctx context.Context) (*Task, error) {
-	var (
-		err  error
-		node *Task
-	)
-	if len(tuo.hooks) == 0 {
-		if err = tuo.check(); err != nil {
-			return nil, err
-		}
-		node, err = tuo.sqlSave(ctx)
-	} else {
-		var mut Mutator = MutateFunc(func(ctx context.Context, m Mutation) (Value, error) {
-			mutation, ok := m.(*TaskMutation)
-			if !ok {
-				return nil, fmt.Errorf("unexpected mutation type %T", m)
-			}
-			if err = tuo.check(); err != nil {
-				return nil, err
-			}
-			tuo.mutation = mutation
-			node, err = tuo.sqlSave(ctx)
-			mutation.done = true
-			return node, err
-		})
-		for i := len(tuo.hooks) - 1; i >= 0; i-- {
-			if tuo.hooks[i] == nil {
-				return nil, fmt.Errorf("ent: uninitialized hook (forgotten import ent/runtime?)")
-			}
-			mut = tuo.hooks[i](mut)
-		}
-		v, err := mut.Mutate(ctx, tuo.mutation)
-		if err != nil {
-			return nil, err
-		}
-		nv, ok := v.(*Task)
-		if !ok {
-			return nil, fmt.Errorf("unexpected node type %T returned from TaskMutation", v)
-		}
-		node = nv
-	}
-	return node, err
+	return withHooks[*Task, TaskMutation](ctx, tuo.sqlSave, tuo.mutation, tuo.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
@@ -325,16 +317,6 @@ func (tuo *TaskUpdateOne) ExecX(ctx context.Context) {
 	}
 }
 
-// check runs all checks and user-defined validators on the builder.
-func (tuo *TaskUpdateOne) check() error {
-	if v, ok := tuo.mutation.Priority(); ok {
-		if err := enttask.PriorityValidator(int(v)); err != nil {
-			return &ValidationError{Name: "priority", err: fmt.Errorf(`ent: validator failed for field "Task.priority": %w`, err)}
-		}
-	}
-	return nil
-}
-
 // Modify adds a statement modifier for attaching custom logic to the UPDATE statement.
 func (tuo *TaskUpdateOne) Modify(modifiers ...func(u *sql.UpdateBuilder)) *TaskUpdateOne {
 	tuo.modifiers = append(tuo.modifiers, modifiers...)
@@ -342,16 +324,7 @@ func (tuo *TaskUpdateOne) Modify(modifiers ...func(u *sql.UpdateBuilder)) *TaskU
 }
 
 func (tuo *TaskUpdateOne) sqlSave(ctx context.Context) (_node *Task, err error) {
-	_spec := &sqlgraph.UpdateSpec{
-		Node: &sqlgraph.NodeSpec{
-			Table:   enttask.Table,
-			Columns: enttask.Columns,
-			ID: &sqlgraph.FieldSpec{
-				Type:   field.TypeInt,
-				Column: enttask.FieldID,
-			},
-		},
-	}
+	_spec := sqlgraph.NewUpdateSpec(enttask.Table, enttask.Columns, sqlgraph.NewFieldSpec(enttask.FieldID, field.TypeInt))
 	id, ok := tuo.mutation.ID()
 	if !ok {
 		return nil, &ValidationError{Name: "id", err: errors.New(`ent: missing "Task.id" for update`)}
@@ -377,33 +350,30 @@ func (tuo *TaskUpdateOne) sqlSave(ctx context.Context) (_node *Task, err error) 
 		}
 	}
 	if value, ok := tuo.mutation.Priority(); ok {
-		_spec.Fields.Set = append(_spec.Fields.Set, &sqlgraph.FieldSpec{
-			Type:   field.TypeInt,
-			Value:  value,
-			Column: enttask.FieldPriority,
-		})
+		_spec.SetField(enttask.FieldPriority, field.TypeInt, value)
 	}
 	if value, ok := tuo.mutation.AddedPriority(); ok {
-		_spec.Fields.Add = append(_spec.Fields.Add, &sqlgraph.FieldSpec{
-			Type:   field.TypeInt,
-			Value:  value,
-			Column: enttask.FieldPriority,
-		})
+		_spec.AddField(enttask.FieldPriority, field.TypeInt, value)
 	}
 	if value, ok := tuo.mutation.Priorities(); ok {
-		_spec.Fields.Set = append(_spec.Fields.Set, &sqlgraph.FieldSpec{
-			Type:   field.TypeJSON,
-			Value:  value,
-			Column: enttask.FieldPriorities,
-		})
+		_spec.SetField(enttask.FieldPriorities, field.TypeJSON, value)
 	}
 	if tuo.mutation.PrioritiesCleared() {
-		_spec.Fields.Clear = append(_spec.Fields.Clear, &sqlgraph.FieldSpec{
-			Type:   field.TypeJSON,
-			Column: enttask.FieldPriorities,
-		})
+		_spec.ClearField(enttask.FieldPriorities, field.TypeJSON)
 	}
-	_spec.Modifiers = tuo.modifiers
+	if value, ok := tuo.mutation.Name(); ok {
+		_spec.SetField(enttask.FieldName, field.TypeString, value)
+	}
+	if tuo.mutation.NameCleared() {
+		_spec.ClearField(enttask.FieldName, field.TypeString)
+	}
+	if value, ok := tuo.mutation.Owner(); ok {
+		_spec.SetField(enttask.FieldOwner, field.TypeString, value)
+	}
+	if tuo.mutation.OwnerCleared() {
+		_spec.ClearField(enttask.FieldOwner, field.TypeString)
+	}
+	_spec.AddModifiers(tuo.modifiers...)
 	_node = &Task{config: tuo.config}
 	_spec.Assign = _node.assignValues
 	_spec.ScanValues = _node.scanValues
@@ -415,5 +385,6 @@ func (tuo *TaskUpdateOne) sqlSave(ctx context.Context) (_node *Task, err error) 
 		}
 		return nil, err
 	}
+	tuo.mutation.done = true
 	return _node, nil
 }

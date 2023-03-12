@@ -66,7 +66,7 @@ func (i *Item) assignValues(columns []string, values []any) error {
 // Note that you need to call Item.Unwrap() before calling this method if this Item
 // was returned from a transaction, and the transaction was committed or rolled back.
 func (i *Item) Update() *ItemUpdateOne {
-	return (&ItemClient{config: i.config}).UpdateOne(i)
+	return NewItemClient(i.config).UpdateOne(i)
 }
 
 // Unwrap unwraps the Item entity that was returned from a transaction after it was closed,
@@ -93,9 +93,3 @@ func (i *Item) String() string {
 
 // Items is a parsable slice of Item.
 type Items []*Item
-
-func (i Items) config(cfg config) {
-	for _i := range i {
-		i[_i].config = cfg
-	}
-}

@@ -13,6 +13,16 @@ import (
 )
 
 var (
+	// ApisColumns holds the columns for the "apis" table.
+	ApisColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+	}
+	// ApisTable holds the schema information for the "apis" table.
+	ApisTable = &schema.Table{
+		Name:       "apis",
+		Columns:    ApisColumns,
+		PrimaryKey: []*schema.Column{ApisColumns[0]},
+	}
 	// CardsColumns holds the columns for the "cards" table.
 	CardsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt, Increment: true},
@@ -62,6 +72,7 @@ var (
 		{Name: "nillable_int", Type: field.TypeInt, Nullable: true},
 		{Name: "table", Type: field.TypeString, Nullable: true},
 		{Name: "dir", Type: field.TypeJSON, Nullable: true},
+		{Name: "client", Type: field.TypeString, Nullable: true},
 	}
 	// CommentsTable holds the schema information for the "comments" table.
 	CommentsTable = &schema.Table{
@@ -305,6 +316,7 @@ var (
 	NodesColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt, Increment: true},
 		{Name: "value", Type: field.TypeInt, Nullable: true},
+		{Name: "updated_at", Type: field.TypeTime, Nullable: true},
 		{Name: "node_next", Type: field.TypeInt, Unique: true, Nullable: true},
 	}
 	// NodesTable holds the schema information for the "nodes" table.
@@ -315,7 +327,7 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "nodes_nodes_next",
-				Columns:    []*schema.Column{NodesColumns[2]},
+				Columns:    []*schema.Column{NodesColumns[3]},
 				RefColumns: []*schema.Column{NodesColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
@@ -380,12 +392,21 @@ var (
 		{Name: "priority", Type: field.TypeInt, Default: 1},
 		{Name: "priorities", Type: field.TypeJSON, Nullable: true},
 		{Name: "created_at", Type: field.TypeTime},
+		{Name: "name", Type: field.TypeString, Nullable: true},
+		{Name: "owner", Type: field.TypeString, Nullable: true},
 	}
 	// TasksTable holds the schema information for the "tasks" table.
 	TasksTable = &schema.Table{
 		Name:       "tasks",
 		Columns:    TasksColumns,
 		PrimaryKey: []*schema.Column{TasksColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "task_name_owner",
+				Unique:  true,
+				Columns: []*schema.Column{TasksColumns[4], TasksColumns[5]},
+			},
+		},
 	}
 	// UsersColumns holds the columns for the "users" table.
 	UsersColumns = []*schema.Column{
@@ -533,6 +554,7 @@ var (
 	}
 	// Tables holds all the tables in the schema.
 	Tables = []*schema.Table{
+		ApisTable,
 		CardsTable,
 		CommentsTable,
 		FieldTypesTable,

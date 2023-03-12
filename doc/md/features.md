@@ -13,7 +13,7 @@ Feature flags can be provided either by CLI flags or as arguments to the `gen` p
 #### CLI
 
 ```console
-go run entgo.io/ent/cmd/ent generate --feature privacy,entql ./ent/schema
+go run -mod=mod entgo.io/ent/cmd/ent generate --feature privacy,entql ./ent/schema
 ```
 
 #### Go
@@ -64,14 +64,14 @@ This option can be added to a project using the `--feature schema/snapshot` flag
 The privacy layer allows configuring privacy policy for queries and mutations of entities in the database.
 
 This option can be added to a project using the `--feature privacy` flag, and you can learn more about in the
-[privacy](privacy.md) documentation.
+[privacy](privacy.mdx) documentation.
 
 ### EntQL Filtering
 
 The `entql` option provides a generic and dynamic filtering capability at runtime for the different query builders.
 
 This option can be added to a project using the `--feature entql` flag, and you can learn more about in the
-[privacy](privacy.md#multi-tenancy) documentation.
+[privacy](privacy.mdx#multi-tenancy) documentation.
 
 ### Named Edges
 
@@ -288,6 +288,28 @@ The above code will produce the following SQL query:
 UPDATE `users` SET `id` = `id` + 1 ORDER BY `id` DESC
 ```
 
+#### Modify Example 7
+
+Append elements to the `values` array in a JSON column:
+
+```go
+client.User.Update().
+	Modify(func(u *sql.UpdateBuilder) {
+        sqljson.Append(u, user.FieldTags, []string{"tag1", "tag2"}, sqljson.Path("values"))
+	}).
+	ExecX(ctx)
+```
+
+The above code will produce the following SQL query:
+
+```sql
+UPDATE `users` SET `tags` = CASE
+    WHEN (JSON_TYPE(JSON_EXTRACT(`tags`, '$.values')) IS NULL OR JSON_TYPE(JSON_EXTRACT(`tags`, '$.values')) = 'NULL')
+    THEN JSON_SET(`tags`, '$.values', JSON_ARRAY(?, ?))
+    ELSE JSON_ARRAY_APPEND(`tags`, '$.values', ?, '$.values', ?) END
+    WHERE `id` = ?
+```
+
 ### SQL Raw API
 
 The `sql/execquery` option allows executing statements using the `ExecContext`/`QueryContext` methods of the underlying
@@ -322,7 +344,7 @@ application such as hooks, privacy (authorization), and validators.
 ### Upsert
 
 The `sql/upsert` option lets configure upsert and bulk-upsert logic using the SQL `ON CONFLICT` / `ON DUPLICATE KEY`
-syntax. For full documentation, go to the [Upsert API](crud.md#upsert-one).
+syntax. For full documentation, go to the [Upsert API](crud.mdx#upsert-one).
 
 This option can be added to a project using the `--feature sql/upsert` flag.
 

@@ -79,7 +79,7 @@ func JSON(name string, typ any) *jsonBuilder {
 	}}
 	t := reflect.TypeOf(typ)
 	if t == nil {
-		b.desc.Err = errors.New("expect a Go value as JSON type, but got nil")
+		b.desc.Err = errors.New("expect a Go value as JSON type but got nil")
 		return b
 	}
 	b.desc.Info.Ident = t.String()
@@ -106,6 +106,26 @@ func Ints(name string) *jsonBuilder {
 // Floats returns a new JSON Field with type []float.
 func Floats(name string) *jsonBuilder {
 	return JSON(name, []float64{})
+}
+
+// Any returns a new JSON Field with type any. Although this field type can be
+// useful for fields with dynamic data layout, it is strongly recommended to use
+// JSON with json.RawMessage instead and implement custom marshaling.
+func Any(name string) *jsonBuilder {
+	const t = "any"
+	return &jsonBuilder{&Descriptor{
+		Name: name,
+		Info: &TypeInfo{
+			Type:     TypeJSON,
+			Ident:    t,
+			Nillable: true,
+			RType: &RType{
+				Name:  t,
+				Ident: t,
+				Kind:  reflect.Interface,
+			},
+		},
+	}}
 }
 
 // Enum returns a new Field with type enum. An example for defining enum is as follows:
@@ -237,6 +257,9 @@ func (b *stringBuilder) Default(s string) *stringBuilder {
 //	field.String("cuid").
 //		DefaultFunc(cuid.New)
 func (b *stringBuilder) DefaultFunc(fn any) *stringBuilder {
+	if t := reflect.TypeOf(fn); t.Kind() != reflect.Func {
+		b.desc.Err = fmt.Errorf("field.String(%q).DefaultFunc expects func but got %s", b.desc.Name, t.Kind())
+	}
 	b.desc.Default = fn
 	return b
 }
@@ -294,6 +317,9 @@ func (b *stringBuilder) SchemaType(types map[string]string) *stringBuilder {
 }
 
 // GoType overrides the default Go type with a custom one.
+// If the provided type implements the Validator interface
+// and no validators have been set, the type validator will
+// be used.
 //
 //	field.String("dir").
 //		GoType(http.Dir("dir"))
@@ -394,6 +420,9 @@ func (b *timeBuilder) StorageKey(key string) *timeBuilder {
 }
 
 // GoType overrides the default Go type with a custom one.
+// If the provided type implements the Validator interface
+// and no validators have been set, the type validator will
+// be used.
 //
 //	field.Time("deleted_at").
 //		GoType(&sql.NullTime{})
@@ -486,6 +515,9 @@ func (b *boolBuilder) StorageKey(key string) *boolBuilder {
 }
 
 // GoType overrides the default Go type with a custom one.
+// If the provided type implements the Validator interface
+// and no validators have been set, the type validator will
+// be used.
 //
 //	field.Bool("deleted").
 //		GoType(&sql.NullBool{})
@@ -528,6 +560,9 @@ func (b *bytesBuilder) Default(v []byte) *bytesBuilder {
 //	field.Bytes("cuid").
 //		DefaultFunc(cuid.New)
 func (b *bytesBuilder) DefaultFunc(fn any) *bytesBuilder {
+	if t := reflect.TypeOf(fn); t.Kind() != reflect.Func {
+		b.desc.Err = fmt.Errorf("field.Bytes(%q).DefaultFunc expects func but got %s", b.desc.Name, t.Kind())
+	}
 	b.desc.Default = fn
 	return b
 }
@@ -631,6 +666,9 @@ func (b *bytesBuilder) StorageKey(key string) *bytesBuilder {
 }
 
 // GoType overrides the default Go type with a custom one.
+// If the provided type implements the Validator interface
+// and no validators have been set, the type validator will
+// be used.
 //
 //	field.Bytes("ip").
 //		GoType(net.IP("127.0.0.1"))
@@ -870,6 +908,9 @@ type EnumValues interface {
 }
 
 // GoType overrides the default Go type with a custom one.
+// If the provided type implements the Validator interface
+// and no validators have been set, the type validator will
+// be used.
 //
 //	field.Enum("enum").
 //		GoType(role.Enum("role"))
@@ -1222,12 +1263,19 @@ var (
 	stringType       = reflect.TypeOf("")
 	valuerType       = reflect.TypeOf((*driver.Valuer)(nil)).Elem()
 	valueScannerType = reflect.TypeOf((*ValueScanner)(nil)).Elem()
+	validatorType    = reflect.TypeOf((*Validator)(nil)).Elem()
 )
 
 // ValueScanner is the interface that groups the Value and the Scan methods.
 type ValueScanner interface {
 	driver.Valuer
 	sql.Scanner
+}
+
+// Validator interface wraps the Validate method. Custom GoTypes with
+// this method will be validated when the entity is created or updated.
+type Validator interface {
+	Validate() error
 }
 
 // indirect returns the type at the end of indirection.

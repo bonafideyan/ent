@@ -7,6 +7,7 @@ package schema
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"strconv"
 	"strings"
 	"unicode"
@@ -29,9 +30,9 @@ type Postgres struct {
 
 // init loads the Postgres version from the database for later use in the migration process.
 // It returns an error if the server version is lower than v10.
-func (d *Postgres) init(ctx context.Context, tx dialect.ExecQuerier) error {
+func (d *Postgres) init(ctx context.Context) error {
 	rows := &sql.Rows{}
-	if err := tx.Query(ctx, "SHOW server_version_num", []any{}, rows); err != nil {
+	if err := d.Query(ctx, "SHOW server_version_num", []any{}, rows); err != nil {
 		return fmt.Errorf("querying server version %w", err)
 	}
 	defer rows.Close()
@@ -642,6 +643,9 @@ func (d *Postgres) foreignKeys(ctx context.Context, tx dialect.Tx, tables []*Tab
 				t.AddForeignKey(newFk)
 			}
 		}
+		if err := rows.Close(); err != nil {
+			return err
+		}
 		if err := rows.Err(); err != nil {
 			return err
 		}
@@ -683,6 +687,11 @@ func (d *Postgres) atTable(t1 *Table, t2 *schema.Table) {
 	}
 }
 
+func (d *Postgres) supportsDefault(*Column) bool {
+	// PostgreSQL supports default values for all standard types.
+	return true
+}
+
 func (d *Postgres) atTypeC(c1 *Column, c2 *schema.Column) error {
 	if c1.SchemaType != nil && c1.SchemaType[dialect.Postgres] != "" {
 		t, err := postgres.ParseType(strings.ToLower(c1.SchemaType[dialect.Postgres]))
@@ -690,6 +699,9 @@ func (d *Postgres) atTypeC(c1 *Column, c2 *schema.Column) error {
 			return err
 		}
 		c2.Type.Type = t
+		if s, ok := t.(*postgres.SerialType); c1.foreign != nil && ok {
+			c2.Type.Type = s.IntegerType()
+		}
 		return nil
 	}
 	var t schema.Type
@@ -758,7 +770,10 @@ func (d *Postgres) atImplicitIndexName(idx *Index, t1 *Table, c1 *Column) bool {
 }
 
 func (d *Postgres) atIncrementC(t *schema.Table, c *schema.Column) {
-	if _, ok := c.Type.Type.(*postgres.SerialType); ok {
+	// Skip marking this column as an identity in case it is
+	// serial type or a default was already defined for it.
+	if _, ok := c.Type.Type.(*postgres.SerialType); ok || c.Default != nil {
+		t.Attrs = removeAttr(t.Attrs, reflect.TypeOf(&postgres.Identity{}))
 		return
 	}
 	id := &postgres.Identity{}
@@ -774,16 +789,56 @@ func (d *Postgres) atIncrementT(t *schema.Table, v int64) {
 	t.AddAttrs(&postgres.Identity{Sequence: &postgres.Sequence{Start: v}})
 }
 
+// indexOpClass returns a map holding the operator-class mapping if exists.
+func indexOpClass(idx *Index) map[string]string {
+	opc := make(map[string]string)
+	if idx.Annotation == nil {
+		return opc
+	}
+	// If operator-class (without a name) was defined on
+	// the annotation, map it to the single column index.
+	if idx.Annotation.OpClass != "" && len(idx.Columns) == 1 {
+		opc[idx.Columns[0].Name] = idx.Annotation.OpClass
+	}
+	for column, op := range idx.Annotation.OpClassColumns {
+		opc[column] = op
+	}
+	return opc
+}
+
 func (d *Postgres) atIndex(idx1 *Index, t2 *schema.Table, idx2 *schema.Index) error {
+	opc := indexOpClass(idx1)
 	for _, c1 := range idx1.Columns {
 		c2, ok := t2.Column(c1.Name)
 		if !ok {
 			return fmt.Errorf("unexpected index %q column: %q", idx1.Name, c1.Name)
 		}
-		idx2.AddParts(&schema.IndexPart{C: c2})
+		part := &schema.IndexPart{C: c2}
+		if v, ok := opc[c1.Name]; ok {
+			var op postgres.IndexOpClass
+			if err := op.UnmarshalText([]byte(v)); err != nil {
+				return fmt.Errorf("unmarshaling operator-class %q for column %q: %v", v, c1.Name, err)
+			}
+			part.Attrs = append(part.Attrs, &op)
+		}
+		idx2.AddParts(part)
 	}
 	if t, ok := indexType(idx1, dialect.Postgres); ok {
 		idx2.AddAttrs(&postgres.IndexType{T: t})
+	}
+	if ant, supportsInclude := idx1.Annotation, compareVersions(d.version, "11.0.0") >= 0; ant != nil && len(ant.IncludeColumns) > 0 && supportsInclude {
+		columns := make([]*schema.Column, len(ant.IncludeColumns))
+		for i, ic := range ant.IncludeColumns {
+			c, ok := t2.Column(ic)
+			if !ok {
+				return fmt.Errorf("include column %q was not found for index %q", ic, idx1.Name)
+			}
+			columns[i] = c
+		}
+		idx2.AddAttrs(&postgres.IndexInclude{Columns: columns})
+	}
+	if idx1.Annotation != nil && idx1.Annotation.Where != "" {
+		idx2.AddAttrs(&postgres.IndexPredicate{P: idx1.Annotation.Where})
 	}
 	return nil
 }

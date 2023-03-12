@@ -12,6 +12,9 @@ in the LICENSE file in the root directory of this source tree.
 {{ $mutation := print $receiver ".mutation"  }}
 
 func ({{ $receiver }} *{{ $builder }}) sqlSave(ctx context.Context) (*{{ $.Name }}, error) {
+	if err := {{ $receiver }}.check(); err != nil {
+		return nil, err
+	}
 	_node, _spec := {{ $receiver }}.createSpec()
 	if err := sqlgraph.CreateNode(ctx, {{ $receiver }}.driver, _spec); err != nil {
 		if sqlgraph.IsConstraintError(err) {
@@ -49,21 +52,17 @@ func ({{ $receiver }} *{{ $builder }}) sqlSave(ctx context.Context) (*{{ $.Name 
 			}
 		{{- end }}
 	{{- end }}
+	{{- if $.HasOneFieldID }}
+		{{ $mutation }}.{{ $.ID.BuilderField }} = &_node.{{ $.ID.StructField }}
+		{{ $mutation }}.done = true
+	{{- end }}
 	return _node, nil
 }
 
 func ({{ $receiver }} *{{ $builder }}) createSpec() (*{{ $.Name }}, *sqlgraph.CreateSpec) {
 	var (
 		_node = &{{ $.Name }}{config: {{ $receiver }}.config}
-		_spec = &sqlgraph.CreateSpec{
-			Table: {{ $.Package }}.Table,
-			{{- if $.HasOneFieldID }}
-				ID: &sqlgraph.FieldSpec{
-					Type: field.{{ $.ID.Type.ConstName }},
-					Column: {{ $.Package }}.{{ $.ID.Constant }},
-				},
-			{{- end }}
-		}
+		_spec = sqlgraph.NewCreateSpec({{ $.Package }}.Table, {{ if $.HasOneFieldID }}sqlgraph.NewFieldSpec({{ $.Package }}.{{ $.ID.Constant }}, field.{{ $.ID.Type.ConstName }}){{ else }}nil{{ end }})
 	)
 	{{- /* Allow mutating the sqlgraph.CreateSpec by ent extensions or user templates.*/}}
 	{{- with $tmpls := matchTemplate "dialect/sql/create/spec/*" }}
@@ -81,11 +80,7 @@ func ({{ $receiver }} *{{ $builder }}) createSpec() (*{{ $.Name }}, *sqlgraph.Cr
 	{{- end }}
 	{{- range $f := $.MutationFields }}
 		if value, ok := {{ $mutation }}.{{ $f.MutationGet }}(); ok {
-			_spec.Fields = append(_spec.Fields, &sqlgraph.FieldSpec{
-				Type: field.{{ $f.Type.ConstName }},
-				Value: value,
-				Column: {{ $.Package }}.{{ $f.Constant }},
-			})
+			_spec.SetField({{ $.Package }}.{{ $f.Constant }}, field.{{ $f.Type.ConstName }}, value)
 			_node.{{ $f.StructField }} = {{ if $f.NillableValue }}&{{ end }}value
 		}
 	{{- end }}

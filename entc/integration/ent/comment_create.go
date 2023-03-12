@@ -80,6 +80,20 @@ func (cc *CommentCreate) SetNillableDir(s *schemadir.Dir) *CommentCreate {
 	return cc
 }
 
+// SetClient sets the "client" field.
+func (cc *CommentCreate) SetClient(s string) *CommentCreate {
+	cc.mutation.SetClient(s)
+	return cc
+}
+
+// SetNillableClient sets the "client" field if the given value is not nil.
+func (cc *CommentCreate) SetNillableClient(s *string) *CommentCreate {
+	if s != nil {
+		cc.SetClient(*s)
+	}
+	return cc
+}
+
 // Mutation returns the CommentMutation object of the builder.
 func (cc *CommentCreate) Mutation() *CommentMutation {
 	return cc.mutation
@@ -87,49 +101,7 @@ func (cc *CommentCreate) Mutation() *CommentMutation {
 
 // Save creates the Comment in the database.
 func (cc *CommentCreate) Save(ctx context.Context) (*Comment, error) {
-	var (
-		err  error
-		node *Comment
-	)
-	if len(cc.hooks) == 0 {
-		if err = cc.check(); err != nil {
-			return nil, err
-		}
-		node, err = cc.sqlSave(ctx)
-	} else {
-		var mut Mutator = MutateFunc(func(ctx context.Context, m Mutation) (Value, error) {
-			mutation, ok := m.(*CommentMutation)
-			if !ok {
-				return nil, fmt.Errorf("unexpected mutation type %T", m)
-			}
-			if err = cc.check(); err != nil {
-				return nil, err
-			}
-			cc.mutation = mutation
-			if node, err = cc.sqlSave(ctx); err != nil {
-				return nil, err
-			}
-			mutation.id = &node.ID
-			mutation.done = true
-			return node, err
-		})
-		for i := len(cc.hooks) - 1; i >= 0; i-- {
-			if cc.hooks[i] == nil {
-				return nil, fmt.Errorf("ent: uninitialized hook (forgotten import ent/runtime?)")
-			}
-			mut = cc.hooks[i](mut)
-		}
-		v, err := mut.Mutate(ctx, cc.mutation)
-		if err != nil {
-			return nil, err
-		}
-		nv, ok := v.(*Comment)
-		if !ok {
-			return nil, fmt.Errorf("unexpected node type %T returned from CommentMutation", v)
-		}
-		node = nv
-	}
-	return node, err
+	return withHooks[*Comment, CommentMutation](ctx, cc.sqlSave, cc.mutation, cc.hooks)
 }
 
 // SaveX calls Save and panics if Save returns an error.
@@ -166,6 +138,9 @@ func (cc *CommentCreate) check() error {
 }
 
 func (cc *CommentCreate) sqlSave(ctx context.Context) (*Comment, error) {
+	if err := cc.check(); err != nil {
+		return nil, err
+	}
 	_node, _spec := cc.createSpec()
 	if err := sqlgraph.CreateNode(ctx, cc.driver, _spec); err != nil {
 		if sqlgraph.IsConstraintError(err) {
@@ -175,60 +150,40 @@ func (cc *CommentCreate) sqlSave(ctx context.Context) (*Comment, error) {
 	}
 	id := _spec.ID.Value.(int64)
 	_node.ID = int(id)
+	cc.mutation.id = &_node.ID
+	cc.mutation.done = true
 	return _node, nil
 }
 
 func (cc *CommentCreate) createSpec() (*Comment, *sqlgraph.CreateSpec) {
 	var (
 		_node = &Comment{config: cc.config}
-		_spec = &sqlgraph.CreateSpec{
-			Table: comment.Table,
-			ID: &sqlgraph.FieldSpec{
-				Type:   field.TypeInt,
-				Column: comment.FieldID,
-			},
-		}
+		_spec = sqlgraph.NewCreateSpec(comment.Table, sqlgraph.NewFieldSpec(comment.FieldID, field.TypeInt))
 	)
 	_spec.OnConflict = cc.conflict
 	if value, ok := cc.mutation.UniqueInt(); ok {
-		_spec.Fields = append(_spec.Fields, &sqlgraph.FieldSpec{
-			Type:   field.TypeInt,
-			Value:  value,
-			Column: comment.FieldUniqueInt,
-		})
+		_spec.SetField(comment.FieldUniqueInt, field.TypeInt, value)
 		_node.UniqueInt = value
 	}
 	if value, ok := cc.mutation.UniqueFloat(); ok {
-		_spec.Fields = append(_spec.Fields, &sqlgraph.FieldSpec{
-			Type:   field.TypeFloat64,
-			Value:  value,
-			Column: comment.FieldUniqueFloat,
-		})
+		_spec.SetField(comment.FieldUniqueFloat, field.TypeFloat64, value)
 		_node.UniqueFloat = value
 	}
 	if value, ok := cc.mutation.NillableInt(); ok {
-		_spec.Fields = append(_spec.Fields, &sqlgraph.FieldSpec{
-			Type:   field.TypeInt,
-			Value:  value,
-			Column: comment.FieldNillableInt,
-		})
+		_spec.SetField(comment.FieldNillableInt, field.TypeInt, value)
 		_node.NillableInt = &value
 	}
 	if value, ok := cc.mutation.Table(); ok {
-		_spec.Fields = append(_spec.Fields, &sqlgraph.FieldSpec{
-			Type:   field.TypeString,
-			Value:  value,
-			Column: comment.FieldTable,
-		})
+		_spec.SetField(comment.FieldTable, field.TypeString, value)
 		_node.Table = value
 	}
 	if value, ok := cc.mutation.Dir(); ok {
-		_spec.Fields = append(_spec.Fields, &sqlgraph.FieldSpec{
-			Type:   field.TypeJSON,
-			Value:  value,
-			Column: comment.FieldDir,
-		})
+		_spec.SetField(comment.FieldDir, field.TypeJSON, value)
 		_node.Dir = value
+	}
+	if value, ok := cc.mutation.GetClient(); ok {
+		_spec.SetField(comment.FieldClient, field.TypeString, value)
+		_node.Client = value
 	}
 	return _node, _spec
 }
@@ -375,6 +330,24 @@ func (u *CommentUpsert) UpdateDir() *CommentUpsert {
 // ClearDir clears the value of the "dir" field.
 func (u *CommentUpsert) ClearDir() *CommentUpsert {
 	u.SetNull(comment.FieldDir)
+	return u
+}
+
+// SetClient sets the "client" field.
+func (u *CommentUpsert) SetClient(v string) *CommentUpsert {
+	u.Set(comment.FieldClient, v)
+	return u
+}
+
+// UpdateClient sets the "client" field to the value that was provided on create.
+func (u *CommentUpsert) UpdateClient() *CommentUpsert {
+	u.SetExcluded(comment.FieldClient)
+	return u
+}
+
+// ClearClient clears the value of the "client" field.
+func (u *CommentUpsert) ClearClient() *CommentUpsert {
+	u.SetNull(comment.FieldClient)
 	return u
 }
 
@@ -527,6 +500,27 @@ func (u *CommentUpsertOne) UpdateDir() *CommentUpsertOne {
 func (u *CommentUpsertOne) ClearDir() *CommentUpsertOne {
 	return u.Update(func(s *CommentUpsert) {
 		s.ClearDir()
+	})
+}
+
+// SetClient sets the "client" field.
+func (u *CommentUpsertOne) SetClient(v string) *CommentUpsertOne {
+	return u.Update(func(s *CommentUpsert) {
+		s.SetClient(v)
+	})
+}
+
+// UpdateClient sets the "client" field to the value that was provided on create.
+func (u *CommentUpsertOne) UpdateClient() *CommentUpsertOne {
+	return u.Update(func(s *CommentUpsert) {
+		s.UpdateClient()
+	})
+}
+
+// ClearClient clears the value of the "client" field.
+func (u *CommentUpsertOne) ClearClient() *CommentUpsertOne {
+	return u.Update(func(s *CommentUpsert) {
+		s.ClearClient()
 	})
 }
 
@@ -838,6 +832,27 @@ func (u *CommentUpsertBulk) UpdateDir() *CommentUpsertBulk {
 func (u *CommentUpsertBulk) ClearDir() *CommentUpsertBulk {
 	return u.Update(func(s *CommentUpsert) {
 		s.ClearDir()
+	})
+}
+
+// SetClient sets the "client" field.
+func (u *CommentUpsertBulk) SetClient(v string) *CommentUpsertBulk {
+	return u.Update(func(s *CommentUpsert) {
+		s.SetClient(v)
+	})
+}
+
+// UpdateClient sets the "client" field to the value that was provided on create.
+func (u *CommentUpsertBulk) UpdateClient() *CommentUpsertBulk {
+	return u.Update(func(s *CommentUpsert) {
+		s.UpdateClient()
+	})
+}
+
+// ClearClient clears the value of the "client" field.
+func (u *CommentUpsertBulk) ClearClient() *CommentUpsertBulk {
+	return u.Update(func(s *CommentUpsert) {
+		s.ClearClient()
 	})
 }
 

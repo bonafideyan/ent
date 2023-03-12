@@ -7,6 +7,7 @@
 package entv2
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -25,6 +26,8 @@ type User struct {
 	MixedString string `json:"mixed_string,omitempty"`
 	// MixedEnum holds the value of the "mixed_enum" field.
 	MixedEnum user.MixedEnum `json:"mixed_enum,omitempty"`
+	// Active holds the value of the "active" field.
+	Active bool `json:"active,omitempty"`
 	// Age holds the value of the "age" field.
 	Age int `json:"age,omitempty"`
 	// Name holds the value of the "name" field.
@@ -51,13 +54,20 @@ type User struct {
 	Status user.Status `json:"status,omitempty"`
 	// Workplace holds the value of the "workplace" field.
 	Workplace string `json:"workplace,omitempty"`
+	// Roles holds the value of the "roles" field.
+	Roles []string `json:"roles,omitempty"`
+	// DefaultExpr holds the value of the "default_expr" field.
+	DefaultExpr string `json:"default_expr,omitempty"`
+	// DefaultExprs holds the value of the "default_exprs" field.
+	DefaultExprs string `json:"default_exprs,omitempty"`
 	// CreatedAt holds the value of the "created_at" field.
 	CreatedAt time.Time `json:"created_at,omitempty"`
 	// DropOptional holds the value of the "drop_optional" field.
 	DropOptional string `json:"drop_optional,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the UserQuery when eager-loading is set.
-	Edges UserEdges `json:"edges"`
+	Edges       UserEdges `json:"edges"`
+	blog_admins *int
 }
 
 // UserEdges holds the relations/edges for other nodes in the graph.
@@ -109,14 +119,18 @@ func (*User) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case user.FieldBuffer, user.FieldBlob:
+		case user.FieldBuffer, user.FieldBlob, user.FieldRoles:
 			values[i] = new([]byte)
+		case user.FieldActive:
+			values[i] = new(sql.NullBool)
 		case user.FieldID, user.FieldAge:
 			values[i] = new(sql.NullInt64)
-		case user.FieldMixedString, user.FieldMixedEnum, user.FieldName, user.FieldDescription, user.FieldNickname, user.FieldPhone, user.FieldTitle, user.FieldNewName, user.FieldNewToken, user.FieldState, user.FieldStatus, user.FieldWorkplace, user.FieldDropOptional:
+		case user.FieldMixedString, user.FieldMixedEnum, user.FieldName, user.FieldDescription, user.FieldNickname, user.FieldPhone, user.FieldTitle, user.FieldNewName, user.FieldNewToken, user.FieldState, user.FieldStatus, user.FieldWorkplace, user.FieldDefaultExpr, user.FieldDefaultExprs, user.FieldDropOptional:
 			values[i] = new(sql.NullString)
 		case user.FieldCreatedAt:
 			values[i] = new(sql.NullTime)
+		case user.ForeignKeys[0]: // blog_admins
+			values[i] = new(sql.NullInt64)
 		default:
 			return nil, fmt.Errorf("unexpected column %q for type User", columns[i])
 		}
@@ -149,6 +163,12 @@ func (u *User) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field mixed_enum", values[i])
 			} else if value.Valid {
 				u.MixedEnum = user.MixedEnum(value.String)
+			}
+		case user.FieldActive:
+			if value, ok := values[i].(*sql.NullBool); !ok {
+				return fmt.Errorf("unexpected type %T for field active", values[i])
+			} else if value.Valid {
+				u.Active = value.Bool
 			}
 		case user.FieldAge:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
@@ -228,6 +248,26 @@ func (u *User) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				u.Workplace = value.String
 			}
+		case user.FieldRoles:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field roles", values[i])
+			} else if value != nil && len(*value) > 0 {
+				if err := json.Unmarshal(*value, &u.Roles); err != nil {
+					return fmt.Errorf("unmarshal field roles: %w", err)
+				}
+			}
+		case user.FieldDefaultExpr:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field default_expr", values[i])
+			} else if value.Valid {
+				u.DefaultExpr = value.String
+			}
+		case user.FieldDefaultExprs:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field default_exprs", values[i])
+			} else if value.Valid {
+				u.DefaultExprs = value.String
+			}
 		case user.FieldCreatedAt:
 			if value, ok := values[i].(*sql.NullTime); !ok {
 				return fmt.Errorf("unexpected type %T for field created_at", values[i])
@@ -240,6 +280,13 @@ func (u *User) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				u.DropOptional = value.String
 			}
+		case user.ForeignKeys[0]:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for edge-field blog_admins", value)
+			} else if value.Valid {
+				u.blog_admins = new(int)
+				*u.blog_admins = int(value.Int64)
+			}
 		}
 	}
 	return nil
@@ -247,24 +294,24 @@ func (u *User) assignValues(columns []string, values []any) error {
 
 // QueryCar queries the "car" edge of the User entity.
 func (u *User) QueryCar() *CarQuery {
-	return (&UserClient{config: u.config}).QueryCar(u)
+	return NewUserClient(u.config).QueryCar(u)
 }
 
 // QueryPets queries the "pets" edge of the User entity.
 func (u *User) QueryPets() *PetQuery {
-	return (&UserClient{config: u.config}).QueryPets(u)
+	return NewUserClient(u.config).QueryPets(u)
 }
 
 // QueryFriends queries the "friends" edge of the User entity.
 func (u *User) QueryFriends() *UserQuery {
-	return (&UserClient{config: u.config}).QueryFriends(u)
+	return NewUserClient(u.config).QueryFriends(u)
 }
 
 // Update returns a builder for updating this User.
 // Note that you need to call User.Unwrap() before calling this method if this User
 // was returned from a transaction, and the transaction was committed or rolled back.
 func (u *User) Update() *UserUpdateOne {
-	return (&UserClient{config: u.config}).UpdateOne(u)
+	return NewUserClient(u.config).UpdateOne(u)
 }
 
 // Unwrap unwraps the User entity that was returned from a transaction after it was closed,
@@ -288,6 +335,9 @@ func (u *User) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("mixed_enum=")
 	builder.WriteString(fmt.Sprintf("%v", u.MixedEnum))
+	builder.WriteString(", ")
+	builder.WriteString("active=")
+	builder.WriteString(fmt.Sprintf("%v", u.Active))
 	builder.WriteString(", ")
 	builder.WriteString("age=")
 	builder.WriteString(fmt.Sprintf("%v", u.Age))
@@ -328,6 +378,15 @@ func (u *User) String() string {
 	builder.WriteString("workplace=")
 	builder.WriteString(u.Workplace)
 	builder.WriteString(", ")
+	builder.WriteString("roles=")
+	builder.WriteString(fmt.Sprintf("%v", u.Roles))
+	builder.WriteString(", ")
+	builder.WriteString("default_expr=")
+	builder.WriteString(u.DefaultExpr)
+	builder.WriteString(", ")
+	builder.WriteString("default_exprs=")
+	builder.WriteString(u.DefaultExprs)
+	builder.WriteString(", ")
 	builder.WriteString("created_at=")
 	builder.WriteString(u.CreatedAt.Format(time.ANSIC))
 	builder.WriteString(", ")
@@ -339,9 +398,3 @@ func (u *User) String() string {
 
 // Users is a parsable slice of User.
 type Users []*User
-
-func (u Users) config(cfg config) {
-	for _i := range u {
-		u[_i].config = cfg
-	}
-}

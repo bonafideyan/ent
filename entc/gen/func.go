@@ -45,6 +45,7 @@ var (
 		"base":          filepath.Base,
 		"keys":          keys,
 		"join":          join,
+		"joinWords":     joinWords,
 		"isNil":         isNil,
 		"lower":         strings.ToLower,
 		"upper":         strings.ToUpper,
@@ -66,13 +67,34 @@ var (
 		"set":           set,
 		"unset":         unset,
 		"hasKey":        hasKey,
-		"list":          list,
+		"list":          list[any],
+		"slist":         list[string],
 		"fail":          fail,
 		"replace":       strings.ReplaceAll,
 	}
 	rules    = ruleset()
 	acronyms = make(map[string]struct{})
 )
+
+// joinWords with spaces and add linebreaks to ensure lines do not exceed the given maxSize.
+func joinWords(words []string, maxSize int) string {
+	if len(words) == 0 {
+		return ""
+	}
+	b := &strings.Builder{}
+	b.WriteString(words[0])
+	n := len(words[0])
+	for _, w := range words[1:] {
+		if n+len(w)+1 > maxSize {
+			b.WriteByte('\n')
+			n = 0
+		}
+		b.WriteString(" ")
+		b.WriteString(w)
+		n += len(w) + 1
+	}
+	return b.String()
+}
 
 // quote only strings.
 func quote(v any) any {
@@ -144,7 +166,6 @@ func pascalWords(words []string) string {
 //	full_name 	=> FullName
 //	user_id   	=> UserID
 //	full-admin	=> FullAdmin
-//
 func pascal(s string) string {
 	words := strings.FieldsFunc(s, isSeparator)
 	return pascalWords(words)
@@ -156,7 +177,6 @@ func pascal(s string) string {
 //	full_name  => fullName
 //	user_id    => userID
 //	full-admin => fullAdmin
-//
 func camel(s string) string {
 	words := strings.FieldsFunc(s, isSeparator)
 	if len(words) == 1 {
@@ -170,7 +190,6 @@ func camel(s string) string {
 //	Username => username
 //	FullName => full_name
 //	HTTPCode => http_code
-//
 func snake(s string) string {
 	var (
 		j int
@@ -199,7 +218,6 @@ func snake(s string) string {
 //	[1]T      => t
 //	User      => u
 //	UserQuery => uq
-//
 func receiver(s string) (r string) {
 	// Trim invalid tokens for identifier prefix.
 	s = strings.Trim(s, "[]*&0123456789")
@@ -244,7 +262,6 @@ type graphScope struct {
 //	{{ with $scope := extend $ "key" "value" }}
 //		{{ template "setters" $scope }}
 //	{{ end}}
-//
 func extend(v any, kv ...any) (any, error) {
 	if len(kv)%2 != 0 {
 		return nil, fmt.Errorf("invalid number of parameters: %d", len(kv))
@@ -283,18 +300,24 @@ func add(xs ...int) (n int) {
 
 func ruleset() *inflect.Ruleset {
 	rules := inflect.NewDefaultRuleset()
-	// Add common initialisms from golint and more.
+	// Add common initialism from golint and more.
 	for _, w := range []string{
 		"ACL", "API", "ASCII", "AWS", "CPU", "CSS", "DNS", "EOF", "GB", "GUID",
-		"HTML", "HTTP", "HTTPS", "ID", "IP", "JSON", "KB", "LHS", "MAC", "MB",
-		"QPS", "RAM", "RHS", "RPC", "SLA", "SMTP", "SQL", "SSH", "SSO", "TCP",
-		"TLS", "TTL", "UDP", "UI", "UID", "URI", "URL", "UTF8", "UUID", "VM",
-		"XML", "XMPP", "XSRF", "XSS",
+		"HCL", "HTML", "HTTP", "HTTPS", "ID", "IP", "JSON", "KB", "LHS", "MAC",
+		"MB", "QPS", "RAM", "RHS", "RPC", "SLA", "SMTP", "SQL", "SSH", "SSO",
+		"TCP", "TLS", "TTL", "UDP", "UI", "UID", "URI", "URL", "UTF8", "UUID",
+		"VM", "XML", "XMPP", "XSRF", "XSS",
 	} {
 		acronyms[w] = struct{}{}
 		rules.AddAcronym(w)
 	}
 	return rules
+}
+
+// AddAcronym adds initialism to the global ruleset.
+func AddAcronym(word string) {
+	acronyms[word] = struct{}{}
+	rules.AddAcronym(word)
 }
 
 // order returns a map of sort orders.
@@ -319,6 +342,7 @@ func aggregate() map[string]bool {
 
 // keys returns the given map keys.
 func keys(v reflect.Value) ([]string, error) {
+	v = indirect(v)
 	if k := v.Type().Kind(); k != reflect.Map {
 		return nil, fmt.Errorf("expect map for keys, got: %s", k)
 	}
@@ -486,7 +510,7 @@ func hasKey(d map[string]any, key string) bool {
 }
 
 // list creates a list from values.
-func list(v ...any) []any {
+func list[T any](v ...T) []T {
 	return v
 }
 

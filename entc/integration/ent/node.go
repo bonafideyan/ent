@@ -9,6 +9,7 @@ package ent
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/entc/integration/ent/node"
@@ -21,6 +22,8 @@ type Node struct {
 	ID int `json:"id,omitempty"`
 	// Value holds the value of the "value" field.
 	Value int `json:"value,omitempty"`
+	// UpdatedAt holds the value of the "updated_at" field.
+	UpdatedAt *time.Time `json:"updated_at,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the NodeQuery when eager-loading is set.
 	Edges     NodeEdges `json:"edges"`
@@ -71,6 +74,8 @@ func (*Node) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case node.FieldID, node.FieldValue:
 			values[i] = new(sql.NullInt64)
+		case node.FieldUpdatedAt:
+			values[i] = new(sql.NullTime)
 		case node.ForeignKeys[0]: // node_next
 			values[i] = new(sql.NullInt64)
 		default:
@@ -100,6 +105,13 @@ func (n *Node) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				n.Value = int(value.Int64)
 			}
+		case node.FieldUpdatedAt:
+			if value, ok := values[i].(*sql.NullTime); !ok {
+				return fmt.Errorf("unexpected type %T for field updated_at", values[i])
+			} else if value.Valid {
+				n.UpdatedAt = new(time.Time)
+				*n.UpdatedAt = value.Time
+			}
 		case node.ForeignKeys[0]:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
 				return fmt.Errorf("unexpected type %T for edge-field node_next", value)
@@ -114,19 +126,19 @@ func (n *Node) assignValues(columns []string, values []any) error {
 
 // QueryPrev queries the "prev" edge of the Node entity.
 func (n *Node) QueryPrev() *NodeQuery {
-	return (&NodeClient{config: n.config}).QueryPrev(n)
+	return NewNodeClient(n.config).QueryPrev(n)
 }
 
 // QueryNext queries the "next" edge of the Node entity.
 func (n *Node) QueryNext() *NodeQuery {
-	return (&NodeClient{config: n.config}).QueryNext(n)
+	return NewNodeClient(n.config).QueryNext(n)
 }
 
 // Update returns a builder for updating this Node.
 // Note that you need to call Node.Unwrap() before calling this method if this Node
 // was returned from a transaction, and the transaction was committed or rolled back.
 func (n *Node) Update() *NodeUpdateOne {
-	return (&NodeClient{config: n.config}).UpdateOne(n)
+	return NewNodeClient(n.config).UpdateOne(n)
 }
 
 // Unwrap unwraps the Node entity that was returned from a transaction after it was closed,
@@ -147,15 +159,14 @@ func (n *Node) String() string {
 	builder.WriteString(fmt.Sprintf("id=%v, ", n.ID))
 	builder.WriteString("value=")
 	builder.WriteString(fmt.Sprintf("%v", n.Value))
+	builder.WriteString(", ")
+	if v := n.UpdatedAt; v != nil {
+		builder.WriteString("updated_at=")
+		builder.WriteString(v.Format(time.ANSIC))
+	}
 	builder.WriteByte(')')
 	return builder.String()
 }
 
 // Nodes is a parsable slice of Node.
 type Nodes []*Node
-
-func (n Nodes) config(cfg config) {
-	for _i := range n {
-		n[_i].config = cfg
-	}
-}

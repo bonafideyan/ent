@@ -104,14 +104,14 @@ func (ft *FileType) assignValues(columns []string, values []any) error {
 
 // QueryFiles queries the "files" edge of the FileType entity.
 func (ft *FileType) QueryFiles() *FileQuery {
-	return (&FileTypeClient{config: ft.config}).QueryFiles(ft)
+	return NewFileTypeClient(ft.config).QueryFiles(ft)
 }
 
 // Update returns a builder for updating this FileType.
 // Note that you need to call FileType.Unwrap() before calling this method if this FileType
 // was returned from a transaction, and the transaction was committed or rolled back.
 func (ft *FileType) Update() *FileTypeUpdateOne {
-	return (&FileTypeClient{config: ft.config}).UpdateOne(ft)
+	return NewFileTypeClient(ft.config).UpdateOne(ft)
 }
 
 // Unwrap unwraps the FileType entity that was returned from a transaction after it was closed,
@@ -168,9 +168,3 @@ func (ft *FileType) appendNamedFiles(name string, edges ...*File) {
 
 // FileTypes is a parsable slice of FileType.
 type FileTypes []*FileType
-
-func (ft FileTypes) config(cfg config) {
-	for _i := range ft {
-		ft[_i].config = cfg
-	}
-}

@@ -25,6 +25,8 @@ const (
 	FieldCreatedAt = "created_at"
 	// FieldInHook holds the string denoting the in_hook field in the database.
 	FieldInHook = "in_hook"
+	// FieldExpiredAt holds the string denoting the expired_at field in the database.
+	FieldExpiredAt = "expired_at"
 	// EdgeOwner holds the string denoting the owner edge name in mutations.
 	EdgeOwner = "owner"
 	// Table holds the table name of the card in the database.
@@ -45,6 +47,7 @@ var Columns = []string{
 	FieldName,
 	FieldCreatedAt,
 	FieldInHook,
+	FieldExpiredAt,
 }
 
 // ForeignKeys holds the SQL foreign-keys that are owned by the "cards"
@@ -74,7 +77,8 @@ func ValidColumn(column string) bool {
 //
 //	import _ "entgo.io/ent/entc/integration/hooks/ent/runtime"
 var (
-	Hooks [3]ent.Hook
+	Hooks        [3]ent.Hook
+	Interceptors [1]ent.Interceptor
 	// DefaultNumber holds the default value on creation for the "number" field.
 	DefaultNumber string
 	// NumberValidator is a validator for the "number" field. It is called by the builders before save.

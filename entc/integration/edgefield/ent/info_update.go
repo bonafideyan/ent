@@ -14,6 +14,7 @@ import (
 
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
+	"entgo.io/ent/dialect/sql/sqljson"
 	"entgo.io/ent/entc/integration/edgefield/ent/info"
 	"entgo.io/ent/entc/integration/edgefield/ent/predicate"
 	"entgo.io/ent/entc/integration/edgefield/ent/user"
@@ -36,6 +37,12 @@ func (iu *InfoUpdate) Where(ps ...predicate.Info) *InfoUpdate {
 // SetContent sets the "content" field.
 func (iu *InfoUpdate) SetContent(jm json.RawMessage) *InfoUpdate {
 	iu.mutation.SetContent(jm)
+	return iu
+}
+
+// AppendContent appends jm to the "content" field.
+func (iu *InfoUpdate) AppendContent(jm json.RawMessage) *InfoUpdate {
+	iu.mutation.AppendContent(jm)
 	return iu
 }
 
@@ -71,34 +78,7 @@ func (iu *InfoUpdate) ClearUser() *InfoUpdate {
 
 // Save executes the query and returns the number of nodes affected by the update operation.
 func (iu *InfoUpdate) Save(ctx context.Context) (int, error) {
-	var (
-		err      error
-		affected int
-	)
-	if len(iu.hooks) == 0 {
-		affected, err = iu.sqlSave(ctx)
-	} else {
-		var mut Mutator = MutateFunc(func(ctx context.Context, m Mutation) (Value, error) {
-			mutation, ok := m.(*InfoMutation)
-			if !ok {
-				return nil, fmt.Errorf("unexpected mutation type %T", m)
-			}
-			iu.mutation = mutation
-			affected, err = iu.sqlSave(ctx)
-			mutation.done = true
-			return affected, err
-		})
-		for i := len(iu.hooks) - 1; i >= 0; i-- {
-			if iu.hooks[i] == nil {
-				return 0, fmt.Errorf("ent: uninitialized hook (forgotten import ent/runtime?)")
-			}
-			mut = iu.hooks[i](mut)
-		}
-		if _, err := mut.Mutate(ctx, iu.mutation); err != nil {
-			return 0, err
-		}
-	}
-	return affected, err
+	return withHooks[int, InfoMutation](ctx, iu.sqlSave, iu.mutation, iu.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
@@ -124,16 +104,7 @@ func (iu *InfoUpdate) ExecX(ctx context.Context) {
 }
 
 func (iu *InfoUpdate) sqlSave(ctx context.Context) (n int, err error) {
-	_spec := &sqlgraph.UpdateSpec{
-		Node: &sqlgraph.NodeSpec{
-			Table:   info.Table,
-			Columns: info.Columns,
-			ID: &sqlgraph.FieldSpec{
-				Type:   field.TypeInt,
-				Column: info.FieldID,
-			},
-		},
-	}
+	_spec := sqlgraph.NewUpdateSpec(info.Table, info.Columns, sqlgraph.NewFieldSpec(info.FieldID, field.TypeInt))
 	if ps := iu.mutation.predicates; len(ps) > 0 {
 		_spec.Predicate = func(selector *sql.Selector) {
 			for i := range ps {
@@ -142,10 +113,11 @@ func (iu *InfoUpdate) sqlSave(ctx context.Context) (n int, err error) {
 		}
 	}
 	if value, ok := iu.mutation.Content(); ok {
-		_spec.Fields.Set = append(_spec.Fields.Set, &sqlgraph.FieldSpec{
-			Type:   field.TypeJSON,
-			Value:  value,
-			Column: info.FieldContent,
+		_spec.SetField(info.FieldContent, field.TypeJSON, value)
+	}
+	if value, ok := iu.mutation.AppendedContent(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, info.FieldContent, value)
 		})
 	}
 	if iu.mutation.UserCleared() {
@@ -156,10 +128,7 @@ func (iu *InfoUpdate) sqlSave(ctx context.Context) (n int, err error) {
 			Columns: []string{info.UserColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: &sqlgraph.FieldSpec{
-					Type:   field.TypeInt,
-					Column: user.FieldID,
-				},
+				IDSpec: sqlgraph.NewFieldSpec(user.FieldID, field.TypeInt),
 			},
 		}
 		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
@@ -172,10 +141,7 @@ func (iu *InfoUpdate) sqlSave(ctx context.Context) (n int, err error) {
 			Columns: []string{info.UserColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: &sqlgraph.FieldSpec{
-					Type:   field.TypeInt,
-					Column: user.FieldID,
-				},
+				IDSpec: sqlgraph.NewFieldSpec(user.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {
@@ -191,6 +157,7 @@ func (iu *InfoUpdate) sqlSave(ctx context.Context) (n int, err error) {
 		}
 		return 0, err
 	}
+	iu.mutation.done = true
 	return n, nil
 }
 
@@ -205,6 +172,12 @@ type InfoUpdateOne struct {
 // SetContent sets the "content" field.
 func (iuo *InfoUpdateOne) SetContent(jm json.RawMessage) *InfoUpdateOne {
 	iuo.mutation.SetContent(jm)
+	return iuo
+}
+
+// AppendContent appends jm to the "content" field.
+func (iuo *InfoUpdateOne) AppendContent(jm json.RawMessage) *InfoUpdateOne {
+	iuo.mutation.AppendContent(jm)
 	return iuo
 }
 
@@ -238,6 +211,12 @@ func (iuo *InfoUpdateOne) ClearUser() *InfoUpdateOne {
 	return iuo
 }
 
+// Where appends a list predicates to the InfoUpdate builder.
+func (iuo *InfoUpdateOne) Where(ps ...predicate.Info) *InfoUpdateOne {
+	iuo.mutation.Where(ps...)
+	return iuo
+}
+
 // Select allows selecting one or more fields (columns) of the returned entity.
 // The default is selecting all fields defined in the entity schema.
 func (iuo *InfoUpdateOne) Select(field string, fields ...string) *InfoUpdateOne {
@@ -247,40 +226,7 @@ func (iuo *InfoUpdateOne) Select(field string, fields ...string) *InfoUpdateOne 
 
 // Save executes the query and returns the updated Info entity.
 func (iuo *InfoUpdateOne) Save(ctx context.Context) (*Info, error) {
-	var (
-		err  error
-		node *Info
-	)
-	if len(iuo.hooks) == 0 {
-		node, err = iuo.sqlSave(ctx)
-	} else {
-		var mut Mutator = MutateFunc(func(ctx context.Context, m Mutation) (Value, error) {
-			mutation, ok := m.(*InfoMutation)
-			if !ok {
-				return nil, fmt.Errorf("unexpected mutation type %T", m)
-			}
-			iuo.mutation = mutation
-			node, err = iuo.sqlSave(ctx)
-			mutation.done = true
-			return node, err
-		})
-		for i := len(iuo.hooks) - 1; i >= 0; i-- {
-			if iuo.hooks[i] == nil {
-				return nil, fmt.Errorf("ent: uninitialized hook (forgotten import ent/runtime?)")
-			}
-			mut = iuo.hooks[i](mut)
-		}
-		v, err := mut.Mutate(ctx, iuo.mutation)
-		if err != nil {
-			return nil, err
-		}
-		nv, ok := v.(*Info)
-		if !ok {
-			return nil, fmt.Errorf("unexpected node type %T returned from InfoMutation", v)
-		}
-		node = nv
-	}
-	return node, err
+	return withHooks[*Info, InfoMutation](ctx, iuo.sqlSave, iuo.mutation, iuo.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
@@ -306,16 +252,7 @@ func (iuo *InfoUpdateOne) ExecX(ctx context.Context) {
 }
 
 func (iuo *InfoUpdateOne) sqlSave(ctx context.Context) (_node *Info, err error) {
-	_spec := &sqlgraph.UpdateSpec{
-		Node: &sqlgraph.NodeSpec{
-			Table:   info.Table,
-			Columns: info.Columns,
-			ID: &sqlgraph.FieldSpec{
-				Type:   field.TypeInt,
-				Column: info.FieldID,
-			},
-		},
-	}
+	_spec := sqlgraph.NewUpdateSpec(info.Table, info.Columns, sqlgraph.NewFieldSpec(info.FieldID, field.TypeInt))
 	id, ok := iuo.mutation.ID()
 	if !ok {
 		return nil, &ValidationError{Name: "id", err: errors.New(`ent: missing "Info.id" for update`)}
@@ -341,10 +278,11 @@ func (iuo *InfoUpdateOne) sqlSave(ctx context.Context) (_node *Info, err error) 
 		}
 	}
 	if value, ok := iuo.mutation.Content(); ok {
-		_spec.Fields.Set = append(_spec.Fields.Set, &sqlgraph.FieldSpec{
-			Type:   field.TypeJSON,
-			Value:  value,
-			Column: info.FieldContent,
+		_spec.SetField(info.FieldContent, field.TypeJSON, value)
+	}
+	if value, ok := iuo.mutation.AppendedContent(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, info.FieldContent, value)
 		})
 	}
 	if iuo.mutation.UserCleared() {
@@ -355,10 +293,7 @@ func (iuo *InfoUpdateOne) sqlSave(ctx context.Context) (_node *Info, err error) 
 			Columns: []string{info.UserColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: &sqlgraph.FieldSpec{
-					Type:   field.TypeInt,
-					Column: user.FieldID,
-				},
+				IDSpec: sqlgraph.NewFieldSpec(user.FieldID, field.TypeInt),
 			},
 		}
 		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
@@ -371,10 +306,7 @@ func (iuo *InfoUpdateOne) sqlSave(ctx context.Context) (_node *Info, err error) 
 			Columns: []string{info.UserColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: &sqlgraph.FieldSpec{
-					Type:   field.TypeInt,
-					Column: user.FieldID,
-				},
+				IDSpec: sqlgraph.NewFieldSpec(user.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {
@@ -393,5 +325,6 @@ func (iuo *InfoUpdateOne) sqlSave(ctx context.Context) (_node *Info, err error) 
 		}
 		return nil, err
 	}
+	iuo.mutation.done = true
 	return _node, nil
 }

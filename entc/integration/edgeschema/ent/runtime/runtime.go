@@ -10,6 +10,7 @@ import (
 	"context"
 	"time"
 
+	"entgo.io/ent/entc/integration/edgeschema/ent/attachedfile"
 	"entgo.io/ent/entc/integration/edgeschema/ent/friendship"
 	"entgo.io/ent/entc/integration/edgeschema/ent/group"
 	"entgo.io/ent/entc/integration/edgeschema/ent/relationship"
@@ -31,6 +32,12 @@ import (
 // (default values, validators, hooks and policies) and stitches it
 // to their package variables.
 func init() {
+	attachedfileFields := schema.AttachedFile{}.Fields()
+	_ = attachedfileFields
+	// attachedfileDescAttachTime is the schema descriptor for attach_time field.
+	attachedfileDescAttachTime := attachedfileFields[0].Descriptor()
+	// attachedfile.DefaultAttachTime holds the default value on creation for the attach_time field.
+	attachedfile.DefaultAttachTime = attachedfileDescAttachTime.Default.(func() time.Time)
 	friendshipFields := schema.Friendship{}.Fields()
 	_ = friendshipFields
 	// friendshipDescWeight is the schema descriptor for weight field.
@@ -47,6 +54,15 @@ func init() {
 	groupDescName := groupFields[0].Descriptor()
 	// group.DefaultName holds the default value on creation for the name field.
 	group.DefaultName = groupDescName.Default.(string)
+	relationship.Policy = privacy.NewPolicies(schema.Relationship{})
+	relationship.Hooks[0] = func(next ent.Mutator) ent.Mutator {
+		return ent.MutateFunc(func(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+			if err := relationship.Policy.EvalMutation(ctx, m); err != nil {
+				return nil, err
+			}
+			return next.Mutate(ctx, m)
+		})
+	}
 	relationshipFields := schema.Relationship{}.Fields()
 	_ = relationshipFields
 	// relationshipDescWeight is the schema descriptor for weight field.

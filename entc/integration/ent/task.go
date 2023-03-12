@@ -14,7 +14,6 @@ import (
 
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/entc/integration/ent/schema/task"
-
 	enttask "entgo.io/ent/entc/integration/ent/task"
 )
 
@@ -29,6 +28,10 @@ type Task struct {
 	Priorities map[string]task.Priority `json:"priorities,omitempty"`
 	// CreatedAt holds the value of the "created_at" field.
 	CreatedAt *time.Time `json:"created_at,omitempty"`
+	// Name holds the value of the "name" field.
+	Name string `json:"name,omitempty"`
+	// Owner holds the value of the "owner" field.
+	Owner string `json:"owner,omitempty"`
 }
 
 // scanValues returns the types for scanning values from sql.Rows.
@@ -40,6 +43,8 @@ func (*Task) scanValues(columns []string) ([]any, error) {
 			values[i] = new([]byte)
 		case enttask.FieldID, enttask.FieldPriority:
 			values[i] = new(sql.NullInt64)
+		case enttask.FieldName, enttask.FieldOwner:
+			values[i] = new(sql.NullString)
 		case enttask.FieldCreatedAt:
 			values[i] = new(sql.NullTime)
 		default:
@@ -84,6 +89,18 @@ func (t *Task) assignValues(columns []string, values []any) error {
 				t.CreatedAt = new(time.Time)
 				*t.CreatedAt = value.Time
 			}
+		case enttask.FieldName:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field name", values[i])
+			} else if value.Valid {
+				t.Name = value.String
+			}
+		case enttask.FieldOwner:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field owner", values[i])
+			} else if value.Valid {
+				t.Owner = value.String
+			}
 		}
 	}
 	return nil
@@ -93,7 +110,7 @@ func (t *Task) assignValues(columns []string, values []any) error {
 // Note that you need to call Task.Unwrap() before calling this method if this Task
 // was returned from a transaction, and the transaction was committed or rolled back.
 func (t *Task) Update() *TaskUpdateOne {
-	return (&TaskClient{config: t.config}).UpdateOne(t)
+	return NewTaskClient(t.config).UpdateOne(t)
 }
 
 // Unwrap unwraps the Task entity that was returned from a transaction after it was closed,
@@ -122,15 +139,15 @@ func (t *Task) String() string {
 		builder.WriteString("created_at=")
 		builder.WriteString(v.Format(time.ANSIC))
 	}
+	builder.WriteString(", ")
+	builder.WriteString("name=")
+	builder.WriteString(t.Name)
+	builder.WriteString(", ")
+	builder.WriteString("owner=")
+	builder.WriteString(t.Owner)
 	builder.WriteByte(')')
 	return builder.String()
 }
 
 // Tasks is a parsable slice of Task.
 type Tasks []*Task
-
-func (t Tasks) config(cfg config) {
-	for _i := range t {
-		t[_i].config = cfg
-	}
-}

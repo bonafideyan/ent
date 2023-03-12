@@ -12,12 +12,12 @@ import (
 	"fmt"
 	"sync"
 
+	"entgo.io/ent"
+	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/examples/privacytenant/ent/group"
 	"entgo.io/ent/examples/privacytenant/ent/predicate"
 	"entgo.io/ent/examples/privacytenant/ent/tenant"
 	"entgo.io/ent/examples/privacytenant/ent/user"
-
-	"entgo.io/ent"
 )
 
 const (
@@ -307,9 +307,24 @@ func (m *GroupMutation) Where(ps ...predicate.Group) {
 	m.predicates = append(m.predicates, ps...)
 }
 
+// WhereP appends storage-level predicates to the GroupMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *GroupMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.Group, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
 // Op returns the operation name.
 func (m *GroupMutation) Op() Op {
 	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *GroupMutation) SetOp(op Op) {
+	m.op = op
 }
 
 // Type returns the node type of this mutation (Group).
@@ -692,9 +707,24 @@ func (m *TenantMutation) Where(ps ...predicate.Tenant) {
 	m.predicates = append(m.predicates, ps...)
 }
 
+// WhereP appends storage-level predicates to the TenantMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *TenantMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.Tenant, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
 // Op returns the operation name.
 func (m *TenantMutation) Op() Op {
 	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *TenantMutation) SetOp(op Op) {
+	m.op = op
 }
 
 // Type returns the node type of this mutation (Tenant).
@@ -859,6 +889,7 @@ type UserMutation struct {
 	id            *int
 	name          *string
 	foods         *[]string
+	appendfoods   []string
 	clearedFields map[string]struct{}
 	tenant        *int
 	clearedtenant bool
@@ -1043,6 +1074,7 @@ func (m *UserMutation) ResetName() {
 // SetFoods sets the "foods" field.
 func (m *UserMutation) SetFoods(s []string) {
 	m.foods = &s
+	m.appendfoods = nil
 }
 
 // Foods returns the value of the "foods" field in the mutation.
@@ -1071,9 +1103,23 @@ func (m *UserMutation) OldFoods(ctx context.Context) (v []string, err error) {
 	return oldValue.Foods, nil
 }
 
+// AppendFoods adds s to the "foods" field.
+func (m *UserMutation) AppendFoods(s []string) {
+	m.appendfoods = append(m.appendfoods, s...)
+}
+
+// AppendedFoods returns the list of values that were appended to the "foods" field in this mutation.
+func (m *UserMutation) AppendedFoods() ([]string, bool) {
+	if len(m.appendfoods) == 0 {
+		return nil, false
+	}
+	return m.appendfoods, true
+}
+
 // ClearFoods clears the value of the "foods" field.
 func (m *UserMutation) ClearFoods() {
 	m.foods = nil
+	m.appendfoods = nil
 	m.clearedFields[user.FieldFoods] = struct{}{}
 }
 
@@ -1086,6 +1132,7 @@ func (m *UserMutation) FoodsCleared() bool {
 // ResetFoods resets all changes to the "foods" field.
 func (m *UserMutation) ResetFoods() {
 	m.foods = nil
+	m.appendfoods = nil
 	delete(m.clearedFields, user.FieldFoods)
 }
 
@@ -1174,9 +1221,24 @@ func (m *UserMutation) Where(ps ...predicate.User) {
 	m.predicates = append(m.predicates, ps...)
 }
 
+// WhereP appends storage-level predicates to the UserMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *UserMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.User, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
 // Op returns the operation name.
 func (m *UserMutation) Op() Op {
 	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *UserMutation) SetOp(op Op) {
+	m.op = op
 }
 
 // Type returns the node type of this mutation (User).

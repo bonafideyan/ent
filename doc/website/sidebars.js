@@ -30,6 +30,7 @@ module.exports = {
         'traversals',
         'eager-load',
         'hooks',
+        'interceptors',
         'privacy',
         'transactions',
         'predicates',
@@ -44,6 +45,7 @@ module.exports = {
       items: [
         'migrate',
         'versioned-migrations',
+        'data-migrations',
         'dialects',
       ],
       collapsed: false,
@@ -64,7 +66,7 @@ module.exports = {
         'translations',
         'contributors',
         'writing-docs',
-        'slack'
+        'community'
       ],
       collapsed: false,
     },
@@ -107,6 +109,42 @@ module.exports = {
           'grpc-edges',
           'grpc-optional-fields',
           'grpc-service-generation-options',
+          'grpc-external-service',
+      ]
+    },
+    {
+      type: 'category',
+      collapsed: false,
+      label: 'Versioned Migrations',
+      items: [
+        {
+          type: 'doc',
+          id: 'versioned/intro',
+        },
+        {
+          type: 'doc',
+          id: 'versioned/auto-plan',
+        },
+        {
+          type: 'doc',
+          id: 'versioned/upgrade-prod',
+        },
+        {
+          type: 'doc',
+          id: 'versioned/new-migration',
+        },
+        {
+          type: 'doc',
+          id: 'versioned/custom-migrations',
+        },
+        {
+          type: 'doc',
+          id: 'versioned/verifying-safety',
+        },
+        {
+          type: 'doc',
+          id: 'versioned/programmatically',
+        },
       ]
     }
   ]

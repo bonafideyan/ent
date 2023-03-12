@@ -644,7 +644,7 @@ func (ft *FieldType) assignValues(columns []string, values []any) error {
 // Note that you need to call FieldType.Unwrap() before calling this method if this FieldType
 // was returned from a transaction, and the transaction was committed or rolled back.
 func (ft *FieldType) Update() *FieldTypeUpdateOne {
-	return (&FieldTypeClient{config: ft.config}).UpdateOne(ft)
+	return NewFieldTypeClient(ft.config).UpdateOne(ft)
 }
 
 // Unwrap unwraps the FieldType entity that was returned from a transaction after it was closed,
@@ -886,9 +886,3 @@ func (ft *FieldType) String() string {
 
 // FieldTypes is a parsable slice of FieldType.
 type FieldTypes []*FieldType
-
-func (ft FieldTypes) config(cfg config) {
-	for _i := range ft {
-		ft[_i].config = cfg
-	}
-}

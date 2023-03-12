@@ -303,6 +303,16 @@ func TestBuilder(t *testing.T) {
 			wantArgs:  []any{"foo"},
 		},
 		{
+			input:     Dialect(dialect.Postgres).Update("users").Set("name", "foo").Returning("*"),
+			wantQuery: `UPDATE "users" SET "name" = $1 RETURNING *`,
+			wantArgs:  []any{"foo"},
+		},
+		{
+			input:     Dialect(dialect.Postgres).Update("users").Set("name", "foo").Returning("id", "name"),
+			wantQuery: `UPDATE "users" SET "name" = $1 RETURNING "id", "name"`,
+			wantArgs:  []any{"foo"},
+		},
+		{
 			input:     Dialect(dialect.Postgres).Update("users").Set("name", "foo").Schema("mydb"),
 			wantQuery: `UPDATE "mydb"."users" SET "name" = $1`,
 			wantArgs:  []any{"foo"},
@@ -316,6 +326,11 @@ func TestBuilder(t *testing.T) {
 			input:     Update("users").Set("name", "foo").Set("age", 10),
 			wantQuery: "UPDATE `users` SET `name` = ?, `age` = ?",
 			wantArgs:  []any{"foo", 10},
+		},
+		{
+			input:     Dialect(dialect.SQLite).Update("users").Set("name", "foo").Returning("id", "name").OrderBy("name").Limit(10),
+			wantQuery: "UPDATE `users` SET `name` = ? RETURNING `id`, `name` ORDER BY `name` LIMIT 10",
+			wantArgs:  []any{"foo"},
 		},
 		{
 			input:     Dialect(dialect.Postgres).Update("users").Set("name", "foo").Set("age", 10),
@@ -852,6 +867,18 @@ func TestBuilder(t *testing.T) {
 					GroupBy(t1.C("id"))
 			}(),
 			wantQuery: "SELECT `g`.`id`, COUNT(`*`) AS `user_count` FROM `groups` AS `g` RIGHT JOIN `user_groups` AS `ug` ON `g`.`id` = `ug`.`group_id` GROUP BY `g`.`id`",
+		},
+		{
+			input: func() Querier {
+				t1 := Table("groups").As("g")
+				t2 := Table("user_groups").As("ug")
+				return Select(t1.C("id"), As(Count("`*`"), "user_count")).
+					From(t1).
+					FullJoin(t2).
+					On(t1.C("id"), t2.C("group_id")).
+					GroupBy(t1.C("id"))
+			}(),
+			wantQuery: "SELECT `g`.`id`, COUNT(`*`) AS `user_count` FROM `groups` AS `g` FULL JOIN `user_groups` AS `ug` ON `g`.`id` = `ug`.`group_id` GROUP BY `g`.`id`",
 		},
 		{
 			input: func() Querier {
@@ -1637,6 +1664,32 @@ func TestSelector_OrderByExpr(t *testing.T) {
 		Query()
 	require.Equal(t, "SELECT * FROM `users` WHERE `age` > ? ORDER BY `name`, CASE WHEN id=? THEN id WHEN id=? THEN name END DESC", query)
 	require.Equal(t, []any{28, 1, 2}, args)
+
+	query, args = Dialect(dialect.Postgres).
+		Select("*").
+		From(Table("users")).
+		Where(GT("age", 28)).
+		OrderBy("name").
+		OrderExpr(ExprFunc(func(b *Builder) {
+			b.WriteString("CASE")
+			b.WriteString(" WHEN ").Ident("id").WriteOp(OpEQ).Arg(1).WriteString(" THEN ").Ident("id")
+			b.WriteString(" WHEN ").Ident("id").WriteOp(OpEQ).Arg(2).WriteString(" THEN ").Ident("name")
+			b.WriteString(" END DESC")
+		})).
+		Query()
+	require.Equal(t, `SELECT * FROM "users" WHERE "age" > $1 ORDER BY "name", CASE WHEN "id" = $2 THEN "id" WHEN "id" = $3 THEN "name" END DESC`, query)
+	require.Equal(t, []any{28, 1, 2}, args)
+}
+
+func TestSelector_ClearOrder(t *testing.T) {
+	query, args := Select("*").
+		From(Table("users")).
+		OrderBy("name").
+		ClearOrder().
+		OrderBy("id").
+		Query()
+	require.Equal(t, "SELECT * FROM `users` ORDER BY `id`", query)
+	require.Empty(t, args)
 }
 
 func TestSelector_SelectExpr(t *testing.T) {
@@ -1658,7 +1711,7 @@ func TestSelector_SelectExpr(t *testing.T) {
 		AppendSelectExpr(
 			Expr("age + $1", 1),
 			ExprFunc(func(b *Builder) {
-				b.Nested(func(b *Builder) {
+				b.Wrap(func(b *Builder) {
 					b.WriteString("similarity(").Ident("name").Comma().Arg("A").WriteByte(')')
 					b.WriteOp(OpAdd)
 					b.WriteString("similarity(").Ident("desc").Comma().Arg("D").WriteByte(')')
@@ -1701,7 +1754,69 @@ func TestSelector_Union(t *testing.T) {
 		Query()
 	require.Equal(t, `SELECT * FROM "users" WHERE "active" UNION SELECT * FROM "old_users1" WHERE "is_active" AND "age" > $1 UNION ALL SELECT * FROM "old_users2" WHERE "is_active" = $2 AND "age" < $3`, query)
 	require.Equal(t, []any{20, "true", 18}, args)
+}
 
+func TestSelector_Except(t *testing.T) {
+	query, args := Dialect(dialect.Postgres).
+		Select("*").
+		From(Table("users")).
+		Where(EQ("active", true)).
+		Except(
+			Select("*").
+				From(Table("old_users1")).
+				Where(
+					And(
+						EQ("is_active", true),
+						GT("age", 20),
+					),
+				),
+		).
+		ExceptAll(
+			Select("*").
+				From(Table("old_users2")).
+				Where(
+					And(
+						EQ("is_active", "true"),
+						LT("age", 18),
+					),
+				),
+		).
+		Query()
+	require.Equal(t, `SELECT * FROM "users" WHERE "active" EXCEPT SELECT * FROM "old_users1" WHERE "is_active" AND "age" > $1 EXCEPT ALL SELECT * FROM "old_users2" WHERE "is_active" = $2 AND "age" < $3`, query)
+	require.Equal(t, []any{20, "true", 18}, args)
+}
+
+func TestSelector_Intersect(t *testing.T) {
+	query, args := Dialect(dialect.Postgres).
+		Select("*").
+		From(Table("users")).
+		Where(EQ("active", true)).
+		Intersect(
+			Select("*").
+				From(Table("old_users1")).
+				Where(
+					And(
+						EQ("is_active", true),
+						GT("age", 20),
+					),
+				),
+		).
+		IntersectAll(
+			Select("*").
+				From(Table("old_users2")).
+				Where(
+					And(
+						EQ("is_active", "true"),
+						LT("age", 18),
+					),
+				),
+		).
+		Query()
+	require.Equal(t, `SELECT * FROM "users" WHERE "active" INTERSECT SELECT * FROM "old_users1" WHERE "is_active" AND "age" > $1 INTERSECT ALL SELECT * FROM "old_users2" WHERE "is_active" = $2 AND "age" < $3`, query)
+	require.Equal(t, []any{20, "true", 18}, args)
+}
+
+func TestSelector_SetOperatorWithRecursive(t *testing.T) {
 	t1, t2, t3 := Table("files"), Table("files"), Table("path")
 	n := Queries{
 		WithRecursive("path", "id", "name", "parent_id").
@@ -1726,7 +1841,7 @@ func TestSelector_Union(t *testing.T) {
 		Select(t3.Columns("id", "name", "parent_id")...).
 			From(t3),
 	}
-	query, args = n.Query()
+	query, args := n.Query()
 	require.Equal(t, "WITH RECURSIVE `path`(`id`, `name`, `parent_id`) AS (SELECT `files`.`id`, `files`.`name`, `files`.`parent_id` FROM `files` WHERE `files`.`parent_id` IS NULL AND NOT `files`.`deleted` UNION ALL SELECT `files`.`id`, `files`.`name`, `files`.`parent_id` FROM `files` JOIN `path` AS `t1` ON `files`.`parent_id` = `t1`.`id` WHERE NOT `files`.`deleted`) SELECT `t1`.`id`, `t1`.`name`, `t1`.`parent_id` FROM `path` AS `t1`", query)
 	require.Nil(t, args)
 }
@@ -2025,6 +2140,11 @@ func TestEscapePatterns(t *testing.T) {
 		Query()
 	require.Equal(t, "UPDATE `users` SET `name` = NULL WHERE `nickname` LIKE ? ESCAPE ? OR `nickname` LIKE ? ESCAPE ? OR `nickname` LIKE ? ESCAPE ? OR LOWER(`nickname`) LIKE ? ESCAPE ?", q)
 	require.Equal(t, []any{"\\%a8m\\%%", "\\", "%\\_alexsn\\_", "\\", "%\\\\pedro\\\\%", "\\", "%\\%abcd\\%efg%", "\\"}, args)
+
+	q, args = Select("*").From(Table("dataset")).
+		Where(Contains("title", "_第一")).Query()
+	require.Equal(t, "SELECT * FROM `dataset` WHERE `title` LIKE ?", q)
+	require.Equal(t, []any{"%\\_第一%"}, args)
 }
 
 func TestReusePredicates(t *testing.T) {
@@ -2134,6 +2254,21 @@ func TestWindowFunction(t *testing.T) {
 	require.Equal(t, []any{2}, args)
 }
 
+func TestWindowFunction_Select(t *testing.T) {
+	posts := Table("posts")
+	q := Select().
+		AppendSelect("*").
+		AppendSelectExprAs(
+			Window(func(b *Builder) {
+				b.WriteString(Sum(posts.C("duration")))
+			}).PartitionBy("author_id").OrderBy("id"), "duration").
+		From(posts)
+
+	query, args := q.Query()
+	require.Equal(t, "SELECT *, (SUM(`posts`.`duration`) OVER (PARTITION BY `author_id` ORDER BY `id`)) AS `duration` FROM `posts`", query)
+	require.Nil(t, args)
+}
+
 func TestSelector_UnqualifiedColumns(t *testing.T) {
 	t1, t2 := Table("t1"), Table("t2")
 	s := Select(t1.C("a"), t2.C("b"))
@@ -2156,4 +2291,78 @@ func TestUpdateBuilder_OrderBy(t *testing.T) {
 
 	u = Dialect(dialect.Postgres).Update("users").Set("id", Expr("id + 1")).OrderBy("id")
 	require.Error(t, u.Err())
+}
+
+func TestUpdateBuilder_WithPrefix(t *testing.T) {
+	u := Dialect(dialect.MySQL).
+		Update("users").
+		Prefix(ExprFunc(func(b *Builder) {
+			b.WriteString("SET @i = ").Arg(1).WriteByte(';')
+		})).
+		Set("id", Expr("(@i:=@i+1)")).
+		OrderBy("id")
+	require.NoError(t, u.Err())
+	query, args := u.Query()
+	require.Equal(t, []any{1}, args)
+	require.Equal(t, "SET @i = ?; UPDATE `users` SET `id` = (@i:=@i+1) ORDER BY `id`", query)
+
+	u = Dialect(dialect.MySQL).
+		Update("users").
+		Prefix(Expr("SET @i = 1;")).
+		Set("id", Expr("(@i:=@i+1)")).
+		OrderBy("id")
+	require.NoError(t, u.Err())
+	query, args = u.Query()
+	require.Empty(t, args)
+	require.Equal(t, "SET @i = 1; UPDATE `users` SET `id` = (@i:=@i+1) ORDER BY `id`", query)
+}
+
+func TestMultipleFrom(t *testing.T) {
+	query, args := Dialect(dialect.Postgres).
+		Select("items.*", As("ts_rank_cd(search, search_query)", "rank")).
+		From(Table("items")).
+		AppendFrom(Table("to_tsquery('neutrino|(dark & matter)')").As("search_query")).
+		Where(P(func(b *Builder) {
+			b.WriteString("search @@ search_query")
+		})).
+		OrderBy(Desc("rank")).
+		Query()
+	require.Empty(t, args)
+	require.Equal(t, `SELECT items.*, ts_rank_cd(search, search_query) AS "rank" FROM "items", to_tsquery('neutrino|(dark & matter)') AS "search_query" WHERE search @@ search_query ORDER BY "rank" DESC`, query)
+
+	query, args = Dialect(dialect.Postgres).
+		Select("items.*", As("ts_rank_cd(search, search_query)", "rank")).
+		From(Table("items")).
+		AppendFromExpr(Expr("to_tsquery($1) AS search_query", "neutrino|(dark & matter)")).
+		Where(P(func(b *Builder) {
+			b.WriteString("search @@ search_query")
+		})).
+		Query()
+	require.Equal(t, []any{"neutrino|(dark & matter)"}, args)
+	require.Equal(t, `SELECT items.*, ts_rank_cd(search, search_query) AS "rank" FROM "items", to_tsquery($1) AS search_query WHERE search @@ search_query`, query)
+
+	query, args = Dialect(dialect.Postgres).
+		Select("items.*", As("ts_rank_cd(search, search_query)", "rank")).
+		From(Table("items")).
+		Where(EQ("value", 10)).
+		AppendFromExpr(ExprFunc(func(b *Builder) {
+			b.WriteString("to_tsquery(").Arg("neutrino|(dark & matter)").WriteString(") AS search_query")
+		})).
+		Where(P(func(b *Builder) {
+			b.WriteString("search @@ search_query")
+		})).
+		Query()
+	require.Equal(t, []any{"neutrino|(dark & matter)", 10}, args)
+	require.Equal(t, `SELECT items.*, ts_rank_cd(search, search_query) AS "rank" FROM "items", to_tsquery($1) AS search_query WHERE "value" = $2 AND search @@ search_query`, query)
+}
+
+func TestFormattedColumnFromSubQuery(t *testing.T) {
+	q := Select("*").From(Select("*").AppendSelectExprAs(P(func(b *Builder) {
+		b.SetDialect(dialect.Postgres)
+		b.WriteString("calculate_score")
+		b.Wrap(func(bb *Builder) {
+			bb.WriteString(Table("table_name").C("field_name")).Comma().Args("test")
+		})
+	}), "score").From(Table("table_name").As("table_name_alias")))
+	require.Equal(t, "`table_name_alias`.`score`", q.C("score"))
 }

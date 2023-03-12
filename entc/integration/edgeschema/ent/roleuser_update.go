@@ -89,40 +89,7 @@ func (ruu *RoleUserUpdate) ClearUser() *RoleUserUpdate {
 
 // Save executes the query and returns the number of nodes affected by the update operation.
 func (ruu *RoleUserUpdate) Save(ctx context.Context) (int, error) {
-	var (
-		err      error
-		affected int
-	)
-	if len(ruu.hooks) == 0 {
-		if err = ruu.check(); err != nil {
-			return 0, err
-		}
-		affected, err = ruu.sqlSave(ctx)
-	} else {
-		var mut Mutator = MutateFunc(func(ctx context.Context, m Mutation) (Value, error) {
-			mutation, ok := m.(*RoleUserMutation)
-			if !ok {
-				return nil, fmt.Errorf("unexpected mutation type %T", m)
-			}
-			if err = ruu.check(); err != nil {
-				return 0, err
-			}
-			ruu.mutation = mutation
-			affected, err = ruu.sqlSave(ctx)
-			mutation.done = true
-			return affected, err
-		})
-		for i := len(ruu.hooks) - 1; i >= 0; i-- {
-			if ruu.hooks[i] == nil {
-				return 0, fmt.Errorf("ent: uninitialized hook (forgotten import ent/runtime?)")
-			}
-			mut = ruu.hooks[i](mut)
-		}
-		if _, err := mut.Mutate(ctx, ruu.mutation); err != nil {
-			return 0, err
-		}
-	}
-	return affected, err
+	return withHooks[int, RoleUserMutation](ctx, ruu.sqlSave, ruu.mutation, ruu.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
@@ -159,22 +126,10 @@ func (ruu *RoleUserUpdate) check() error {
 }
 
 func (ruu *RoleUserUpdate) sqlSave(ctx context.Context) (n int, err error) {
-	_spec := &sqlgraph.UpdateSpec{
-		Node: &sqlgraph.NodeSpec{
-			Table:   roleuser.Table,
-			Columns: roleuser.Columns,
-			CompositeID: []*sqlgraph.FieldSpec{
-				{
-					Type:   field.TypeInt,
-					Column: roleuser.FieldUserID,
-				},
-				{
-					Type:   field.TypeInt,
-					Column: roleuser.FieldRoleID,
-				},
-			},
-		},
+	if err := ruu.check(); err != nil {
+		return n, err
 	}
+	_spec := sqlgraph.NewUpdateSpec(roleuser.Table, roleuser.Columns, sqlgraph.NewFieldSpec(roleuser.FieldUserID, field.TypeInt), sqlgraph.NewFieldSpec(roleuser.FieldRoleID, field.TypeInt))
 	if ps := ruu.mutation.predicates; len(ps) > 0 {
 		_spec.Predicate = func(selector *sql.Selector) {
 			for i := range ps {
@@ -183,11 +138,7 @@ func (ruu *RoleUserUpdate) sqlSave(ctx context.Context) (n int, err error) {
 		}
 	}
 	if value, ok := ruu.mutation.CreatedAt(); ok {
-		_spec.Fields.Set = append(_spec.Fields.Set, &sqlgraph.FieldSpec{
-			Type:   field.TypeTime,
-			Value:  value,
-			Column: roleuser.FieldCreatedAt,
-		})
+		_spec.SetField(roleuser.FieldCreatedAt, field.TypeTime, value)
 	}
 	if ruu.mutation.RoleCleared() {
 		edge := &sqlgraph.EdgeSpec{
@@ -197,10 +148,7 @@ func (ruu *RoleUserUpdate) sqlSave(ctx context.Context) (n int, err error) {
 			Columns: []string{roleuser.RoleColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: &sqlgraph.FieldSpec{
-					Type:   field.TypeInt,
-					Column: role.FieldID,
-				},
+				IDSpec: sqlgraph.NewFieldSpec(role.FieldID, field.TypeInt),
 			},
 		}
 		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
@@ -213,10 +161,7 @@ func (ruu *RoleUserUpdate) sqlSave(ctx context.Context) (n int, err error) {
 			Columns: []string{roleuser.RoleColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: &sqlgraph.FieldSpec{
-					Type:   field.TypeInt,
-					Column: role.FieldID,
-				},
+				IDSpec: sqlgraph.NewFieldSpec(role.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {
@@ -232,10 +177,7 @@ func (ruu *RoleUserUpdate) sqlSave(ctx context.Context) (n int, err error) {
 			Columns: []string{roleuser.UserColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: &sqlgraph.FieldSpec{
-					Type:   field.TypeInt,
-					Column: user.FieldID,
-				},
+				IDSpec: sqlgraph.NewFieldSpec(user.FieldID, field.TypeInt),
 			},
 		}
 		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
@@ -248,10 +190,7 @@ func (ruu *RoleUserUpdate) sqlSave(ctx context.Context) (n int, err error) {
 			Columns: []string{roleuser.UserColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: &sqlgraph.FieldSpec{
-					Type:   field.TypeInt,
-					Column: user.FieldID,
-				},
+				IDSpec: sqlgraph.NewFieldSpec(user.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {
@@ -267,6 +206,7 @@ func (ruu *RoleUserUpdate) sqlSave(ctx context.Context) (n int, err error) {
 		}
 		return 0, err
 	}
+	ruu.mutation.done = true
 	return n, nil
 }
 
@@ -331,6 +271,12 @@ func (ruuo *RoleUserUpdateOne) ClearUser() *RoleUserUpdateOne {
 	return ruuo
 }
 
+// Where appends a list predicates to the RoleUserUpdate builder.
+func (ruuo *RoleUserUpdateOne) Where(ps ...predicate.RoleUser) *RoleUserUpdateOne {
+	ruuo.mutation.Where(ps...)
+	return ruuo
+}
+
 // Select allows selecting one or more fields (columns) of the returned entity.
 // The default is selecting all fields defined in the entity schema.
 func (ruuo *RoleUserUpdateOne) Select(field string, fields ...string) *RoleUserUpdateOne {
@@ -340,46 +286,7 @@ func (ruuo *RoleUserUpdateOne) Select(field string, fields ...string) *RoleUserU
 
 // Save executes the query and returns the updated RoleUser entity.
 func (ruuo *RoleUserUpdateOne) Save(ctx context.Context) (*RoleUser, error) {
-	var (
-		err  error
-		node *RoleUser
-	)
-	if len(ruuo.hooks) == 0 {
-		if err = ruuo.check(); err != nil {
-			return nil, err
-		}
-		node, err = ruuo.sqlSave(ctx)
-	} else {
-		var mut Mutator = MutateFunc(func(ctx context.Context, m Mutation) (Value, error) {
-			mutation, ok := m.(*RoleUserMutation)
-			if !ok {
-				return nil, fmt.Errorf("unexpected mutation type %T", m)
-			}
-			if err = ruuo.check(); err != nil {
-				return nil, err
-			}
-			ruuo.mutation = mutation
-			node, err = ruuo.sqlSave(ctx)
-			mutation.done = true
-			return node, err
-		})
-		for i := len(ruuo.hooks) - 1; i >= 0; i-- {
-			if ruuo.hooks[i] == nil {
-				return nil, fmt.Errorf("ent: uninitialized hook (forgotten import ent/runtime?)")
-			}
-			mut = ruuo.hooks[i](mut)
-		}
-		v, err := mut.Mutate(ctx, ruuo.mutation)
-		if err != nil {
-			return nil, err
-		}
-		nv, ok := v.(*RoleUser)
-		if !ok {
-			return nil, fmt.Errorf("unexpected node type %T returned from RoleUserMutation", v)
-		}
-		node = nv
-	}
-	return node, err
+	return withHooks[*RoleUser, RoleUserMutation](ctx, ruuo.sqlSave, ruuo.mutation, ruuo.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
@@ -416,22 +323,10 @@ func (ruuo *RoleUserUpdateOne) check() error {
 }
 
 func (ruuo *RoleUserUpdateOne) sqlSave(ctx context.Context) (_node *RoleUser, err error) {
-	_spec := &sqlgraph.UpdateSpec{
-		Node: &sqlgraph.NodeSpec{
-			Table:   roleuser.Table,
-			Columns: roleuser.Columns,
-			CompositeID: []*sqlgraph.FieldSpec{
-				{
-					Type:   field.TypeInt,
-					Column: roleuser.FieldUserID,
-				},
-				{
-					Type:   field.TypeInt,
-					Column: roleuser.FieldRoleID,
-				},
-			},
-		},
+	if err := ruuo.check(); err != nil {
+		return _node, err
 	}
+	_spec := sqlgraph.NewUpdateSpec(roleuser.Table, roleuser.Columns, sqlgraph.NewFieldSpec(roleuser.FieldUserID, field.TypeInt), sqlgraph.NewFieldSpec(roleuser.FieldRoleID, field.TypeInt))
 	if id, ok := ruuo.mutation.UserID(); !ok {
 		return nil, &ValidationError{Name: "user_id", err: errors.New(`ent: missing "RoleUser.user_id" for update`)}
 	} else {
@@ -459,11 +354,7 @@ func (ruuo *RoleUserUpdateOne) sqlSave(ctx context.Context) (_node *RoleUser, er
 		}
 	}
 	if value, ok := ruuo.mutation.CreatedAt(); ok {
-		_spec.Fields.Set = append(_spec.Fields.Set, &sqlgraph.FieldSpec{
-			Type:   field.TypeTime,
-			Value:  value,
-			Column: roleuser.FieldCreatedAt,
-		})
+		_spec.SetField(roleuser.FieldCreatedAt, field.TypeTime, value)
 	}
 	if ruuo.mutation.RoleCleared() {
 		edge := &sqlgraph.EdgeSpec{
@@ -473,10 +364,7 @@ func (ruuo *RoleUserUpdateOne) sqlSave(ctx context.Context) (_node *RoleUser, er
 			Columns: []string{roleuser.RoleColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: &sqlgraph.FieldSpec{
-					Type:   field.TypeInt,
-					Column: role.FieldID,
-				},
+				IDSpec: sqlgraph.NewFieldSpec(role.FieldID, field.TypeInt),
 			},
 		}
 		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
@@ -489,10 +377,7 @@ func (ruuo *RoleUserUpdateOne) sqlSave(ctx context.Context) (_node *RoleUser, er
 			Columns: []string{roleuser.RoleColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: &sqlgraph.FieldSpec{
-					Type:   field.TypeInt,
-					Column: role.FieldID,
-				},
+				IDSpec: sqlgraph.NewFieldSpec(role.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {
@@ -508,10 +393,7 @@ func (ruuo *RoleUserUpdateOne) sqlSave(ctx context.Context) (_node *RoleUser, er
 			Columns: []string{roleuser.UserColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: &sqlgraph.FieldSpec{
-					Type:   field.TypeInt,
-					Column: user.FieldID,
-				},
+				IDSpec: sqlgraph.NewFieldSpec(user.FieldID, field.TypeInt),
 			},
 		}
 		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
@@ -524,10 +406,7 @@ func (ruuo *RoleUserUpdateOne) sqlSave(ctx context.Context) (_node *RoleUser, er
 			Columns: []string{roleuser.UserColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: &sqlgraph.FieldSpec{
-					Type:   field.TypeInt,
-					Column: user.FieldID,
-				},
+				IDSpec: sqlgraph.NewFieldSpec(user.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {
@@ -546,5 +425,6 @@ func (ruuo *RoleUserUpdateOne) sqlSave(ctx context.Context) (_node *RoleUser, er
 		}
 		return nil, err
 	}
+	ruuo.mutation.done = true
 	return _node, nil
 }

@@ -77,7 +77,7 @@ func (mi *MixinID) assignValues(columns []string, values []any) error {
 // Note that you need to call MixinID.Unwrap() before calling this method if this MixinID
 // was returned from a transaction, and the transaction was committed or rolled back.
 func (mi *MixinID) Update() *MixinIDUpdateOne {
-	return (&MixinIDClient{config: mi.config}).UpdateOne(mi)
+	return NewMixinIDClient(mi.config).UpdateOne(mi)
 }
 
 // Unwrap unwraps the MixinID entity that was returned from a transaction after it was closed,
@@ -107,9 +107,3 @@ func (mi *MixinID) String() string {
 
 // MixinIDs is a parsable slice of MixinID.
 type MixinIDs []*MixinID
-
-func (mi MixinIDs) config(cfg config) {
-	for _i := range mi {
-		mi[_i].config = cfg
-	}
-}

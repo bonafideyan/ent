@@ -10,6 +10,9 @@ import (
 	"entgo.io/ent/dialect/sql"
 )
 
+// Blog is the predicate function for blog builders.
+type Blog func(*sql.Selector)
+
 // Car is the predicate function for car builders.
 type Car func(*sql.Selector)
 
@@ -30,3 +33,6 @@ type Pet func(*sql.Selector)
 
 // User is the predicate function for user builders.
 type User func(*sql.Selector)
+
+// Zoo is the predicate function for zoo builders.
+type Zoo func(*sql.Selector)

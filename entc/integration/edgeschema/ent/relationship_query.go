@@ -8,6 +8,7 @@ package ent
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 
@@ -22,11 +23,9 @@ import (
 // RelationshipQuery is the builder for querying Relationship entities.
 type RelationshipQuery struct {
 	config
-	limit        *int
-	offset       *int
-	unique       *bool
+	ctx          *QueryContext
 	order        []OrderFunc
-	fields       []string
+	inters       []Interceptor
 	predicates   []predicate.Relationship
 	withUser     *UserQuery
 	withRelative *UserQuery
@@ -42,26 +41,26 @@ func (rq *RelationshipQuery) Where(ps ...predicate.Relationship) *RelationshipQu
 	return rq
 }
 
-// Limit adds a limit step to the query.
+// Limit the number of records to be returned by this query.
 func (rq *RelationshipQuery) Limit(limit int) *RelationshipQuery {
-	rq.limit = &limit
+	rq.ctx.Limit = &limit
 	return rq
 }
 
-// Offset adds an offset step to the query.
+// Offset to start from.
 func (rq *RelationshipQuery) Offset(offset int) *RelationshipQuery {
-	rq.offset = &offset
+	rq.ctx.Offset = &offset
 	return rq
 }
 
 // Unique configures the query builder to filter duplicate records on query.
 // By default, unique is set to true, and can be disabled using this method.
 func (rq *RelationshipQuery) Unique(unique bool) *RelationshipQuery {
-	rq.unique = &unique
+	rq.ctx.Unique = &unique
 	return rq
 }
 
-// Order adds an order step to the query.
+// Order specifies how the records should be ordered.
 func (rq *RelationshipQuery) Order(o ...OrderFunc) *RelationshipQuery {
 	rq.order = append(rq.order, o...)
 	return rq
@@ -69,7 +68,7 @@ func (rq *RelationshipQuery) Order(o ...OrderFunc) *RelationshipQuery {
 
 // QueryUser chains the current query on the "user" edge.
 func (rq *RelationshipQuery) QueryUser() *UserQuery {
-	query := &UserQuery{config: rq.config}
+	query := (&UserClient{config: rq.config}).Query()
 	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
 		if err := rq.prepareQuery(ctx); err != nil {
 			return nil, err
@@ -91,7 +90,7 @@ func (rq *RelationshipQuery) QueryUser() *UserQuery {
 
 // QueryRelative chains the current query on the "relative" edge.
 func (rq *RelationshipQuery) QueryRelative() *UserQuery {
-	query := &UserQuery{config: rq.config}
+	query := (&UserClient{config: rq.config}).Query()
 	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
 		if err := rq.prepareQuery(ctx); err != nil {
 			return nil, err
@@ -113,7 +112,7 @@ func (rq *RelationshipQuery) QueryRelative() *UserQuery {
 
 // QueryInfo chains the current query on the "info" edge.
 func (rq *RelationshipQuery) QueryInfo() *RelationshipInfoQuery {
-	query := &RelationshipInfoQuery{config: rq.config}
+	query := (&RelationshipInfoClient{config: rq.config}).Query()
 	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
 		if err := rq.prepareQuery(ctx); err != nil {
 			return nil, err
@@ -136,7 +135,7 @@ func (rq *RelationshipQuery) QueryInfo() *RelationshipInfoQuery {
 // First returns the first Relationship entity from the query.
 // Returns a *NotFoundError when no Relationship was found.
 func (rq *RelationshipQuery) First(ctx context.Context) (*Relationship, error) {
-	nodes, err := rq.Limit(1).All(ctx)
+	nodes, err := rq.Limit(1).All(setContextOp(ctx, rq.ctx, "First"))
 	if err != nil {
 		return nil, err
 	}
@@ -159,7 +158,7 @@ func (rq *RelationshipQuery) FirstX(ctx context.Context) *Relationship {
 // Returns a *NotSingularError when more than one Relationship entity is found.
 // Returns a *NotFoundError when no Relationship entities are found.
 func (rq *RelationshipQuery) Only(ctx context.Context) (*Relationship, error) {
-	nodes, err := rq.Limit(2).All(ctx)
+	nodes, err := rq.Limit(2).All(setContextOp(ctx, rq.ctx, "Only"))
 	if err != nil {
 		return nil, err
 	}
@@ -184,10 +183,12 @@ func (rq *RelationshipQuery) OnlyX(ctx context.Context) *Relationship {
 
 // All executes the query and returns a list of Relationships.
 func (rq *RelationshipQuery) All(ctx context.Context) ([]*Relationship, error) {
+	ctx = setContextOp(ctx, rq.ctx, "All")
 	if err := rq.prepareQuery(ctx); err != nil {
 		return nil, err
 	}
-	return rq.sqlAll(ctx)
+	qr := querierAll[[]*Relationship, *RelationshipQuery]()
+	return withInterceptors[[]*Relationship](ctx, rq, qr, rq.inters)
 }
 
 // AllX is like All, but panics if an error occurs.
@@ -201,10 +202,11 @@ func (rq *RelationshipQuery) AllX(ctx context.Context) []*Relationship {
 
 // Count returns the count of the given query.
 func (rq *RelationshipQuery) Count(ctx context.Context) (int, error) {
+	ctx = setContextOp(ctx, rq.ctx, "Count")
 	if err := rq.prepareQuery(ctx); err != nil {
 		return 0, err
 	}
-	return rq.sqlCount(ctx)
+	return withInterceptors[int](ctx, rq, querierCount[*RelationshipQuery](), rq.inters)
 }
 
 // CountX is like Count, but panics if an error occurs.
@@ -218,10 +220,15 @@ func (rq *RelationshipQuery) CountX(ctx context.Context) int {
 
 // Exist returns true if the query has elements in the graph.
 func (rq *RelationshipQuery) Exist(ctx context.Context) (bool, error) {
-	if err := rq.prepareQuery(ctx); err != nil {
-		return false, err
+	ctx = setContextOp(ctx, rq.ctx, "Exist")
+	switch _, err := rq.First(ctx); {
+	case IsNotFound(err):
+		return false, nil
+	case err != nil:
+		return false, fmt.Errorf("ent: check existence: %w", err)
+	default:
+		return true, nil
 	}
-	return rq.sqlExist(ctx)
 }
 
 // ExistX is like Exist, but panics if an error occurs.
@@ -241,24 +248,23 @@ func (rq *RelationshipQuery) Clone() *RelationshipQuery {
 	}
 	return &RelationshipQuery{
 		config:       rq.config,
-		limit:        rq.limit,
-		offset:       rq.offset,
+		ctx:          rq.ctx.Clone(),
 		order:        append([]OrderFunc{}, rq.order...),
+		inters:       append([]Interceptor{}, rq.inters...),
 		predicates:   append([]predicate.Relationship{}, rq.predicates...),
 		withUser:     rq.withUser.Clone(),
 		withRelative: rq.withRelative.Clone(),
 		withInfo:     rq.withInfo.Clone(),
 		// clone intermediate query.
-		sql:    rq.sql.Clone(),
-		path:   rq.path,
-		unique: rq.unique,
+		sql:  rq.sql.Clone(),
+		path: rq.path,
 	}
 }
 
 // WithUser tells the query-builder to eager-load the nodes that are connected to
 // the "user" edge. The optional arguments are used to configure the query builder of the edge.
 func (rq *RelationshipQuery) WithUser(opts ...func(*UserQuery)) *RelationshipQuery {
-	query := &UserQuery{config: rq.config}
+	query := (&UserClient{config: rq.config}).Query()
 	for _, opt := range opts {
 		opt(query)
 	}
@@ -269,7 +275,7 @@ func (rq *RelationshipQuery) WithUser(opts ...func(*UserQuery)) *RelationshipQue
 // WithRelative tells the query-builder to eager-load the nodes that are connected to
 // the "relative" edge. The optional arguments are used to configure the query builder of the edge.
 func (rq *RelationshipQuery) WithRelative(opts ...func(*UserQuery)) *RelationshipQuery {
-	query := &UserQuery{config: rq.config}
+	query := (&UserClient{config: rq.config}).Query()
 	for _, opt := range opts {
 		opt(query)
 	}
@@ -280,7 +286,7 @@ func (rq *RelationshipQuery) WithRelative(opts ...func(*UserQuery)) *Relationshi
 // WithInfo tells the query-builder to eager-load the nodes that are connected to
 // the "info" edge. The optional arguments are used to configure the query builder of the edge.
 func (rq *RelationshipQuery) WithInfo(opts ...func(*RelationshipInfoQuery)) *RelationshipQuery {
-	query := &RelationshipInfoQuery{config: rq.config}
+	query := (&RelationshipInfoClient{config: rq.config}).Query()
 	for _, opt := range opts {
 		opt(query)
 	}
@@ -303,16 +309,11 @@ func (rq *RelationshipQuery) WithInfo(opts ...func(*RelationshipInfoQuery)) *Rel
 //		Aggregate(ent.Count()).
 //		Scan(ctx, &v)
 func (rq *RelationshipQuery) GroupBy(field string, fields ...string) *RelationshipGroupBy {
-	grbuild := &RelationshipGroupBy{config: rq.config}
-	grbuild.fields = append([]string{field}, fields...)
-	grbuild.path = func(ctx context.Context) (prev *sql.Selector, err error) {
-		if err := rq.prepareQuery(ctx); err != nil {
-			return nil, err
-		}
-		return rq.sqlQuery(ctx), nil
-	}
+	rq.ctx.Fields = append([]string{field}, fields...)
+	grbuild := &RelationshipGroupBy{build: rq}
+	grbuild.flds = &rq.ctx.Fields
 	grbuild.label = relationship.Label
-	grbuild.flds, grbuild.scan = &grbuild.fields, grbuild.Scan
+	grbuild.scan = grbuild.Scan
 	return grbuild
 }
 
@@ -329,15 +330,30 @@ func (rq *RelationshipQuery) GroupBy(field string, fields ...string) *Relationsh
 //		Select(relationship.FieldWeight).
 //		Scan(ctx, &v)
 func (rq *RelationshipQuery) Select(fields ...string) *RelationshipSelect {
-	rq.fields = append(rq.fields, fields...)
-	selbuild := &RelationshipSelect{RelationshipQuery: rq}
-	selbuild.label = relationship.Label
-	selbuild.flds, selbuild.scan = &rq.fields, selbuild.Scan
-	return selbuild
+	rq.ctx.Fields = append(rq.ctx.Fields, fields...)
+	sbuild := &RelationshipSelect{RelationshipQuery: rq}
+	sbuild.label = relationship.Label
+	sbuild.flds, sbuild.scan = &rq.ctx.Fields, sbuild.Scan
+	return sbuild
+}
+
+// Aggregate returns a RelationshipSelect configured with the given aggregations.
+func (rq *RelationshipQuery) Aggregate(fns ...AggregateFunc) *RelationshipSelect {
+	return rq.Select().Aggregate(fns...)
 }
 
 func (rq *RelationshipQuery) prepareQuery(ctx context.Context) error {
-	for _, f := range rq.fields {
+	for _, inter := range rq.inters {
+		if inter == nil {
+			return fmt.Errorf("ent: uninitialized interceptor (forgotten import ent/runtime?)")
+		}
+		if trv, ok := inter.(Traverser); ok {
+			if err := trv.Traverse(ctx, rq); err != nil {
+				return err
+			}
+		}
+	}
+	for _, f := range rq.ctx.Fields {
 		if !relationship.ValidColumn(f) {
 			return &ValidationError{Name: f, err: fmt.Errorf("ent: invalid field %q for query", f)}
 		}
@@ -348,6 +364,12 @@ func (rq *RelationshipQuery) prepareQuery(ctx context.Context) error {
 			return err
 		}
 		rq.sql = prev
+	}
+	if relationship.Policy == nil {
+		return errors.New("ent: uninitialized relationship.Policy (forgotten import ent/runtime?)")
+	}
+	if err := relationship.Policy.EvalQuery(ctx, rq); err != nil {
+		return err
 	}
 	return nil
 }
@@ -411,6 +433,9 @@ func (rq *RelationshipQuery) loadUser(ctx context.Context, query *UserQuery, nod
 		}
 		nodeids[fk] = append(nodeids[fk], nodes[i])
 	}
+	if len(ids) == 0 {
+		return nil
+	}
 	query.Where(user.IDIn(ids...))
 	neighbors, err := query.All(ctx)
 	if err != nil {
@@ -436,6 +461,9 @@ func (rq *RelationshipQuery) loadRelative(ctx context.Context, query *UserQuery,
 			ids = append(ids, fk)
 		}
 		nodeids[fk] = append(nodeids[fk], nodes[i])
+	}
+	if len(ids) == 0 {
+		return nil
 	}
 	query.Where(user.IDIn(ids...))
 	neighbors, err := query.All(ctx)
@@ -463,6 +491,9 @@ func (rq *RelationshipQuery) loadInfo(ctx context.Context, query *RelationshipIn
 		}
 		nodeids[fk] = append(nodeids[fk], nodes[i])
 	}
+	if len(ids) == 0 {
+		return nil
+	}
 	query.Where(relationshipinfo.IDIn(ids...))
 	neighbors, err := query.All(ctx)
 	if err != nil {
@@ -487,27 +518,15 @@ func (rq *RelationshipQuery) sqlCount(ctx context.Context) (int, error) {
 	return sqlgraph.CountNodes(ctx, rq.driver, _spec)
 }
 
-func (rq *RelationshipQuery) sqlExist(ctx context.Context) (bool, error) {
-	n, err := rq.sqlCount(ctx)
-	if err != nil {
-		return false, fmt.Errorf("ent: check existence: %w", err)
-	}
-	return n > 0, nil
-}
-
 func (rq *RelationshipQuery) querySpec() *sqlgraph.QuerySpec {
-	_spec := &sqlgraph.QuerySpec{
-		Node: &sqlgraph.NodeSpec{
-			Table:   relationship.Table,
-			Columns: relationship.Columns,
-		},
-		From:   rq.sql,
-		Unique: true,
-	}
-	if unique := rq.unique; unique != nil {
+	_spec := sqlgraph.NewQuerySpec(relationship.Table, relationship.Columns, nil)
+	_spec.From = rq.sql
+	if unique := rq.ctx.Unique; unique != nil {
 		_spec.Unique = *unique
+	} else if rq.path != nil {
+		_spec.Unique = true
 	}
-	if fields := rq.fields; len(fields) > 0 {
+	if fields := rq.ctx.Fields; len(fields) > 0 {
 		_spec.Node.Columns = make([]string, 0, len(fields))
 		for i := range fields {
 			_spec.Node.Columns = append(_spec.Node.Columns, fields[i])
@@ -520,10 +539,10 @@ func (rq *RelationshipQuery) querySpec() *sqlgraph.QuerySpec {
 			}
 		}
 	}
-	if limit := rq.limit; limit != nil {
+	if limit := rq.ctx.Limit; limit != nil {
 		_spec.Limit = *limit
 	}
-	if offset := rq.offset; offset != nil {
+	if offset := rq.ctx.Offset; offset != nil {
 		_spec.Offset = *offset
 	}
 	if ps := rq.order; len(ps) > 0 {
@@ -539,7 +558,7 @@ func (rq *RelationshipQuery) querySpec() *sqlgraph.QuerySpec {
 func (rq *RelationshipQuery) sqlQuery(ctx context.Context) *sql.Selector {
 	builder := sql.Dialect(rq.driver.Dialect())
 	t1 := builder.Table(relationship.Table)
-	columns := rq.fields
+	columns := rq.ctx.Fields
 	if len(columns) == 0 {
 		columns = relationship.Columns
 	}
@@ -548,7 +567,7 @@ func (rq *RelationshipQuery) sqlQuery(ctx context.Context) *sql.Selector {
 		selector = rq.sql
 		selector.Select(selector.Columns(columns...)...)
 	}
-	if rq.unique != nil && *rq.unique {
+	if rq.ctx.Unique != nil && *rq.ctx.Unique {
 		selector.Distinct()
 	}
 	for _, p := range rq.predicates {
@@ -557,12 +576,12 @@ func (rq *RelationshipQuery) sqlQuery(ctx context.Context) *sql.Selector {
 	for _, p := range rq.order {
 		p(selector)
 	}
-	if offset := rq.offset; offset != nil {
+	if offset := rq.ctx.Offset; offset != nil {
 		// limit is mandatory for offset clause. We start
 		// with default value, and override it below if needed.
 		selector.Offset(*offset).Limit(math.MaxInt32)
 	}
-	if limit := rq.limit; limit != nil {
+	if limit := rq.ctx.Limit; limit != nil {
 		selector.Limit(*limit)
 	}
 	return selector
@@ -570,13 +589,8 @@ func (rq *RelationshipQuery) sqlQuery(ctx context.Context) *sql.Selector {
 
 // RelationshipGroupBy is the group-by builder for Relationship entities.
 type RelationshipGroupBy struct {
-	config
 	selector
-	fields []string
-	fns    []AggregateFunc
-	// intermediate query (i.e. traversal path).
-	sql  *sql.Selector
-	path func(context.Context) (*sql.Selector, error)
+	build *RelationshipQuery
 }
 
 // Aggregate adds the given aggregation functions to the group-by query.
@@ -585,74 +599,77 @@ func (rgb *RelationshipGroupBy) Aggregate(fns ...AggregateFunc) *RelationshipGro
 	return rgb
 }
 
-// Scan applies the group-by query and scans the result into the given value.
+// Scan applies the selector query and scans the result into the given value.
 func (rgb *RelationshipGroupBy) Scan(ctx context.Context, v any) error {
-	query, err := rgb.path(ctx)
-	if err != nil {
+	ctx = setContextOp(ctx, rgb.build.ctx, "GroupBy")
+	if err := rgb.build.prepareQuery(ctx); err != nil {
 		return err
 	}
-	rgb.sql = query
-	return rgb.sqlScan(ctx, v)
+	return scanWithInterceptors[*RelationshipQuery, *RelationshipGroupBy](ctx, rgb.build, rgb, rgb.build.inters, v)
 }
 
-func (rgb *RelationshipGroupBy) sqlScan(ctx context.Context, v any) error {
-	for _, f := range rgb.fields {
-		if !relationship.ValidColumn(f) {
-			return &ValidationError{Name: f, err: fmt.Errorf("invalid field %q for group-by", f)}
-		}
+func (rgb *RelationshipGroupBy) sqlScan(ctx context.Context, root *RelationshipQuery, v any) error {
+	selector := root.sqlQuery(ctx).Select()
+	aggregation := make([]string, 0, len(rgb.fns))
+	for _, fn := range rgb.fns {
+		aggregation = append(aggregation, fn(selector))
 	}
-	selector := rgb.sqlQuery()
+	if len(selector.SelectedColumns()) == 0 {
+		columns := make([]string, 0, len(*rgb.flds)+len(rgb.fns))
+		for _, f := range *rgb.flds {
+			columns = append(columns, selector.C(f))
+		}
+		columns = append(columns, aggregation...)
+		selector.Select(columns...)
+	}
+	selector.GroupBy(selector.Columns(*rgb.flds...)...)
 	if err := selector.Err(); err != nil {
 		return err
 	}
 	rows := &sql.Rows{}
 	query, args := selector.Query()
-	if err := rgb.driver.Query(ctx, query, args, rows); err != nil {
+	if err := rgb.build.driver.Query(ctx, query, args, rows); err != nil {
 		return err
 	}
 	defer rows.Close()
 	return sql.ScanSlice(rows, v)
 }
 
-func (rgb *RelationshipGroupBy) sqlQuery() *sql.Selector {
-	selector := rgb.sql.Select()
-	aggregation := make([]string, 0, len(rgb.fns))
-	for _, fn := range rgb.fns {
-		aggregation = append(aggregation, fn(selector))
-	}
-	// If no columns were selected in a custom aggregation function, the default
-	// selection is the fields used for "group-by", and the aggregation functions.
-	if len(selector.SelectedColumns()) == 0 {
-		columns := make([]string, 0, len(rgb.fields)+len(rgb.fns))
-		for _, f := range rgb.fields {
-			columns = append(columns, selector.C(f))
-		}
-		columns = append(columns, aggregation...)
-		selector.Select(columns...)
-	}
-	return selector.GroupBy(selector.Columns(rgb.fields...)...)
-}
-
 // RelationshipSelect is the builder for selecting fields of Relationship entities.
 type RelationshipSelect struct {
 	*RelationshipQuery
 	selector
-	// intermediate query (i.e. traversal path).
-	sql *sql.Selector
+}
+
+// Aggregate adds the given aggregation functions to the selector query.
+func (rs *RelationshipSelect) Aggregate(fns ...AggregateFunc) *RelationshipSelect {
+	rs.fns = append(rs.fns, fns...)
+	return rs
 }
 
 // Scan applies the selector query and scans the result into the given value.
 func (rs *RelationshipSelect) Scan(ctx context.Context, v any) error {
+	ctx = setContextOp(ctx, rs.ctx, "Select")
 	if err := rs.prepareQuery(ctx); err != nil {
 		return err
 	}
-	rs.sql = rs.RelationshipQuery.sqlQuery(ctx)
-	return rs.sqlScan(ctx, v)
+	return scanWithInterceptors[*RelationshipQuery, *RelationshipSelect](ctx, rs.RelationshipQuery, rs, rs.inters, v)
 }
 
-func (rs *RelationshipSelect) sqlScan(ctx context.Context, v any) error {
+func (rs *RelationshipSelect) sqlScan(ctx context.Context, root *RelationshipQuery, v any) error {
+	selector := root.sqlQuery(ctx)
+	aggregation := make([]string, 0, len(rs.fns))
+	for _, fn := range rs.fns {
+		aggregation = append(aggregation, fn(selector))
+	}
+	switch n := len(*rs.selector.flds); {
+	case n == 0 && len(aggregation) > 0:
+		selector.Select(aggregation...)
+	case n != 0 && len(aggregation) > 0:
+		selector.AppendSelect(aggregation...)
+	}
 	rows := &sql.Rows{}
-	query, args := rs.sql.Query()
+	query, args := selector.Query()
 	if err := rs.driver.Query(ctx, query, args, rows); err != nil {
 		return err
 	}

@@ -29,6 +29,8 @@ type Comment struct {
 	Table string `json:"table,omitempty"`
 	// Dir holds the value of the "dir" field.
 	Dir schemadir.Dir `json:"dir,omitempty"`
+	// Client holds the value of the "client" field.
+	Client string `json:"client,omitempty"`
 }
 
 // FromResponse scans the gremlin response data into Comment.
@@ -44,6 +46,7 @@ func (c *Comment) FromResponse(res *gremlin.Response) error {
 		NillableInt *int          `json:"nillable_int,omitempty"`
 		Table       string        `json:"table,omitempty"`
 		Dir         schemadir.Dir `json:"dir,omitempty"`
+		Client      string        `json:"client,omitempty"`
 	}
 	if err := vmap.Decode(&scanc); err != nil {
 		return err
@@ -54,6 +57,7 @@ func (c *Comment) FromResponse(res *gremlin.Response) error {
 	c.NillableInt = scanc.NillableInt
 	c.Table = scanc.Table
 	c.Dir = scanc.Dir
+	c.Client = scanc.Client
 	return nil
 }
 
@@ -61,7 +65,7 @@ func (c *Comment) FromResponse(res *gremlin.Response) error {
 // Note that you need to call Comment.Unwrap() before calling this method if this Comment
 // was returned from a transaction, and the transaction was committed or rolled back.
 func (c *Comment) Update() *CommentUpdateOne {
-	return (&CommentClient{config: c.config}).UpdateOne(c)
+	return NewCommentClient(c.config).UpdateOne(c)
 }
 
 // Unwrap unwraps the Comment entity that was returned from a transaction after it was closed,
@@ -96,6 +100,9 @@ func (c *Comment) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("dir=")
 	builder.WriteString(fmt.Sprintf("%v", c.Dir))
+	builder.WriteString(", ")
+	builder.WriteString("client=")
+	builder.WriteString(c.Client)
 	builder.WriteByte(')')
 	return builder.String()
 }
@@ -116,6 +123,7 @@ func (c *Comments) FromResponse(res *gremlin.Response) error {
 		NillableInt *int          `json:"nillable_int,omitempty"`
 		Table       string        `json:"table,omitempty"`
 		Dir         schemadir.Dir `json:"dir,omitempty"`
+		Client      string        `json:"client,omitempty"`
 	}
 	if err := vmap.Decode(&scanc); err != nil {
 		return err
@@ -127,13 +135,8 @@ func (c *Comments) FromResponse(res *gremlin.Response) error {
 		node.NillableInt = v.NillableInt
 		node.Table = v.Table
 		node.Dir = v.Dir
+		node.Client = v.Client
 		*c = append(*c, node)
 	}
 	return nil
-}
-
-func (c Comments) config(cfg config) {
-	for _i := range c {
-		c[_i].config = cfg
-	}
 }

@@ -98,34 +98,7 @@ func (mu *MediaUpdate) Mutation() *MediaMutation {
 
 // Save executes the query and returns the number of nodes affected by the update operation.
 func (mu *MediaUpdate) Save(ctx context.Context) (int, error) {
-	var (
-		err      error
-		affected int
-	)
-	if len(mu.hooks) == 0 {
-		affected, err = mu.sqlSave(ctx)
-	} else {
-		var mut Mutator = MutateFunc(func(ctx context.Context, m Mutation) (Value, error) {
-			mutation, ok := m.(*MediaMutation)
-			if !ok {
-				return nil, fmt.Errorf("unexpected mutation type %T", m)
-			}
-			mu.mutation = mutation
-			affected, err = mu.sqlSave(ctx)
-			mutation.done = true
-			return affected, err
-		})
-		for i := len(mu.hooks) - 1; i >= 0; i-- {
-			if mu.hooks[i] == nil {
-				return 0, fmt.Errorf("entv2: uninitialized hook (forgotten import entv2/runtime?)")
-			}
-			mut = mu.hooks[i](mut)
-		}
-		if _, err := mut.Mutate(ctx, mu.mutation); err != nil {
-			return 0, err
-		}
-	}
-	return affected, err
+	return withHooks[int, MediaMutation](ctx, mu.sqlSave, mu.mutation, mu.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
@@ -151,16 +124,7 @@ func (mu *MediaUpdate) ExecX(ctx context.Context) {
 }
 
 func (mu *MediaUpdate) sqlSave(ctx context.Context) (n int, err error) {
-	_spec := &sqlgraph.UpdateSpec{
-		Node: &sqlgraph.NodeSpec{
-			Table:   media.Table,
-			Columns: media.Columns,
-			ID: &sqlgraph.FieldSpec{
-				Type:   field.TypeInt,
-				Column: media.FieldID,
-			},
-		},
-	}
+	_spec := sqlgraph.NewUpdateSpec(media.Table, media.Columns, sqlgraph.NewFieldSpec(media.FieldID, field.TypeInt))
 	if ps := mu.mutation.predicates; len(ps) > 0 {
 		_spec.Predicate = func(selector *sql.Selector) {
 			for i := range ps {
@@ -169,43 +133,22 @@ func (mu *MediaUpdate) sqlSave(ctx context.Context) (n int, err error) {
 		}
 	}
 	if value, ok := mu.mutation.Source(); ok {
-		_spec.Fields.Set = append(_spec.Fields.Set, &sqlgraph.FieldSpec{
-			Type:   field.TypeString,
-			Value:  value,
-			Column: media.FieldSource,
-		})
+		_spec.SetField(media.FieldSource, field.TypeString, value)
 	}
 	if mu.mutation.SourceCleared() {
-		_spec.Fields.Clear = append(_spec.Fields.Clear, &sqlgraph.FieldSpec{
-			Type:   field.TypeString,
-			Column: media.FieldSource,
-		})
+		_spec.ClearField(media.FieldSource, field.TypeString)
 	}
 	if value, ok := mu.mutation.SourceURI(); ok {
-		_spec.Fields.Set = append(_spec.Fields.Set, &sqlgraph.FieldSpec{
-			Type:   field.TypeString,
-			Value:  value,
-			Column: media.FieldSourceURI,
-		})
+		_spec.SetField(media.FieldSourceURI, field.TypeString, value)
 	}
 	if mu.mutation.SourceURICleared() {
-		_spec.Fields.Clear = append(_spec.Fields.Clear, &sqlgraph.FieldSpec{
-			Type:   field.TypeString,
-			Column: media.FieldSourceURI,
-		})
+		_spec.ClearField(media.FieldSourceURI, field.TypeString)
 	}
 	if value, ok := mu.mutation.Text(); ok {
-		_spec.Fields.Set = append(_spec.Fields.Set, &sqlgraph.FieldSpec{
-			Type:   field.TypeString,
-			Value:  value,
-			Column: media.FieldText,
-		})
+		_spec.SetField(media.FieldText, field.TypeString, value)
 	}
 	if mu.mutation.TextCleared() {
-		_spec.Fields.Clear = append(_spec.Fields.Clear, &sqlgraph.FieldSpec{
-			Type:   field.TypeString,
-			Column: media.FieldText,
-		})
+		_spec.ClearField(media.FieldText, field.TypeString)
 	}
 	if n, err = sqlgraph.UpdateNodes(ctx, mu.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
@@ -215,6 +158,7 @@ func (mu *MediaUpdate) sqlSave(ctx context.Context) (n int, err error) {
 		}
 		return 0, err
 	}
+	mu.mutation.done = true
 	return n, nil
 }
 
@@ -291,6 +235,12 @@ func (muo *MediaUpdateOne) Mutation() *MediaMutation {
 	return muo.mutation
 }
 
+// Where appends a list predicates to the MediaUpdate builder.
+func (muo *MediaUpdateOne) Where(ps ...predicate.Media) *MediaUpdateOne {
+	muo.mutation.Where(ps...)
+	return muo
+}
+
 // Select allows selecting one or more fields (columns) of the returned entity.
 // The default is selecting all fields defined in the entity schema.
 func (muo *MediaUpdateOne) Select(field string, fields ...string) *MediaUpdateOne {
@@ -300,40 +250,7 @@ func (muo *MediaUpdateOne) Select(field string, fields ...string) *MediaUpdateOn
 
 // Save executes the query and returns the updated Media entity.
 func (muo *MediaUpdateOne) Save(ctx context.Context) (*Media, error) {
-	var (
-		err  error
-		node *Media
-	)
-	if len(muo.hooks) == 0 {
-		node, err = muo.sqlSave(ctx)
-	} else {
-		var mut Mutator = MutateFunc(func(ctx context.Context, m Mutation) (Value, error) {
-			mutation, ok := m.(*MediaMutation)
-			if !ok {
-				return nil, fmt.Errorf("unexpected mutation type %T", m)
-			}
-			muo.mutation = mutation
-			node, err = muo.sqlSave(ctx)
-			mutation.done = true
-			return node, err
-		})
-		for i := len(muo.hooks) - 1; i >= 0; i-- {
-			if muo.hooks[i] == nil {
-				return nil, fmt.Errorf("entv2: uninitialized hook (forgotten import entv2/runtime?)")
-			}
-			mut = muo.hooks[i](mut)
-		}
-		v, err := mut.Mutate(ctx, muo.mutation)
-		if err != nil {
-			return nil, err
-		}
-		nv, ok := v.(*Media)
-		if !ok {
-			return nil, fmt.Errorf("unexpected node type %T returned from MediaMutation", v)
-		}
-		node = nv
-	}
-	return node, err
+	return withHooks[*Media, MediaMutation](ctx, muo.sqlSave, muo.mutation, muo.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
@@ -359,16 +276,7 @@ func (muo *MediaUpdateOne) ExecX(ctx context.Context) {
 }
 
 func (muo *MediaUpdateOne) sqlSave(ctx context.Context) (_node *Media, err error) {
-	_spec := &sqlgraph.UpdateSpec{
-		Node: &sqlgraph.NodeSpec{
-			Table:   media.Table,
-			Columns: media.Columns,
-			ID: &sqlgraph.FieldSpec{
-				Type:   field.TypeInt,
-				Column: media.FieldID,
-			},
-		},
-	}
+	_spec := sqlgraph.NewUpdateSpec(media.Table, media.Columns, sqlgraph.NewFieldSpec(media.FieldID, field.TypeInt))
 	id, ok := muo.mutation.ID()
 	if !ok {
 		return nil, &ValidationError{Name: "id", err: errors.New(`entv2: missing "Media.id" for update`)}
@@ -394,43 +302,22 @@ func (muo *MediaUpdateOne) sqlSave(ctx context.Context) (_node *Media, err error
 		}
 	}
 	if value, ok := muo.mutation.Source(); ok {
-		_spec.Fields.Set = append(_spec.Fields.Set, &sqlgraph.FieldSpec{
-			Type:   field.TypeString,
-			Value:  value,
-			Column: media.FieldSource,
-		})
+		_spec.SetField(media.FieldSource, field.TypeString, value)
 	}
 	if muo.mutation.SourceCleared() {
-		_spec.Fields.Clear = append(_spec.Fields.Clear, &sqlgraph.FieldSpec{
-			Type:   field.TypeString,
-			Column: media.FieldSource,
-		})
+		_spec.ClearField(media.FieldSource, field.TypeString)
 	}
 	if value, ok := muo.mutation.SourceURI(); ok {
-		_spec.Fields.Set = append(_spec.Fields.Set, &sqlgraph.FieldSpec{
-			Type:   field.TypeString,
-			Value:  value,
-			Column: media.FieldSourceURI,
-		})
+		_spec.SetField(media.FieldSourceURI, field.TypeString, value)
 	}
 	if muo.mutation.SourceURICleared() {
-		_spec.Fields.Clear = append(_spec.Fields.Clear, &sqlgraph.FieldSpec{
-			Type:   field.TypeString,
-			Column: media.FieldSourceURI,
-		})
+		_spec.ClearField(media.FieldSourceURI, field.TypeString)
 	}
 	if value, ok := muo.mutation.Text(); ok {
-		_spec.Fields.Set = append(_spec.Fields.Set, &sqlgraph.FieldSpec{
-			Type:   field.TypeString,
-			Value:  value,
-			Column: media.FieldText,
-		})
+		_spec.SetField(media.FieldText, field.TypeString, value)
 	}
 	if muo.mutation.TextCleared() {
-		_spec.Fields.Clear = append(_spec.Fields.Clear, &sqlgraph.FieldSpec{
-			Type:   field.TypeString,
-			Column: media.FieldText,
-		})
+		_spec.ClearField(media.FieldText, field.TypeString)
 	}
 	_node = &Media{config: muo.config}
 	_spec.Assign = _node.assignValues
@@ -443,5 +330,6 @@ func (muo *MediaUpdateOne) sqlSave(ctx context.Context) (_node *Media, err error
 		}
 		return nil, err
 	}
+	muo.mutation.done = true
 	return _node, nil
 }

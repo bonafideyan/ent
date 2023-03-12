@@ -21,10 +21,11 @@ type Node struct {
 	ID int `json:"id,omitempty"`
 	// Value holds the value of the "value" field.
 	Value int `json:"value,omitempty"`
+	// PrevID holds the value of the "prev_id" field.
+	PrevID int `json:"prev_id,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the NodeQuery when eager-loading is set.
-	Edges     NodeEdges `json:"edges"`
-	node_next *int
+	Edges NodeEdges `json:"edges"`
 }
 
 // NodeEdges holds the relations/edges for other nodes in the graph.
@@ -69,9 +70,7 @@ func (*Node) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case node.FieldID, node.FieldValue:
-			values[i] = new(sql.NullInt64)
-		case node.ForeignKeys[0]: // node_next
+		case node.FieldID, node.FieldValue, node.FieldPrevID:
 			values[i] = new(sql.NullInt64)
 		default:
 			return nil, fmt.Errorf("unexpected column %q for type Node", columns[i])
@@ -100,12 +99,11 @@ func (n *Node) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				n.Value = int(value.Int64)
 			}
-		case node.ForeignKeys[0]:
+		case node.FieldPrevID:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
-				return fmt.Errorf("unexpected type %T for edge-field node_next", value)
+				return fmt.Errorf("unexpected type %T for field prev_id", values[i])
 			} else if value.Valid {
-				n.node_next = new(int)
-				*n.node_next = int(value.Int64)
+				n.PrevID = int(value.Int64)
 			}
 		}
 	}
@@ -114,19 +112,19 @@ func (n *Node) assignValues(columns []string, values []any) error {
 
 // QueryPrev queries the "prev" edge of the Node entity.
 func (n *Node) QueryPrev() *NodeQuery {
-	return (&NodeClient{config: n.config}).QueryPrev(n)
+	return NewNodeClient(n.config).QueryPrev(n)
 }
 
 // QueryNext queries the "next" edge of the Node entity.
 func (n *Node) QueryNext() *NodeQuery {
-	return (&NodeClient{config: n.config}).QueryNext(n)
+	return NewNodeClient(n.config).QueryNext(n)
 }
 
 // Update returns a builder for updating this Node.
 // Note that you need to call Node.Unwrap() before calling this method if this Node
 // was returned from a transaction, and the transaction was committed or rolled back.
 func (n *Node) Update() *NodeUpdateOne {
-	return (&NodeClient{config: n.config}).UpdateOne(n)
+	return NewNodeClient(n.config).UpdateOne(n)
 }
 
 // Unwrap unwraps the Node entity that was returned from a transaction after it was closed,
@@ -147,15 +145,12 @@ func (n *Node) String() string {
 	builder.WriteString(fmt.Sprintf("id=%v, ", n.ID))
 	builder.WriteString("value=")
 	builder.WriteString(fmt.Sprintf("%v", n.Value))
+	builder.WriteString(", ")
+	builder.WriteString("prev_id=")
+	builder.WriteString(fmt.Sprintf("%v", n.PrevID))
 	builder.WriteByte(')')
 	return builder.String()
 }
 
 // Nodes is a parsable slice of Node.
 type Nodes []*Node
-
-func (n Nodes) config(cfg config) {
-	for _i := range n {
-		n[_i].config = cfg
-	}
-}

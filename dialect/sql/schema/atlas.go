@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"reflect"
 	"sort"
 	"strings"
 
@@ -32,10 +33,12 @@ type Atlas struct {
 	withFixture bool // deprecated: with fks rename fixture
 	sum         bool // deprecated: sum file generation will be required
 
-	universalID     bool // global unique ids
-	dropColumns     bool // drop deleted columns
-	dropIndexes     bool // drop deleted indexes
-	withForeignKeys bool // with foreign keys
+	indent          string // plan indentation
+	errNoPlan       bool   // no plan error enabled
+	universalID     bool   // global unique ids
+	dropColumns     bool   // drop deleted columns
+	dropIndexes     bool   // drop deleted indexes
+	withForeignKeys bool   // with foreign keys
 	mode            Mode
 	hooks           []Hook            // hooks to apply before creation
 	diffHooks       []DiffHook        // diff hooks to run when diffing current and desired
@@ -140,7 +143,7 @@ func (a *Atlas) NamedDiff(ctx context.Context, name string, tables ...*Table) er
 	// Set up connections.
 	if a.driver != nil {
 		var err error
-		a.sqlDialect, err = a.entDialect(a.driver)
+		a.sqlDialect, err = a.entDialect(ctx, a.driver)
 		if err != nil {
 			return err
 		}
@@ -154,7 +157,7 @@ func (a *Atlas) NamedDiff(ctx context.Context, name string, tables ...*Table) er
 			return err
 		}
 		defer c.Close()
-		a.sqlDialect, err = a.entDialect(entsql.OpenDB(a.dialect, c.DB))
+		a.sqlDialect, err = a.entDialect(ctx, entsql.OpenDB(a.dialect, c.DB))
 		if err != nil {
 			return err
 		}
@@ -164,67 +167,52 @@ func (a *Atlas) NamedDiff(ctx context.Context, name string, tables ...*Table) er
 		a.sqlDialect = nil
 		a.atDriver = nil
 	}()
-	if err := a.sqlDialect.init(ctx, a.sqlDialect); err != nil {
+	if err := a.sqlDialect.init(ctx); err != nil {
 		return err
 	}
 	if a.universalID {
-		tables = append(tables, NewTable(TypeTable).
-			AddPrimary(&Column{Name: "id", Type: field.TypeUint, Increment: true}).
-			AddColumn(&Column{Name: "type", Type: field.TypeString, Unique: true}),
-		)
+		tables = append(tables, NewTypesTable())
 	}
+	var (
+		err  error
+		plan *migrate.Plan
+	)
 	switch a.mode {
 	case ModeInspect:
-		// Do nothing here, simply inspect later on.
+		plan, err = a.planInspect(ctx, a.sqlDialect, name, tables)
 	case ModeReplay:
-		// We consider a database clean if there are no tables in the connected schema.
-		s, err := a.atDriver.InspectSchema(ctx, "", nil)
-		if err != nil {
-			return err
-		}
-		if len(s.Tables) > 0 {
-			return migrate.NotCleanError{Reason: fmt.Sprintf("found table %q", s.Tables[0].Name)}
-		}
-		// Clean up once done.
-		defer func() {
-			// We clean a database by dropping all tables inside the connected schema.
-			s, err = a.atDriver.InspectSchema(ctx, "", nil)
-			if err != nil {
-				return
-			}
-			tbls := make([]schema.Change, len(s.Tables))
-			for i, t := range s.Tables {
-				tbls[i] = &schema.DropTable{T: t}
-			}
-			if err2 := a.atDriver.ApplyChanges(ctx, tbls); err2 != nil {
-				if err != nil {
-					err = fmt.Errorf("%v: %w", err2, err)
-					return
-				}
-				err = err2
-				return
-			}
-		}()
-		// Replay the migration directory on the database.
-		ex, err := migrate.NewExecutor(a.atDriver, a.dir, &migrate.NopRevisionReadWriter{})
-		if err != nil {
-			return err
-		}
-		if err := ex.ExecuteN(ctx, 0); err != nil && !errors.Is(err, migrate.ErrNoPendingFiles) {
-			return err
-		}
+		plan, err = a.planReplay(ctx, name, tables)
 	default:
 		return fmt.Errorf("unknown migration mode: %q", a.mode)
 	}
-	plan, err := a.plan(ctx, a.sqlDialect, name, tables)
+	switch {
+	case err != nil:
+		return err
+	case len(plan.Changes) == 0:
+		if a.errNoPlan {
+			return migrate.ErrNoPlan
+		}
+		return nil
+	default:
+		return migrate.NewPlanner(nil, a.dir, opts...).WritePlan(plan)
+	}
+}
+
+func (a *Atlas) cleanSchema(ctx context.Context, name string, err0 error) (err error) {
+	defer func() {
+		if err0 != nil {
+			err = fmt.Errorf("%v: %w", err0, err)
+		}
+	}()
+	s, err := a.atDriver.InspectSchema(ctx, name, nil)
 	if err != nil {
 		return err
 	}
-	// Skip if the plan has no changes.
-	if len(plan.Changes) == 0 {
-		return nil
+	drop := make([]schema.Change, len(s.Tables))
+	for i, t := range s.Tables {
+		drop[i] = &schema.DropTable{T: t}
 	}
-	return migrate.NewPlanner(nil, a.dir, opts...).WritePlan(plan)
+	return a.atDriver.ApplyChanges(ctx, drop)
 }
 
 // VerifyTableRange ensures, that the defined autoincrement starting value is set for each table as defined by the
@@ -236,7 +224,7 @@ func (a *Atlas) NamedDiff(ctx context.Context, name string, tables ...*Table) er
 func (a *Atlas) VerifyTableRange(ctx context.Context, tables []*Table) error {
 	if a.driver != nil {
 		var err error
-		a.sqlDialect, err = a.entDialect(a.driver)
+		a.sqlDialect, err = a.entDialect(ctx, a.driver)
 		if err != nil {
 			return err
 		}
@@ -246,7 +234,7 @@ func (a *Atlas) VerifyTableRange(ctx context.Context, tables []*Table) error {
 			return err
 		}
 		defer c.Close()
-		a.sqlDialect, err = a.entDialect(entsql.OpenDB(a.dialect, c.DB))
+		a.sqlDialect, err = a.entDialect(ctx, entsql.OpenDB(a.dialect, c.DB))
 		if err != nil {
 			return err
 		}
@@ -564,7 +552,14 @@ const (
 
 // StateReader returns an atlas migrate.StateReader returning the state as described by the Ent table slice.
 func (a *Atlas) StateReader(tables ...*Table) migrate.StateReaderFunc {
-	return func(context.Context) (*schema.Realm, error) {
+	return func(ctx context.Context) (*schema.Realm, error) {
+		if a.sqlDialect == nil {
+			drv, err := a.entDialect(ctx, a.driver)
+			if err != nil {
+				return nil, err
+			}
+			a.sqlDialect = drv
+		}
 		ts, err := a.tables(tables)
 		if err != nil {
 			return nil, err
@@ -578,6 +573,7 @@ func (a *Atlas) StateReader(tables ...*Table) migrate.StateReaderFunc {
 type atBuilder interface {
 	atOpen(dialect.ExecQuerier) (migrate.Driver, error)
 	atTable(*Table, *schema.Table)
+	supportsDefault(*Column) bool
 	atTypeC(*Column, *schema.Column) error
 	atUniqueC(*Table, *Column, *schema.Table, *schema.Column)
 	atIncrementC(*schema.Table, *schema.Column)
@@ -634,13 +630,10 @@ func (a *Atlas) init() error {
 // create is the Atlas engine based online migration.
 func (a *Atlas) create(ctx context.Context, tables ...*Table) (err error) {
 	if a.universalID {
-		tables = append(tables, NewTable(TypeTable).
-			AddPrimary(&Column{Name: "id", Type: field.TypeUint, Increment: true}).
-			AddColumn(&Column{Name: "type", Type: field.TypeString, Unique: true}),
-		)
+		tables = append(tables, NewTypesTable())
 	}
 	if a.driver != nil {
-		a.sqlDialect, err = a.entDialect(a.driver)
+		a.sqlDialect, err = a.entDialect(ctx, a.driver)
 		if err != nil {
 			return err
 		}
@@ -650,19 +643,19 @@ func (a *Atlas) create(ctx context.Context, tables ...*Table) (err error) {
 			return err
 		}
 		defer c.Close()
-		a.sqlDialect, err = a.entDialect(entsql.OpenDB(a.dialect, c.DB))
+		a.sqlDialect, err = a.entDialect(ctx, entsql.OpenDB(a.dialect, c.DB))
 		if err != nil {
 			return err
 		}
 	}
 	defer func() { a.sqlDialect = nil }()
+	if err := a.sqlDialect.init(ctx); err != nil {
+		return err
+	}
 	// Open a transaction for backwards compatibility,
 	// even if the migration is not transactional.
 	tx, err := a.sqlDialect.Tx(ctx)
 	if err != nil {
-		return err
-	}
-	if err := a.sqlDialect.init(ctx, tx); err != nil {
 		return err
 	}
 	a.atDriver, err = a.sqlDialect.atOpen(tx)
@@ -671,7 +664,7 @@ func (a *Atlas) create(ctx context.Context, tables ...*Table) (err error) {
 	}
 	defer func() { a.atDriver = nil }()
 	if err := func() error {
-		plan, err := a.plan(ctx, tx, "changes", tables)
+		plan, err := a.planInspect(ctx, tx, "changes", tables)
 		if err != nil {
 			return err
 		}
@@ -701,10 +694,9 @@ func (a *Atlas) create(ctx context.Context, tables ...*Table) (err error) {
 	return tx.Commit()
 }
 
-// plan creates the current state by inspecting the connected database, computing the current state of the Ent schema
+// planInspect creates the current state by inspecting the connected database, computing the current state of the Ent schema
 // and proceeds to diff the changes to create a migration plan.
-// before diffing.
-func (a *Atlas) plan(ctx context.Context, conn dialect.ExecQuerier, name string, tables []*Table) (*migrate.Plan, error) {
+func (a *Atlas) planInspect(ctx context.Context, conn dialect.ExecQuerier, name string, tables []*Table) (*migrate.Plan, error) {
 	current, err := a.atDriver.InspectSchema(ctx, "", &schema.InspectOptions{
 		Tables: func() (t []string) {
 			for i := range tables {
@@ -724,26 +716,104 @@ func (a *Atlas) plan(ctx context.Context, conn dialect.ExecQuerier, name string,
 		}
 		a.types = types
 	}
-	desired, err := a.StateReader(tables...).ReadState(ctx)
+	realm, err := a.StateReader(tables...).ReadState(ctx)
 	if err != nil {
 		return nil, err
 	}
-	// Diff changes.
-	changes, err := (&diffDriver{a.atDriver, a.diffHooks}).SchemaDiff(current, &schema.Schema{
-		Name:   current.Name,
-		Attrs:  current.Attrs,
-		Tables: desired.Schemas[0].Tables,
-	})
+	desired := realm.Schemas[0]
+	desired.Name, desired.Attrs = current.Name, current.Attrs
+	return a.diff(ctx, name, current, desired, a.types[len(types):])
+}
+
+func (a *Atlas) planReplay(ctx context.Context, name string, tables []*Table) (*migrate.Plan, error) {
+	// We consider a database clean if there are no tables in the connected schema.
+	s, err := a.atDriver.InspectSchema(ctx, "", nil)
 	if err != nil {
 		return nil, err
 	}
-	// Plan changes.
-	plan, err := a.atDriver.PlanChanges(ctx, name, changes)
+	if len(s.Tables) > 0 {
+		return nil, &migrate.NotCleanError{Reason: fmt.Sprintf("found table %q", s.Tables[0].Name)}
+	}
+	// Replay the migration directory on the database.
+	ex, err := migrate.NewExecutor(a.atDriver, a.dir, &migrate.NopRevisionReadWriter{})
 	if err != nil {
 		return nil, err
 	}
-	// Insert new types.
-	newTypes := a.types[len(types):]
+	if err := ex.ExecuteN(ctx, 0); err != nil && !errors.Is(err, migrate.ErrNoPendingFiles) {
+		return nil, a.cleanSchema(ctx, "", err)
+	}
+	// Inspect the current schema (migration directory).
+	current, err := a.atDriver.InspectSchema(ctx, "", nil)
+	if err != nil {
+		return nil, a.cleanSchema(ctx, "", err)
+	}
+	var types []string
+	if a.universalID {
+		if types, err = a.loadTypes(ctx, a.sqlDialect); err != nil && !errors.Is(err, errTypeTableNotFound) {
+			return nil, a.cleanSchema(ctx, "", err)
+		}
+		a.types = types
+	}
+	if err := a.cleanSchema(ctx, "", nil); err != nil {
+		return nil, fmt.Errorf("clean schemas after migration replaying: %w", err)
+	}
+	desired, err := a.tables(tables)
+	if err != nil {
+		return nil, err
+	}
+	// In case of replay mode, normalize the desired state (i.e. ent/schema).
+	if nr, ok := a.atDriver.(schema.Normalizer); ok {
+		ns, err := nr.NormalizeSchema(ctx, schema.New(current.Name).AddTables(desired...))
+		if err != nil {
+			return nil, err
+		}
+		if len(ns.Tables) != len(desired) {
+			return nil, fmt.Errorf("unexpected number of tables after normalization: %d != %d", len(ns.Tables), len(desired))
+		}
+		// Ensure all tables exist in the normalized format and the order is preserved.
+		for i, t := range desired {
+			d, ok := ns.Table(t.Name)
+			if !ok {
+				return nil, fmt.Errorf("table %q not found after normalization", t.Name)
+			}
+			desired[i] = d
+		}
+	}
+	return a.diff(ctx, name, current,
+		&schema.Schema{Name: current.Name, Attrs: current.Attrs, Tables: desired}, a.types[len(types):],
+		// For BC reason, we omit the schema qualifier from the migration scripts,
+		// but that is currently limiting versioned migration to a single schema.
+		func(opts *migrate.PlanOptions) {
+			var noQualifier string
+			opts.SchemaQualifier = &noQualifier
+		},
+	)
+}
+
+func (a *Atlas) diff(ctx context.Context, name string, current, desired *schema.Schema, newTypes []string, opts ...migrate.PlanOption) (*migrate.Plan, error) {
+	changes, err := (&diffDriver{a.atDriver, a.diffHooks}).SchemaDiff(current, desired)
+	if err != nil {
+		return nil, err
+	}
+	filtered := make([]schema.Change, 0, len(changes))
+	for _, c := range changes {
+		// Skip any table drops explicitly. The reason we may encounter this, even though specific tables are passed
+		// to Inspect, is if the MySQL system variable 'lower_case_table_names' is set to 1. In such a case, the given
+		// tables will be returned from inspection because MySQL compares case-insensitive, but they won't match when
+		// compare them in code.
+		if _, ok := c.(*schema.DropTable); !ok {
+			filtered = append(filtered, c)
+		}
+	}
+	if a.indent != "" {
+		opts = append(opts, func(opts *migrate.PlanOptions) {
+			opts.Indent = a.indent
+		})
+	}
+	plan, err := a.atDriver.PlanChanges(ctx, name, filtered, opts...)
+	if err != nil {
+		return nil, err
+	}
 	if len(newTypes) > 0 {
 		plan.Changes = append(plan.Changes, &migrate.Change{
 			Cmd:     a.sqlDialect.atTypeRangeSQL(newTypes...),
@@ -802,8 +872,11 @@ func (a *Atlas) tables(tables []*Table) ([]*schema.Table, error) {
 	ts := make([]*schema.Table, len(tables))
 	for i, et := range tables {
 		at := schema.NewTable(et.Name)
+		if et.Comment != "" {
+			at.SetComment(et.Comment)
+		}
 		a.sqlDialect.atTable(et, at)
-		if a.universalID && et.Name != TypeTable {
+		if a.universalID && et.Name != TypeTable && len(et.PrimaryKey) == 1 {
 			r, err := a.pkRange(et)
 			if err != nil {
 				return nil, err
@@ -863,17 +936,14 @@ func (a *Atlas) aColumns(et *Table, at *schema.Table) error {
 		if c1.Collation != "" {
 			c2.SetCollation(c1.Collation)
 		}
+		if c1.Comment != "" {
+			c2.SetComment(c1.Comment)
+		}
 		if err := a.sqlDialect.atTypeC(c1, c2); err != nil {
 			return err
 		}
-		if c1.Default != nil && c1.supportDefault() {
-			// Has default and the database supports adding this default.
-			x := fmt.Sprint(c1.Default)
-			if v, ok := c1.Default.(string); ok && c1.Type != field.TypeUUID && c1.Type != field.TypeTime {
-				// Escape single quote by replacing each with 2.
-				x = fmt.Sprintf("'%s'", strings.ReplaceAll(v, "'", "''"))
-			}
-			c2.SetDefault(&schema.RawExpr{X: x})
+		if err := a.atDefault(c1, c2); err != nil {
+			return err
 		}
 		if c1.Unique && (len(et.PrimaryKey) != 1 || et.PrimaryKey[0] != c1) {
 			a.sqlDialect.atUniqueC(et, c1, at, c2)
@@ -882,6 +952,46 @@ func (a *Atlas) aColumns(et *Table, at *schema.Table) error {
 			a.sqlDialect.atIncrementC(at, c2)
 		}
 		at.AddColumns(c2)
+	}
+	return nil
+}
+
+func (a *Atlas) atDefault(c1 *Column, c2 *schema.Column) error {
+	if c1.Default == nil || !a.sqlDialect.supportsDefault(c1) {
+		return nil
+	}
+	switch x := c1.Default.(type) {
+	case Expr:
+		if len(x) > 1 && (x[0] != '(' || x[len(x)-1] != ')') {
+			x = "(" + x + ")"
+		}
+		c2.SetDefault(&schema.RawExpr{X: string(x)})
+	case map[string]Expr:
+		d, ok := x[a.sqlDialect.Dialect()]
+		if !ok {
+			return nil
+		}
+		if len(d) > 1 && (d[0] != '(' || d[len(d)-1] != ')') {
+			d = "(" + d + ")"
+		}
+		c2.SetDefault(&schema.RawExpr{X: string(d)})
+	default:
+		switch {
+		case c1.Type == field.TypeJSON:
+			s, ok := c1.Default.(string)
+			if !ok {
+				return fmt.Errorf("invalid default value for JSON column %q: %v", c1.Name, c1.Default)
+			}
+			c2.SetDefault(&schema.Literal{V: strings.ReplaceAll(s, "'", "''")})
+		default:
+			// Keep backwards compatibility with the old default value format.
+			x := fmt.Sprint(c1.Default)
+			if v, ok := c1.Default.(string); ok && c1.Type != field.TypeUUID && c1.Type != field.TypeTime {
+				// Escape single quote by replacing each with 2.
+				x = fmt.Sprintf("'%s'", strings.ReplaceAll(v, "'", "''"))
+			}
+			c2.SetDefault(&schema.RawExpr{X: x})
+		}
 	}
 	return nil
 }
@@ -896,7 +1006,10 @@ func (a *Atlas) aIndexes(et *Table, at *schema.Table) error {
 		}
 		pk = append(pk, c2)
 	}
-	at.SetPrimaryKey(schema.NewPrimaryKey(pk...))
+	// CreateFunc might clear the primary keys.
+	if len(pk) > 0 {
+		at.SetPrimaryKey(schema.NewPrimaryKey(pk...))
+	}
 	// Rest of indexes.
 	for _, idx1 := range et.Indexes {
 		idx2 := schema.NewIndex(idx1.Name).
@@ -956,17 +1069,22 @@ func (a *Atlas) symbol(name string) string {
 }
 
 // entDialect returns the Ent dialect as configured by the dialect option.
-func (a *Atlas) entDialect(drv dialect.Driver) (sqlDialect, error) {
+func (a *Atlas) entDialect(ctx context.Context, drv dialect.Driver) (sqlDialect, error) {
+	var d sqlDialect
 	switch a.dialect {
 	case dialect.MySQL:
-		return &MySQL{Driver: drv}, nil
+		d = &MySQL{Driver: drv}
 	case dialect.SQLite:
-		return &SQLite{Driver: drv, WithForeignKeys: a.withForeignKeys}, nil
+		d = &SQLite{Driver: drv, WithForeignKeys: a.withForeignKeys}
 	case dialect.Postgres:
-		return &Postgres{Driver: drv}, nil
+		d = &Postgres{Driver: drv}
 	default:
 		return nil, fmt.Errorf("sql/schema: unsupported dialect %q", a.dialect)
 	}
+	if err := d.init(ctx); err != nil {
+		return nil, err
+	}
+	return d, nil
 }
 
 func (a *Atlas) pkRange(et *Table) (int64, error) {
@@ -1066,4 +1184,17 @@ func (a *Atlas) legacyMigrate() (*Migrate, error) {
 		return nil, fmt.Errorf("sql/schema: unsupported dialect %q", a.dialect)
 	}
 	return m, nil
+}
+
+// removeAttr is a temporary patch due to compiler errors we get by using the generic
+// schema.RemoveAttr function (<autogenerated>:1: internal compiler error: panic: ...).
+// Can be removed in Go 1.20. See: https://github.com/golang/go/issues/54302.
+func removeAttr(attrs []schema.Attr, t reflect.Type) []schema.Attr {
+	f := make([]schema.Attr, 0, len(attrs))
+	for _, a := range attrs {
+		if reflect.TypeOf(a) != t {
+			f = append(f, a)
+		}
+	}
+	return f
 }

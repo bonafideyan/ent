@@ -13,9 +13,15 @@ import (
 	"sync"
 	"time"
 
+	"entgo.io/ent"
+	"entgo.io/ent/dialect/sql"
+	"entgo.io/ent/entc/integration/edgeschema/ent/attachedfile"
+	"entgo.io/ent/entc/integration/edgeschema/ent/file"
 	"entgo.io/ent/entc/integration/edgeschema/ent/friendship"
 	"entgo.io/ent/entc/integration/edgeschema/ent/group"
+	"entgo.io/ent/entc/integration/edgeschema/ent/grouptag"
 	"entgo.io/ent/entc/integration/edgeschema/ent/predicate"
+	"entgo.io/ent/entc/integration/edgeschema/ent/process"
 	"entgo.io/ent/entc/integration/edgeschema/ent/relationship"
 	"entgo.io/ent/entc/integration/edgeschema/ent/relationshipinfo"
 	"entgo.io/ent/entc/integration/edgeschema/ent/role"
@@ -28,8 +34,6 @@ import (
 	"entgo.io/ent/entc/integration/edgeschema/ent/usergroup"
 	"entgo.io/ent/entc/integration/edgeschema/ent/usertweet"
 	"github.com/google/uuid"
-
-	"entgo.io/ent"
 )
 
 const (
@@ -41,8 +45,12 @@ const (
 	OpUpdateOne = ent.OpUpdateOne
 
 	// Node types.
+	TypeAttachedFile     = "AttachedFile"
+	TypeFile             = "File"
 	TypeFriendship       = "Friendship"
 	TypeGroup            = "Group"
+	TypeGroupTag         = "GroupTag"
+	TypeProcess          = "Process"
 	TypeRelationship     = "Relationship"
 	TypeRelationshipInfo = "RelationshipInfo"
 	TypeRole             = "Role"
@@ -55,6 +63,973 @@ const (
 	TypeUserGroup        = "UserGroup"
 	TypeUserTweet        = "UserTweet"
 )
+
+// AttachedFileMutation represents an operation that mutates the AttachedFile nodes in the graph.
+type AttachedFileMutation struct {
+	config
+	op            Op
+	typ           string
+	id            *int
+	attach_time   *time.Time
+	clearedFields map[string]struct{}
+	fi            *int
+	clearedfi     bool
+	proc          *int
+	clearedproc   bool
+	done          bool
+	oldValue      func(context.Context) (*AttachedFile, error)
+	predicates    []predicate.AttachedFile
+}
+
+var _ ent.Mutation = (*AttachedFileMutation)(nil)
+
+// attachedfileOption allows management of the mutation configuration using functional options.
+type attachedfileOption func(*AttachedFileMutation)
+
+// newAttachedFileMutation creates new mutation for the AttachedFile entity.
+func newAttachedFileMutation(c config, op Op, opts ...attachedfileOption) *AttachedFileMutation {
+	m := &AttachedFileMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeAttachedFile,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withAttachedFileID sets the ID field of the mutation.
+func withAttachedFileID(id int) attachedfileOption {
+	return func(m *AttachedFileMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *AttachedFile
+		)
+		m.oldValue = func(ctx context.Context) (*AttachedFile, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().AttachedFile.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withAttachedFile sets the old AttachedFile of the mutation.
+func withAttachedFile(node *AttachedFile) attachedfileOption {
+	return func(m *AttachedFileMutation) {
+		m.oldValue = func(context.Context) (*AttachedFile, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m AttachedFileMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m AttachedFileMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *AttachedFileMutation) ID() (id int, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *AttachedFileMutation) IDs(ctx context.Context) ([]int, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().AttachedFile.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetAttachTime sets the "attach_time" field.
+func (m *AttachedFileMutation) SetAttachTime(t time.Time) {
+	m.attach_time = &t
+}
+
+// AttachTime returns the value of the "attach_time" field in the mutation.
+func (m *AttachedFileMutation) AttachTime() (r time.Time, exists bool) {
+	v := m.attach_time
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldAttachTime returns the old "attach_time" field's value of the AttachedFile entity.
+// If the AttachedFile object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AttachedFileMutation) OldAttachTime(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldAttachTime is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldAttachTime requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldAttachTime: %w", err)
+	}
+	return oldValue.AttachTime, nil
+}
+
+// ResetAttachTime resets all changes to the "attach_time" field.
+func (m *AttachedFileMutation) ResetAttachTime() {
+	m.attach_time = nil
+}
+
+// SetFID sets the "f_id" field.
+func (m *AttachedFileMutation) SetFID(i int) {
+	m.fi = &i
+}
+
+// FID returns the value of the "f_id" field in the mutation.
+func (m *AttachedFileMutation) FID() (r int, exists bool) {
+	v := m.fi
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldFID returns the old "f_id" field's value of the AttachedFile entity.
+// If the AttachedFile object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AttachedFileMutation) OldFID(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldFID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldFID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldFID: %w", err)
+	}
+	return oldValue.FID, nil
+}
+
+// ResetFID resets all changes to the "f_id" field.
+func (m *AttachedFileMutation) ResetFID() {
+	m.fi = nil
+}
+
+// SetProcID sets the "proc_id" field.
+func (m *AttachedFileMutation) SetProcID(i int) {
+	m.proc = &i
+}
+
+// ProcID returns the value of the "proc_id" field in the mutation.
+func (m *AttachedFileMutation) ProcID() (r int, exists bool) {
+	v := m.proc
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldProcID returns the old "proc_id" field's value of the AttachedFile entity.
+// If the AttachedFile object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *AttachedFileMutation) OldProcID(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldProcID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldProcID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldProcID: %w", err)
+	}
+	return oldValue.ProcID, nil
+}
+
+// ResetProcID resets all changes to the "proc_id" field.
+func (m *AttachedFileMutation) ResetProcID() {
+	m.proc = nil
+}
+
+// SetFiID sets the "fi" edge to the File entity by id.
+func (m *AttachedFileMutation) SetFiID(id int) {
+	m.fi = &id
+}
+
+// ClearFi clears the "fi" edge to the File entity.
+func (m *AttachedFileMutation) ClearFi() {
+	m.clearedfi = true
+}
+
+// FiCleared reports if the "fi" edge to the File entity was cleared.
+func (m *AttachedFileMutation) FiCleared() bool {
+	return m.clearedfi
+}
+
+// FiID returns the "fi" edge ID in the mutation.
+func (m *AttachedFileMutation) FiID() (id int, exists bool) {
+	if m.fi != nil {
+		return *m.fi, true
+	}
+	return
+}
+
+// FiIDs returns the "fi" edge IDs in the mutation.
+// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
+// FiID instead. It exists only for internal usage by the builders.
+func (m *AttachedFileMutation) FiIDs() (ids []int) {
+	if id := m.fi; id != nil {
+		ids = append(ids, *id)
+	}
+	return
+}
+
+// ResetFi resets all changes to the "fi" edge.
+func (m *AttachedFileMutation) ResetFi() {
+	m.fi = nil
+	m.clearedfi = false
+}
+
+// ClearProc clears the "proc" edge to the Process entity.
+func (m *AttachedFileMutation) ClearProc() {
+	m.clearedproc = true
+}
+
+// ProcCleared reports if the "proc" edge to the Process entity was cleared.
+func (m *AttachedFileMutation) ProcCleared() bool {
+	return m.clearedproc
+}
+
+// ProcIDs returns the "proc" edge IDs in the mutation.
+// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
+// ProcID instead. It exists only for internal usage by the builders.
+func (m *AttachedFileMutation) ProcIDs() (ids []int) {
+	if id := m.proc; id != nil {
+		ids = append(ids, *id)
+	}
+	return
+}
+
+// ResetProc resets all changes to the "proc" edge.
+func (m *AttachedFileMutation) ResetProc() {
+	m.proc = nil
+	m.clearedproc = false
+}
+
+// Where appends a list predicates to the AttachedFileMutation builder.
+func (m *AttachedFileMutation) Where(ps ...predicate.AttachedFile) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the AttachedFileMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *AttachedFileMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.AttachedFile, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *AttachedFileMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *AttachedFileMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (AttachedFile).
+func (m *AttachedFileMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *AttachedFileMutation) Fields() []string {
+	fields := make([]string, 0, 3)
+	if m.attach_time != nil {
+		fields = append(fields, attachedfile.FieldAttachTime)
+	}
+	if m.fi != nil {
+		fields = append(fields, attachedfile.FieldFID)
+	}
+	if m.proc != nil {
+		fields = append(fields, attachedfile.FieldProcID)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *AttachedFileMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case attachedfile.FieldAttachTime:
+		return m.AttachTime()
+	case attachedfile.FieldFID:
+		return m.FID()
+	case attachedfile.FieldProcID:
+		return m.ProcID()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *AttachedFileMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case attachedfile.FieldAttachTime:
+		return m.OldAttachTime(ctx)
+	case attachedfile.FieldFID:
+		return m.OldFID(ctx)
+	case attachedfile.FieldProcID:
+		return m.OldProcID(ctx)
+	}
+	return nil, fmt.Errorf("unknown AttachedFile field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *AttachedFileMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case attachedfile.FieldAttachTime:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetAttachTime(v)
+		return nil
+	case attachedfile.FieldFID:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetFID(v)
+		return nil
+	case attachedfile.FieldProcID:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetProcID(v)
+		return nil
+	}
+	return fmt.Errorf("unknown AttachedFile field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *AttachedFileMutation) AddedFields() []string {
+	var fields []string
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *AttachedFileMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *AttachedFileMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	}
+	return fmt.Errorf("unknown AttachedFile numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *AttachedFileMutation) ClearedFields() []string {
+	return nil
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *AttachedFileMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *AttachedFileMutation) ClearField(name string) error {
+	return fmt.Errorf("unknown AttachedFile nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *AttachedFileMutation) ResetField(name string) error {
+	switch name {
+	case attachedfile.FieldAttachTime:
+		m.ResetAttachTime()
+		return nil
+	case attachedfile.FieldFID:
+		m.ResetFID()
+		return nil
+	case attachedfile.FieldProcID:
+		m.ResetProcID()
+		return nil
+	}
+	return fmt.Errorf("unknown AttachedFile field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *AttachedFileMutation) AddedEdges() []string {
+	edges := make([]string, 0, 2)
+	if m.fi != nil {
+		edges = append(edges, attachedfile.EdgeFi)
+	}
+	if m.proc != nil {
+		edges = append(edges, attachedfile.EdgeProc)
+	}
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *AttachedFileMutation) AddedIDs(name string) []ent.Value {
+	switch name {
+	case attachedfile.EdgeFi:
+		if id := m.fi; id != nil {
+			return []ent.Value{*id}
+		}
+	case attachedfile.EdgeProc:
+		if id := m.proc; id != nil {
+			return []ent.Value{*id}
+		}
+	}
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *AttachedFileMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 2)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *AttachedFileMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *AttachedFileMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 2)
+	if m.clearedfi {
+		edges = append(edges, attachedfile.EdgeFi)
+	}
+	if m.clearedproc {
+		edges = append(edges, attachedfile.EdgeProc)
+	}
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *AttachedFileMutation) EdgeCleared(name string) bool {
+	switch name {
+	case attachedfile.EdgeFi:
+		return m.clearedfi
+	case attachedfile.EdgeProc:
+		return m.clearedproc
+	}
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *AttachedFileMutation) ClearEdge(name string) error {
+	switch name {
+	case attachedfile.EdgeFi:
+		m.ClearFi()
+		return nil
+	case attachedfile.EdgeProc:
+		m.ClearProc()
+		return nil
+	}
+	return fmt.Errorf("unknown AttachedFile unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *AttachedFileMutation) ResetEdge(name string) error {
+	switch name {
+	case attachedfile.EdgeFi:
+		m.ResetFi()
+		return nil
+	case attachedfile.EdgeProc:
+		m.ResetProc()
+		return nil
+	}
+	return fmt.Errorf("unknown AttachedFile edge %s", name)
+}
+
+// FileMutation represents an operation that mutates the File nodes in the graph.
+type FileMutation struct {
+	config
+	op               Op
+	typ              string
+	id               *int
+	name             *string
+	clearedFields    map[string]struct{}
+	processes        map[int]struct{}
+	removedprocesses map[int]struct{}
+	clearedprocesses bool
+	done             bool
+	oldValue         func(context.Context) (*File, error)
+	predicates       []predicate.File
+}
+
+var _ ent.Mutation = (*FileMutation)(nil)
+
+// fileOption allows management of the mutation configuration using functional options.
+type fileOption func(*FileMutation)
+
+// newFileMutation creates new mutation for the File entity.
+func newFileMutation(c config, op Op, opts ...fileOption) *FileMutation {
+	m := &FileMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeFile,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withFileID sets the ID field of the mutation.
+func withFileID(id int) fileOption {
+	return func(m *FileMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *File
+		)
+		m.oldValue = func(ctx context.Context) (*File, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().File.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withFile sets the old File of the mutation.
+func withFile(node *File) fileOption {
+	return func(m *FileMutation) {
+		m.oldValue = func(context.Context) (*File, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m FileMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m FileMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *FileMutation) ID() (id int, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *FileMutation) IDs(ctx context.Context) ([]int, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().File.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetName sets the "name" field.
+func (m *FileMutation) SetName(s string) {
+	m.name = &s
+}
+
+// Name returns the value of the "name" field in the mutation.
+func (m *FileMutation) Name() (r string, exists bool) {
+	v := m.name
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldName returns the old "name" field's value of the File entity.
+// If the File object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *FileMutation) OldName(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldName is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldName requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldName: %w", err)
+	}
+	return oldValue.Name, nil
+}
+
+// ResetName resets all changes to the "name" field.
+func (m *FileMutation) ResetName() {
+	m.name = nil
+}
+
+// AddProcessIDs adds the "processes" edge to the Process entity by ids.
+func (m *FileMutation) AddProcessIDs(ids ...int) {
+	if m.processes == nil {
+		m.processes = make(map[int]struct{})
+	}
+	for i := range ids {
+		m.processes[ids[i]] = struct{}{}
+	}
+}
+
+// ClearProcesses clears the "processes" edge to the Process entity.
+func (m *FileMutation) ClearProcesses() {
+	m.clearedprocesses = true
+}
+
+// ProcessesCleared reports if the "processes" edge to the Process entity was cleared.
+func (m *FileMutation) ProcessesCleared() bool {
+	return m.clearedprocesses
+}
+
+// RemoveProcessIDs removes the "processes" edge to the Process entity by IDs.
+func (m *FileMutation) RemoveProcessIDs(ids ...int) {
+	if m.removedprocesses == nil {
+		m.removedprocesses = make(map[int]struct{})
+	}
+	for i := range ids {
+		delete(m.processes, ids[i])
+		m.removedprocesses[ids[i]] = struct{}{}
+	}
+}
+
+// RemovedProcesses returns the removed IDs of the "processes" edge to the Process entity.
+func (m *FileMutation) RemovedProcessesIDs() (ids []int) {
+	for id := range m.removedprocesses {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// ProcessesIDs returns the "processes" edge IDs in the mutation.
+func (m *FileMutation) ProcessesIDs() (ids []int) {
+	for id := range m.processes {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// ResetProcesses resets all changes to the "processes" edge.
+func (m *FileMutation) ResetProcesses() {
+	m.processes = nil
+	m.clearedprocesses = false
+	m.removedprocesses = nil
+}
+
+// Where appends a list predicates to the FileMutation builder.
+func (m *FileMutation) Where(ps ...predicate.File) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the FileMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *FileMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.File, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *FileMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *FileMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (File).
+func (m *FileMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *FileMutation) Fields() []string {
+	fields := make([]string, 0, 1)
+	if m.name != nil {
+		fields = append(fields, file.FieldName)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *FileMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case file.FieldName:
+		return m.Name()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *FileMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case file.FieldName:
+		return m.OldName(ctx)
+	}
+	return nil, fmt.Errorf("unknown File field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *FileMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case file.FieldName:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetName(v)
+		return nil
+	}
+	return fmt.Errorf("unknown File field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *FileMutation) AddedFields() []string {
+	return nil
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *FileMutation) AddedField(name string) (ent.Value, bool) {
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *FileMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	}
+	return fmt.Errorf("unknown File numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *FileMutation) ClearedFields() []string {
+	return nil
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *FileMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *FileMutation) ClearField(name string) error {
+	return fmt.Errorf("unknown File nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *FileMutation) ResetField(name string) error {
+	switch name {
+	case file.FieldName:
+		m.ResetName()
+		return nil
+	}
+	return fmt.Errorf("unknown File field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *FileMutation) AddedEdges() []string {
+	edges := make([]string, 0, 1)
+	if m.processes != nil {
+		edges = append(edges, file.EdgeProcesses)
+	}
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *FileMutation) AddedIDs(name string) []ent.Value {
+	switch name {
+	case file.EdgeProcesses:
+		ids := make([]ent.Value, 0, len(m.processes))
+		for id := range m.processes {
+			ids = append(ids, id)
+		}
+		return ids
+	}
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *FileMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 1)
+	if m.removedprocesses != nil {
+		edges = append(edges, file.EdgeProcesses)
+	}
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *FileMutation) RemovedIDs(name string) []ent.Value {
+	switch name {
+	case file.EdgeProcesses:
+		ids := make([]ent.Value, 0, len(m.removedprocesses))
+		for id := range m.removedprocesses {
+			ids = append(ids, id)
+		}
+		return ids
+	}
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *FileMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 1)
+	if m.clearedprocesses {
+		edges = append(edges, file.EdgeProcesses)
+	}
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *FileMutation) EdgeCleared(name string) bool {
+	switch name {
+	case file.EdgeProcesses:
+		return m.clearedprocesses
+	}
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *FileMutation) ClearEdge(name string) error {
+	switch name {
+	}
+	return fmt.Errorf("unknown File unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *FileMutation) ResetEdge(name string) error {
+	switch name {
+	case file.EdgeProcesses:
+		m.ResetProcesses()
+		return nil
+	}
+	return fmt.Errorf("unknown File edge %s", name)
+}
 
 // FriendshipMutation represents an operation that mutates the Friendship nodes in the graph.
 type FriendshipMutation struct {
@@ -394,9 +1369,24 @@ func (m *FriendshipMutation) Where(ps ...predicate.Friendship) {
 	m.predicates = append(m.predicates, ps...)
 }
 
+// WhereP appends storage-level predicates to the FriendshipMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *FriendshipMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.Friendship, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
 // Op returns the operation name.
 func (m *FriendshipMutation) Op() Op {
 	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *FriendshipMutation) SetOp(op Op) {
+	m.op = op
 }
 
 // Type returns the node type of this mutation (Friendship).
@@ -674,9 +1664,15 @@ type GroupMutation struct {
 	users               map[int]struct{}
 	removedusers        map[int]struct{}
 	clearedusers        bool
+	tags                map[int]struct{}
+	removedtags         map[int]struct{}
+	clearedtags         bool
 	joined_users        map[int]struct{}
 	removedjoined_users map[int]struct{}
 	clearedjoined_users bool
+	group_tags          map[int]struct{}
+	removedgroup_tags   map[int]struct{}
+	clearedgroup_tags   bool
 	done                bool
 	oldValue            func(context.Context) (*Group, error)
 	predicates          []predicate.Group
@@ -870,6 +1866,60 @@ func (m *GroupMutation) ResetUsers() {
 	m.removedusers = nil
 }
 
+// AddTagIDs adds the "tags" edge to the Tag entity by ids.
+func (m *GroupMutation) AddTagIDs(ids ...int) {
+	if m.tags == nil {
+		m.tags = make(map[int]struct{})
+	}
+	for i := range ids {
+		m.tags[ids[i]] = struct{}{}
+	}
+}
+
+// ClearTags clears the "tags" edge to the Tag entity.
+func (m *GroupMutation) ClearTags() {
+	m.clearedtags = true
+}
+
+// TagsCleared reports if the "tags" edge to the Tag entity was cleared.
+func (m *GroupMutation) TagsCleared() bool {
+	return m.clearedtags
+}
+
+// RemoveTagIDs removes the "tags" edge to the Tag entity by IDs.
+func (m *GroupMutation) RemoveTagIDs(ids ...int) {
+	if m.removedtags == nil {
+		m.removedtags = make(map[int]struct{})
+	}
+	for i := range ids {
+		delete(m.tags, ids[i])
+		m.removedtags[ids[i]] = struct{}{}
+	}
+}
+
+// RemovedTags returns the removed IDs of the "tags" edge to the Tag entity.
+func (m *GroupMutation) RemovedTagsIDs() (ids []int) {
+	for id := range m.removedtags {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// TagsIDs returns the "tags" edge IDs in the mutation.
+func (m *GroupMutation) TagsIDs() (ids []int) {
+	for id := range m.tags {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// ResetTags resets all changes to the "tags" edge.
+func (m *GroupMutation) ResetTags() {
+	m.tags = nil
+	m.clearedtags = false
+	m.removedtags = nil
+}
+
 // AddJoinedUserIDs adds the "joined_users" edge to the UserGroup entity by ids.
 func (m *GroupMutation) AddJoinedUserIDs(ids ...int) {
 	if m.joined_users == nil {
@@ -924,14 +1974,83 @@ func (m *GroupMutation) ResetJoinedUsers() {
 	m.removedjoined_users = nil
 }
 
+// AddGroupTagIDs adds the "group_tags" edge to the GroupTag entity by ids.
+func (m *GroupMutation) AddGroupTagIDs(ids ...int) {
+	if m.group_tags == nil {
+		m.group_tags = make(map[int]struct{})
+	}
+	for i := range ids {
+		m.group_tags[ids[i]] = struct{}{}
+	}
+}
+
+// ClearGroupTags clears the "group_tags" edge to the GroupTag entity.
+func (m *GroupMutation) ClearGroupTags() {
+	m.clearedgroup_tags = true
+}
+
+// GroupTagsCleared reports if the "group_tags" edge to the GroupTag entity was cleared.
+func (m *GroupMutation) GroupTagsCleared() bool {
+	return m.clearedgroup_tags
+}
+
+// RemoveGroupTagIDs removes the "group_tags" edge to the GroupTag entity by IDs.
+func (m *GroupMutation) RemoveGroupTagIDs(ids ...int) {
+	if m.removedgroup_tags == nil {
+		m.removedgroup_tags = make(map[int]struct{})
+	}
+	for i := range ids {
+		delete(m.group_tags, ids[i])
+		m.removedgroup_tags[ids[i]] = struct{}{}
+	}
+}
+
+// RemovedGroupTags returns the removed IDs of the "group_tags" edge to the GroupTag entity.
+func (m *GroupMutation) RemovedGroupTagsIDs() (ids []int) {
+	for id := range m.removedgroup_tags {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// GroupTagsIDs returns the "group_tags" edge IDs in the mutation.
+func (m *GroupMutation) GroupTagsIDs() (ids []int) {
+	for id := range m.group_tags {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// ResetGroupTags resets all changes to the "group_tags" edge.
+func (m *GroupMutation) ResetGroupTags() {
+	m.group_tags = nil
+	m.clearedgroup_tags = false
+	m.removedgroup_tags = nil
+}
+
 // Where appends a list predicates to the GroupMutation builder.
 func (m *GroupMutation) Where(ps ...predicate.Group) {
 	m.predicates = append(m.predicates, ps...)
 }
 
+// WhereP appends storage-level predicates to the GroupMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *GroupMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.Group, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
 // Op returns the operation name.
 func (m *GroupMutation) Op() Op {
 	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *GroupMutation) SetOp(op Op) {
+	m.op = op
 }
 
 // Type returns the node type of this mutation (Group).
@@ -1042,12 +2161,18 @@ func (m *GroupMutation) ResetField(name string) error {
 
 // AddedEdges returns all edge names that were set/added in this mutation.
 func (m *GroupMutation) AddedEdges() []string {
-	edges := make([]string, 0, 2)
+	edges := make([]string, 0, 4)
 	if m.users != nil {
 		edges = append(edges, group.EdgeUsers)
 	}
+	if m.tags != nil {
+		edges = append(edges, group.EdgeTags)
+	}
 	if m.joined_users != nil {
 		edges = append(edges, group.EdgeJoinedUsers)
+	}
+	if m.group_tags != nil {
+		edges = append(edges, group.EdgeGroupTags)
 	}
 	return edges
 }
@@ -1062,9 +2187,21 @@ func (m *GroupMutation) AddedIDs(name string) []ent.Value {
 			ids = append(ids, id)
 		}
 		return ids
+	case group.EdgeTags:
+		ids := make([]ent.Value, 0, len(m.tags))
+		for id := range m.tags {
+			ids = append(ids, id)
+		}
+		return ids
 	case group.EdgeJoinedUsers:
 		ids := make([]ent.Value, 0, len(m.joined_users))
 		for id := range m.joined_users {
+			ids = append(ids, id)
+		}
+		return ids
+	case group.EdgeGroupTags:
+		ids := make([]ent.Value, 0, len(m.group_tags))
+		for id := range m.group_tags {
 			ids = append(ids, id)
 		}
 		return ids
@@ -1074,12 +2211,18 @@ func (m *GroupMutation) AddedIDs(name string) []ent.Value {
 
 // RemovedEdges returns all edge names that were removed in this mutation.
 func (m *GroupMutation) RemovedEdges() []string {
-	edges := make([]string, 0, 2)
+	edges := make([]string, 0, 4)
 	if m.removedusers != nil {
 		edges = append(edges, group.EdgeUsers)
 	}
+	if m.removedtags != nil {
+		edges = append(edges, group.EdgeTags)
+	}
 	if m.removedjoined_users != nil {
 		edges = append(edges, group.EdgeJoinedUsers)
+	}
+	if m.removedgroup_tags != nil {
+		edges = append(edges, group.EdgeGroupTags)
 	}
 	return edges
 }
@@ -1094,9 +2237,21 @@ func (m *GroupMutation) RemovedIDs(name string) []ent.Value {
 			ids = append(ids, id)
 		}
 		return ids
+	case group.EdgeTags:
+		ids := make([]ent.Value, 0, len(m.removedtags))
+		for id := range m.removedtags {
+			ids = append(ids, id)
+		}
+		return ids
 	case group.EdgeJoinedUsers:
 		ids := make([]ent.Value, 0, len(m.removedjoined_users))
 		for id := range m.removedjoined_users {
+			ids = append(ids, id)
+		}
+		return ids
+	case group.EdgeGroupTags:
+		ids := make([]ent.Value, 0, len(m.removedgroup_tags))
+		for id := range m.removedgroup_tags {
 			ids = append(ids, id)
 		}
 		return ids
@@ -1106,12 +2261,18 @@ func (m *GroupMutation) RemovedIDs(name string) []ent.Value {
 
 // ClearedEdges returns all edge names that were cleared in this mutation.
 func (m *GroupMutation) ClearedEdges() []string {
-	edges := make([]string, 0, 2)
+	edges := make([]string, 0, 4)
 	if m.clearedusers {
 		edges = append(edges, group.EdgeUsers)
 	}
+	if m.clearedtags {
+		edges = append(edges, group.EdgeTags)
+	}
 	if m.clearedjoined_users {
 		edges = append(edges, group.EdgeJoinedUsers)
+	}
+	if m.clearedgroup_tags {
+		edges = append(edges, group.EdgeGroupTags)
 	}
 	return edges
 }
@@ -1122,8 +2283,12 @@ func (m *GroupMutation) EdgeCleared(name string) bool {
 	switch name {
 	case group.EdgeUsers:
 		return m.clearedusers
+	case group.EdgeTags:
+		return m.clearedtags
 	case group.EdgeJoinedUsers:
 		return m.clearedjoined_users
+	case group.EdgeGroupTags:
+		return m.clearedgroup_tags
 	}
 	return false
 }
@@ -1143,11 +2308,938 @@ func (m *GroupMutation) ResetEdge(name string) error {
 	case group.EdgeUsers:
 		m.ResetUsers()
 		return nil
+	case group.EdgeTags:
+		m.ResetTags()
+		return nil
 	case group.EdgeJoinedUsers:
 		m.ResetJoinedUsers()
 		return nil
+	case group.EdgeGroupTags:
+		m.ResetGroupTags()
+		return nil
 	}
 	return fmt.Errorf("unknown Group edge %s", name)
+}
+
+// GroupTagMutation represents an operation that mutates the GroupTag nodes in the graph.
+type GroupTagMutation struct {
+	config
+	op            Op
+	typ           string
+	id            *int
+	clearedFields map[string]struct{}
+	tag           *int
+	clearedtag    bool
+	group         *int
+	clearedgroup  bool
+	done          bool
+	oldValue      func(context.Context) (*GroupTag, error)
+	predicates    []predicate.GroupTag
+}
+
+var _ ent.Mutation = (*GroupTagMutation)(nil)
+
+// grouptagOption allows management of the mutation configuration using functional options.
+type grouptagOption func(*GroupTagMutation)
+
+// newGroupTagMutation creates new mutation for the GroupTag entity.
+func newGroupTagMutation(c config, op Op, opts ...grouptagOption) *GroupTagMutation {
+	m := &GroupTagMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeGroupTag,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withGroupTagID sets the ID field of the mutation.
+func withGroupTagID(id int) grouptagOption {
+	return func(m *GroupTagMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *GroupTag
+		)
+		m.oldValue = func(ctx context.Context) (*GroupTag, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().GroupTag.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withGroupTag sets the old GroupTag of the mutation.
+func withGroupTag(node *GroupTag) grouptagOption {
+	return func(m *GroupTagMutation) {
+		m.oldValue = func(context.Context) (*GroupTag, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m GroupTagMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m GroupTagMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *GroupTagMutation) ID() (id int, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *GroupTagMutation) IDs(ctx context.Context) ([]int, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().GroupTag.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetTagID sets the "tag_id" field.
+func (m *GroupTagMutation) SetTagID(i int) {
+	m.tag = &i
+}
+
+// TagID returns the value of the "tag_id" field in the mutation.
+func (m *GroupTagMutation) TagID() (r int, exists bool) {
+	v := m.tag
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTagID returns the old "tag_id" field's value of the GroupTag entity.
+// If the GroupTag object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupTagMutation) OldTagID(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTagID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTagID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTagID: %w", err)
+	}
+	return oldValue.TagID, nil
+}
+
+// ResetTagID resets all changes to the "tag_id" field.
+func (m *GroupTagMutation) ResetTagID() {
+	m.tag = nil
+}
+
+// SetGroupID sets the "group_id" field.
+func (m *GroupTagMutation) SetGroupID(i int) {
+	m.group = &i
+}
+
+// GroupID returns the value of the "group_id" field in the mutation.
+func (m *GroupTagMutation) GroupID() (r int, exists bool) {
+	v := m.group
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldGroupID returns the old "group_id" field's value of the GroupTag entity.
+// If the GroupTag object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GroupTagMutation) OldGroupID(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldGroupID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldGroupID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldGroupID: %w", err)
+	}
+	return oldValue.GroupID, nil
+}
+
+// ResetGroupID resets all changes to the "group_id" field.
+func (m *GroupTagMutation) ResetGroupID() {
+	m.group = nil
+}
+
+// ClearTag clears the "tag" edge to the Tag entity.
+func (m *GroupTagMutation) ClearTag() {
+	m.clearedtag = true
+}
+
+// TagCleared reports if the "tag" edge to the Tag entity was cleared.
+func (m *GroupTagMutation) TagCleared() bool {
+	return m.clearedtag
+}
+
+// TagIDs returns the "tag" edge IDs in the mutation.
+// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
+// TagID instead. It exists only for internal usage by the builders.
+func (m *GroupTagMutation) TagIDs() (ids []int) {
+	if id := m.tag; id != nil {
+		ids = append(ids, *id)
+	}
+	return
+}
+
+// ResetTag resets all changes to the "tag" edge.
+func (m *GroupTagMutation) ResetTag() {
+	m.tag = nil
+	m.clearedtag = false
+}
+
+// ClearGroup clears the "group" edge to the Group entity.
+func (m *GroupTagMutation) ClearGroup() {
+	m.clearedgroup = true
+}
+
+// GroupCleared reports if the "group" edge to the Group entity was cleared.
+func (m *GroupTagMutation) GroupCleared() bool {
+	return m.clearedgroup
+}
+
+// GroupIDs returns the "group" edge IDs in the mutation.
+// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
+// GroupID instead. It exists only for internal usage by the builders.
+func (m *GroupTagMutation) GroupIDs() (ids []int) {
+	if id := m.group; id != nil {
+		ids = append(ids, *id)
+	}
+	return
+}
+
+// ResetGroup resets all changes to the "group" edge.
+func (m *GroupTagMutation) ResetGroup() {
+	m.group = nil
+	m.clearedgroup = false
+}
+
+// Where appends a list predicates to the GroupTagMutation builder.
+func (m *GroupTagMutation) Where(ps ...predicate.GroupTag) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the GroupTagMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *GroupTagMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.GroupTag, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *GroupTagMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *GroupTagMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (GroupTag).
+func (m *GroupTagMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *GroupTagMutation) Fields() []string {
+	fields := make([]string, 0, 2)
+	if m.tag != nil {
+		fields = append(fields, grouptag.FieldTagID)
+	}
+	if m.group != nil {
+		fields = append(fields, grouptag.FieldGroupID)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *GroupTagMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case grouptag.FieldTagID:
+		return m.TagID()
+	case grouptag.FieldGroupID:
+		return m.GroupID()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *GroupTagMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case grouptag.FieldTagID:
+		return m.OldTagID(ctx)
+	case grouptag.FieldGroupID:
+		return m.OldGroupID(ctx)
+	}
+	return nil, fmt.Errorf("unknown GroupTag field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *GroupTagMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case grouptag.FieldTagID:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTagID(v)
+		return nil
+	case grouptag.FieldGroupID:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetGroupID(v)
+		return nil
+	}
+	return fmt.Errorf("unknown GroupTag field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *GroupTagMutation) AddedFields() []string {
+	var fields []string
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *GroupTagMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *GroupTagMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	}
+	return fmt.Errorf("unknown GroupTag numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *GroupTagMutation) ClearedFields() []string {
+	return nil
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *GroupTagMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *GroupTagMutation) ClearField(name string) error {
+	return fmt.Errorf("unknown GroupTag nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *GroupTagMutation) ResetField(name string) error {
+	switch name {
+	case grouptag.FieldTagID:
+		m.ResetTagID()
+		return nil
+	case grouptag.FieldGroupID:
+		m.ResetGroupID()
+		return nil
+	}
+	return fmt.Errorf("unknown GroupTag field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *GroupTagMutation) AddedEdges() []string {
+	edges := make([]string, 0, 2)
+	if m.tag != nil {
+		edges = append(edges, grouptag.EdgeTag)
+	}
+	if m.group != nil {
+		edges = append(edges, grouptag.EdgeGroup)
+	}
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *GroupTagMutation) AddedIDs(name string) []ent.Value {
+	switch name {
+	case grouptag.EdgeTag:
+		if id := m.tag; id != nil {
+			return []ent.Value{*id}
+		}
+	case grouptag.EdgeGroup:
+		if id := m.group; id != nil {
+			return []ent.Value{*id}
+		}
+	}
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *GroupTagMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 2)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *GroupTagMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *GroupTagMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 2)
+	if m.clearedtag {
+		edges = append(edges, grouptag.EdgeTag)
+	}
+	if m.clearedgroup {
+		edges = append(edges, grouptag.EdgeGroup)
+	}
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *GroupTagMutation) EdgeCleared(name string) bool {
+	switch name {
+	case grouptag.EdgeTag:
+		return m.clearedtag
+	case grouptag.EdgeGroup:
+		return m.clearedgroup
+	}
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *GroupTagMutation) ClearEdge(name string) error {
+	switch name {
+	case grouptag.EdgeTag:
+		m.ClearTag()
+		return nil
+	case grouptag.EdgeGroup:
+		m.ClearGroup()
+		return nil
+	}
+	return fmt.Errorf("unknown GroupTag unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *GroupTagMutation) ResetEdge(name string) error {
+	switch name {
+	case grouptag.EdgeTag:
+		m.ResetTag()
+		return nil
+	case grouptag.EdgeGroup:
+		m.ResetGroup()
+		return nil
+	}
+	return fmt.Errorf("unknown GroupTag edge %s", name)
+}
+
+// ProcessMutation represents an operation that mutates the Process nodes in the graph.
+type ProcessMutation struct {
+	config
+	op                    Op
+	typ                   string
+	id                    *int
+	clearedFields         map[string]struct{}
+	files                 map[int]struct{}
+	removedfiles          map[int]struct{}
+	clearedfiles          bool
+	attached_files        map[int]struct{}
+	removedattached_files map[int]struct{}
+	clearedattached_files bool
+	done                  bool
+	oldValue              func(context.Context) (*Process, error)
+	predicates            []predicate.Process
+}
+
+var _ ent.Mutation = (*ProcessMutation)(nil)
+
+// processOption allows management of the mutation configuration using functional options.
+type processOption func(*ProcessMutation)
+
+// newProcessMutation creates new mutation for the Process entity.
+func newProcessMutation(c config, op Op, opts ...processOption) *ProcessMutation {
+	m := &ProcessMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeProcess,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withProcessID sets the ID field of the mutation.
+func withProcessID(id int) processOption {
+	return func(m *ProcessMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *Process
+		)
+		m.oldValue = func(ctx context.Context) (*Process, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().Process.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withProcess sets the old Process of the mutation.
+func withProcess(node *Process) processOption {
+	return func(m *ProcessMutation) {
+		m.oldValue = func(context.Context) (*Process, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m ProcessMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m ProcessMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *ProcessMutation) ID() (id int, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *ProcessMutation) IDs(ctx context.Context) ([]int, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().Process.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// AddFileIDs adds the "files" edge to the File entity by ids.
+func (m *ProcessMutation) AddFileIDs(ids ...int) {
+	if m.files == nil {
+		m.files = make(map[int]struct{})
+	}
+	for i := range ids {
+		m.files[ids[i]] = struct{}{}
+	}
+}
+
+// ClearFiles clears the "files" edge to the File entity.
+func (m *ProcessMutation) ClearFiles() {
+	m.clearedfiles = true
+}
+
+// FilesCleared reports if the "files" edge to the File entity was cleared.
+func (m *ProcessMutation) FilesCleared() bool {
+	return m.clearedfiles
+}
+
+// RemoveFileIDs removes the "files" edge to the File entity by IDs.
+func (m *ProcessMutation) RemoveFileIDs(ids ...int) {
+	if m.removedfiles == nil {
+		m.removedfiles = make(map[int]struct{})
+	}
+	for i := range ids {
+		delete(m.files, ids[i])
+		m.removedfiles[ids[i]] = struct{}{}
+	}
+}
+
+// RemovedFiles returns the removed IDs of the "files" edge to the File entity.
+func (m *ProcessMutation) RemovedFilesIDs() (ids []int) {
+	for id := range m.removedfiles {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// FilesIDs returns the "files" edge IDs in the mutation.
+func (m *ProcessMutation) FilesIDs() (ids []int) {
+	for id := range m.files {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// ResetFiles resets all changes to the "files" edge.
+func (m *ProcessMutation) ResetFiles() {
+	m.files = nil
+	m.clearedfiles = false
+	m.removedfiles = nil
+}
+
+// AddAttachedFileIDs adds the "attached_files" edge to the AttachedFile entity by ids.
+func (m *ProcessMutation) AddAttachedFileIDs(ids ...int) {
+	if m.attached_files == nil {
+		m.attached_files = make(map[int]struct{})
+	}
+	for i := range ids {
+		m.attached_files[ids[i]] = struct{}{}
+	}
+}
+
+// ClearAttachedFiles clears the "attached_files" edge to the AttachedFile entity.
+func (m *ProcessMutation) ClearAttachedFiles() {
+	m.clearedattached_files = true
+}
+
+// AttachedFilesCleared reports if the "attached_files" edge to the AttachedFile entity was cleared.
+func (m *ProcessMutation) AttachedFilesCleared() bool {
+	return m.clearedattached_files
+}
+
+// RemoveAttachedFileIDs removes the "attached_files" edge to the AttachedFile entity by IDs.
+func (m *ProcessMutation) RemoveAttachedFileIDs(ids ...int) {
+	if m.removedattached_files == nil {
+		m.removedattached_files = make(map[int]struct{})
+	}
+	for i := range ids {
+		delete(m.attached_files, ids[i])
+		m.removedattached_files[ids[i]] = struct{}{}
+	}
+}
+
+// RemovedAttachedFiles returns the removed IDs of the "attached_files" edge to the AttachedFile entity.
+func (m *ProcessMutation) RemovedAttachedFilesIDs() (ids []int) {
+	for id := range m.removedattached_files {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// AttachedFilesIDs returns the "attached_files" edge IDs in the mutation.
+func (m *ProcessMutation) AttachedFilesIDs() (ids []int) {
+	for id := range m.attached_files {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// ResetAttachedFiles resets all changes to the "attached_files" edge.
+func (m *ProcessMutation) ResetAttachedFiles() {
+	m.attached_files = nil
+	m.clearedattached_files = false
+	m.removedattached_files = nil
+}
+
+// Where appends a list predicates to the ProcessMutation builder.
+func (m *ProcessMutation) Where(ps ...predicate.Process) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the ProcessMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *ProcessMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.Process, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *ProcessMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *ProcessMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (Process).
+func (m *ProcessMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *ProcessMutation) Fields() []string {
+	fields := make([]string, 0, 0)
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *ProcessMutation) Field(name string) (ent.Value, bool) {
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *ProcessMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	return nil, fmt.Errorf("unknown Process field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *ProcessMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	}
+	return fmt.Errorf("unknown Process field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *ProcessMutation) AddedFields() []string {
+	return nil
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *ProcessMutation) AddedField(name string) (ent.Value, bool) {
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *ProcessMutation) AddField(name string, value ent.Value) error {
+	return fmt.Errorf("unknown Process numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *ProcessMutation) ClearedFields() []string {
+	return nil
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *ProcessMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *ProcessMutation) ClearField(name string) error {
+	return fmt.Errorf("unknown Process nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *ProcessMutation) ResetField(name string) error {
+	return fmt.Errorf("unknown Process field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *ProcessMutation) AddedEdges() []string {
+	edges := make([]string, 0, 2)
+	if m.files != nil {
+		edges = append(edges, process.EdgeFiles)
+	}
+	if m.attached_files != nil {
+		edges = append(edges, process.EdgeAttachedFiles)
+	}
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *ProcessMutation) AddedIDs(name string) []ent.Value {
+	switch name {
+	case process.EdgeFiles:
+		ids := make([]ent.Value, 0, len(m.files))
+		for id := range m.files {
+			ids = append(ids, id)
+		}
+		return ids
+	case process.EdgeAttachedFiles:
+		ids := make([]ent.Value, 0, len(m.attached_files))
+		for id := range m.attached_files {
+			ids = append(ids, id)
+		}
+		return ids
+	}
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *ProcessMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 2)
+	if m.removedfiles != nil {
+		edges = append(edges, process.EdgeFiles)
+	}
+	if m.removedattached_files != nil {
+		edges = append(edges, process.EdgeAttachedFiles)
+	}
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *ProcessMutation) RemovedIDs(name string) []ent.Value {
+	switch name {
+	case process.EdgeFiles:
+		ids := make([]ent.Value, 0, len(m.removedfiles))
+		for id := range m.removedfiles {
+			ids = append(ids, id)
+		}
+		return ids
+	case process.EdgeAttachedFiles:
+		ids := make([]ent.Value, 0, len(m.removedattached_files))
+		for id := range m.removedattached_files {
+			ids = append(ids, id)
+		}
+		return ids
+	}
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *ProcessMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 2)
+	if m.clearedfiles {
+		edges = append(edges, process.EdgeFiles)
+	}
+	if m.clearedattached_files {
+		edges = append(edges, process.EdgeAttachedFiles)
+	}
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *ProcessMutation) EdgeCleared(name string) bool {
+	switch name {
+	case process.EdgeFiles:
+		return m.clearedfiles
+	case process.EdgeAttachedFiles:
+		return m.clearedattached_files
+	}
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *ProcessMutation) ClearEdge(name string) error {
+	switch name {
+	}
+	return fmt.Errorf("unknown Process unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *ProcessMutation) ResetEdge(name string) error {
+	switch name {
+	case process.EdgeFiles:
+		m.ResetFiles()
+		return nil
+	case process.EdgeAttachedFiles:
+		m.ResetAttachedFiles()
+		return nil
+	}
+	return fmt.Errorf("unknown Process edge %s", name)
 }
 
 // RelationshipMutation represents an operation that mutates the Relationship nodes in the graph.
@@ -1399,9 +3491,24 @@ func (m *RelationshipMutation) Where(ps ...predicate.Relationship) {
 	m.predicates = append(m.predicates, ps...)
 }
 
+// WhereP appends storage-level predicates to the RelationshipMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *RelationshipMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.Relationship, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
 // Op returns the operation name.
 func (m *RelationshipMutation) Op() Op {
 	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *RelationshipMutation) SetOp(op Op) {
+	m.op = op
 }
 
 // Type returns the node type of this mutation (Relationship).
@@ -1837,9 +3944,24 @@ func (m *RelationshipInfoMutation) Where(ps ...predicate.RelationshipInfo) {
 	m.predicates = append(m.predicates, ps...)
 }
 
+// WhereP appends storage-level predicates to the RelationshipInfoMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *RelationshipInfoMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.RelationshipInfo, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
 // Op returns the operation name.
 func (m *RelationshipInfoMutation) Op() Op {
 	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *RelationshipInfoMutation) SetOp(op Op) {
+	m.op = op
 }
 
 // Type returns the node type of this mutation (RelationshipInfo).
@@ -2242,9 +4364,24 @@ func (m *RoleMutation) Where(ps ...predicate.Role) {
 	m.predicates = append(m.predicates, ps...)
 }
 
+// WhereP appends storage-level predicates to the RoleMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *RoleMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.Role, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
 // Op returns the operation name.
 func (m *RoleMutation) Op() Op {
 	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *RoleMutation) SetOp(op Op) {
+	m.op = op
 }
 
 // Type returns the node type of this mutation (Role).
@@ -2622,9 +4759,24 @@ func (m *RoleUserMutation) Where(ps ...predicate.RoleUser) {
 	m.predicates = append(m.predicates, ps...)
 }
 
+// WhereP appends storage-level predicates to the RoleUserMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *RoleUserMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.RoleUser, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
 // Op returns the operation name.
 func (m *RoleUserMutation) Op() Op {
 	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *RoleUserMutation) SetOp(op Op) {
+	m.op = op
 }
 
 // Type returns the node type of this mutation (RoleUser).
@@ -2865,9 +5017,15 @@ type TagMutation struct {
 	tweets            map[int]struct{}
 	removedtweets     map[int]struct{}
 	clearedtweets     bool
+	groups            map[int]struct{}
+	removedgroups     map[int]struct{}
+	clearedgroups     bool
 	tweet_tags        map[uuid.UUID]struct{}
 	removedtweet_tags map[uuid.UUID]struct{}
 	clearedtweet_tags bool
+	group_tags        map[int]struct{}
+	removedgroup_tags map[int]struct{}
+	clearedgroup_tags bool
 	done              bool
 	oldValue          func(context.Context) (*Tag, error)
 	predicates        []predicate.Tag
@@ -3061,6 +5219,60 @@ func (m *TagMutation) ResetTweets() {
 	m.removedtweets = nil
 }
 
+// AddGroupIDs adds the "groups" edge to the Group entity by ids.
+func (m *TagMutation) AddGroupIDs(ids ...int) {
+	if m.groups == nil {
+		m.groups = make(map[int]struct{})
+	}
+	for i := range ids {
+		m.groups[ids[i]] = struct{}{}
+	}
+}
+
+// ClearGroups clears the "groups" edge to the Group entity.
+func (m *TagMutation) ClearGroups() {
+	m.clearedgroups = true
+}
+
+// GroupsCleared reports if the "groups" edge to the Group entity was cleared.
+func (m *TagMutation) GroupsCleared() bool {
+	return m.clearedgroups
+}
+
+// RemoveGroupIDs removes the "groups" edge to the Group entity by IDs.
+func (m *TagMutation) RemoveGroupIDs(ids ...int) {
+	if m.removedgroups == nil {
+		m.removedgroups = make(map[int]struct{})
+	}
+	for i := range ids {
+		delete(m.groups, ids[i])
+		m.removedgroups[ids[i]] = struct{}{}
+	}
+}
+
+// RemovedGroups returns the removed IDs of the "groups" edge to the Group entity.
+func (m *TagMutation) RemovedGroupsIDs() (ids []int) {
+	for id := range m.removedgroups {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// GroupsIDs returns the "groups" edge IDs in the mutation.
+func (m *TagMutation) GroupsIDs() (ids []int) {
+	for id := range m.groups {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// ResetGroups resets all changes to the "groups" edge.
+func (m *TagMutation) ResetGroups() {
+	m.groups = nil
+	m.clearedgroups = false
+	m.removedgroups = nil
+}
+
 // AddTweetTagIDs adds the "tweet_tags" edge to the TweetTag entity by ids.
 func (m *TagMutation) AddTweetTagIDs(ids ...uuid.UUID) {
 	if m.tweet_tags == nil {
@@ -3115,14 +5327,83 @@ func (m *TagMutation) ResetTweetTags() {
 	m.removedtweet_tags = nil
 }
 
+// AddGroupTagIDs adds the "group_tags" edge to the GroupTag entity by ids.
+func (m *TagMutation) AddGroupTagIDs(ids ...int) {
+	if m.group_tags == nil {
+		m.group_tags = make(map[int]struct{})
+	}
+	for i := range ids {
+		m.group_tags[ids[i]] = struct{}{}
+	}
+}
+
+// ClearGroupTags clears the "group_tags" edge to the GroupTag entity.
+func (m *TagMutation) ClearGroupTags() {
+	m.clearedgroup_tags = true
+}
+
+// GroupTagsCleared reports if the "group_tags" edge to the GroupTag entity was cleared.
+func (m *TagMutation) GroupTagsCleared() bool {
+	return m.clearedgroup_tags
+}
+
+// RemoveGroupTagIDs removes the "group_tags" edge to the GroupTag entity by IDs.
+func (m *TagMutation) RemoveGroupTagIDs(ids ...int) {
+	if m.removedgroup_tags == nil {
+		m.removedgroup_tags = make(map[int]struct{})
+	}
+	for i := range ids {
+		delete(m.group_tags, ids[i])
+		m.removedgroup_tags[ids[i]] = struct{}{}
+	}
+}
+
+// RemovedGroupTags returns the removed IDs of the "group_tags" edge to the GroupTag entity.
+func (m *TagMutation) RemovedGroupTagsIDs() (ids []int) {
+	for id := range m.removedgroup_tags {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// GroupTagsIDs returns the "group_tags" edge IDs in the mutation.
+func (m *TagMutation) GroupTagsIDs() (ids []int) {
+	for id := range m.group_tags {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// ResetGroupTags resets all changes to the "group_tags" edge.
+func (m *TagMutation) ResetGroupTags() {
+	m.group_tags = nil
+	m.clearedgroup_tags = false
+	m.removedgroup_tags = nil
+}
+
 // Where appends a list predicates to the TagMutation builder.
 func (m *TagMutation) Where(ps ...predicate.Tag) {
 	m.predicates = append(m.predicates, ps...)
 }
 
+// WhereP appends storage-level predicates to the TagMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *TagMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.Tag, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
 // Op returns the operation name.
 func (m *TagMutation) Op() Op {
 	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *TagMutation) SetOp(op Op) {
+	m.op = op
 }
 
 // Type returns the node type of this mutation (Tag).
@@ -3233,12 +5514,18 @@ func (m *TagMutation) ResetField(name string) error {
 
 // AddedEdges returns all edge names that were set/added in this mutation.
 func (m *TagMutation) AddedEdges() []string {
-	edges := make([]string, 0, 2)
+	edges := make([]string, 0, 4)
 	if m.tweets != nil {
 		edges = append(edges, tag.EdgeTweets)
 	}
+	if m.groups != nil {
+		edges = append(edges, tag.EdgeGroups)
+	}
 	if m.tweet_tags != nil {
 		edges = append(edges, tag.EdgeTweetTags)
+	}
+	if m.group_tags != nil {
+		edges = append(edges, tag.EdgeGroupTags)
 	}
 	return edges
 }
@@ -3253,9 +5540,21 @@ func (m *TagMutation) AddedIDs(name string) []ent.Value {
 			ids = append(ids, id)
 		}
 		return ids
+	case tag.EdgeGroups:
+		ids := make([]ent.Value, 0, len(m.groups))
+		for id := range m.groups {
+			ids = append(ids, id)
+		}
+		return ids
 	case tag.EdgeTweetTags:
 		ids := make([]ent.Value, 0, len(m.tweet_tags))
 		for id := range m.tweet_tags {
+			ids = append(ids, id)
+		}
+		return ids
+	case tag.EdgeGroupTags:
+		ids := make([]ent.Value, 0, len(m.group_tags))
+		for id := range m.group_tags {
 			ids = append(ids, id)
 		}
 		return ids
@@ -3265,12 +5564,18 @@ func (m *TagMutation) AddedIDs(name string) []ent.Value {
 
 // RemovedEdges returns all edge names that were removed in this mutation.
 func (m *TagMutation) RemovedEdges() []string {
-	edges := make([]string, 0, 2)
+	edges := make([]string, 0, 4)
 	if m.removedtweets != nil {
 		edges = append(edges, tag.EdgeTweets)
 	}
+	if m.removedgroups != nil {
+		edges = append(edges, tag.EdgeGroups)
+	}
 	if m.removedtweet_tags != nil {
 		edges = append(edges, tag.EdgeTweetTags)
+	}
+	if m.removedgroup_tags != nil {
+		edges = append(edges, tag.EdgeGroupTags)
 	}
 	return edges
 }
@@ -3285,9 +5590,21 @@ func (m *TagMutation) RemovedIDs(name string) []ent.Value {
 			ids = append(ids, id)
 		}
 		return ids
+	case tag.EdgeGroups:
+		ids := make([]ent.Value, 0, len(m.removedgroups))
+		for id := range m.removedgroups {
+			ids = append(ids, id)
+		}
+		return ids
 	case tag.EdgeTweetTags:
 		ids := make([]ent.Value, 0, len(m.removedtweet_tags))
 		for id := range m.removedtweet_tags {
+			ids = append(ids, id)
+		}
+		return ids
+	case tag.EdgeGroupTags:
+		ids := make([]ent.Value, 0, len(m.removedgroup_tags))
+		for id := range m.removedgroup_tags {
 			ids = append(ids, id)
 		}
 		return ids
@@ -3297,12 +5614,18 @@ func (m *TagMutation) RemovedIDs(name string) []ent.Value {
 
 // ClearedEdges returns all edge names that were cleared in this mutation.
 func (m *TagMutation) ClearedEdges() []string {
-	edges := make([]string, 0, 2)
+	edges := make([]string, 0, 4)
 	if m.clearedtweets {
 		edges = append(edges, tag.EdgeTweets)
 	}
+	if m.clearedgroups {
+		edges = append(edges, tag.EdgeGroups)
+	}
 	if m.clearedtweet_tags {
 		edges = append(edges, tag.EdgeTweetTags)
+	}
+	if m.clearedgroup_tags {
+		edges = append(edges, tag.EdgeGroupTags)
 	}
 	return edges
 }
@@ -3313,8 +5636,12 @@ func (m *TagMutation) EdgeCleared(name string) bool {
 	switch name {
 	case tag.EdgeTweets:
 		return m.clearedtweets
+	case tag.EdgeGroups:
+		return m.clearedgroups
 	case tag.EdgeTweetTags:
 		return m.clearedtweet_tags
+	case tag.EdgeGroupTags:
+		return m.clearedgroup_tags
 	}
 	return false
 }
@@ -3334,8 +5661,14 @@ func (m *TagMutation) ResetEdge(name string) error {
 	case tag.EdgeTweets:
 		m.ResetTweets()
 		return nil
+	case tag.EdgeGroups:
+		m.ResetGroups()
+		return nil
 	case tag.EdgeTweetTags:
 		m.ResetTweetTags()
+		return nil
+	case tag.EdgeGroupTags:
+		m.ResetGroupTags()
 		return nil
 	}
 	return fmt.Errorf("unknown Tag edge %s", name)
@@ -3778,9 +6111,24 @@ func (m *TweetMutation) Where(ps ...predicate.Tweet) {
 	m.predicates = append(m.predicates, ps...)
 }
 
+// WhereP appends storage-level predicates to the TweetMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *TweetMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.Tweet, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
 // Op returns the operation name.
 func (m *TweetMutation) Op() Op {
 	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *TweetMutation) SetOp(op Op) {
+	m.op = op
 }
 
 // Type returns the node type of this mutation (Tweet).
@@ -4245,9 +6593,24 @@ func (m *TweetLikeMutation) Where(ps ...predicate.TweetLike) {
 	m.predicates = append(m.predicates, ps...)
 }
 
+// WhereP appends storage-level predicates to the TweetLikeMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *TweetLikeMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.TweetLike, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
 // Op returns the operation name.
 func (m *TweetLikeMutation) Op() Op {
 	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *TweetLikeMutation) SetOp(op Op) {
+	m.op = op
 }
 
 // Type returns the node type of this mutation (TweetLike).
@@ -4763,9 +7126,24 @@ func (m *TweetTagMutation) Where(ps ...predicate.TweetTag) {
 	m.predicates = append(m.predicates, ps...)
 }
 
+// WhereP appends storage-level predicates to the TweetTagMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *TweetTagMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.TweetTag, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
 // Op returns the operation name.
 func (m *TweetTagMutation) Op() Op {
 	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *TweetTagMutation) SetOp(op Op) {
+	m.op = op
 }
 
 // Type returns the node type of this mutation (TweetTag).
@@ -5668,9 +8046,24 @@ func (m *UserMutation) Where(ps ...predicate.User) {
 	m.predicates = append(m.predicates, ps...)
 }
 
+// WhereP appends storage-level predicates to the UserMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *UserMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.User, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
 // Op returns the operation name.
 func (m *UserMutation) Op() Op {
 	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *UserMutation) SetOp(op Op) {
+	m.op = op
 }
 
 // Type returns the node type of this mutation (User).
@@ -6351,9 +8744,24 @@ func (m *UserGroupMutation) Where(ps ...predicate.UserGroup) {
 	m.predicates = append(m.predicates, ps...)
 }
 
+// WhereP appends storage-level predicates to the UserGroupMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *UserGroupMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.UserGroup, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
 // Op returns the operation name.
 func (m *UserGroupMutation) Op() Op {
 	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *UserGroupMutation) SetOp(op Op) {
+	m.op = op
 }
 
 // Type returns the node type of this mutation (UserGroup).
@@ -6871,9 +9279,24 @@ func (m *UserTweetMutation) Where(ps ...predicate.UserTweet) {
 	m.predicates = append(m.predicates, ps...)
 }
 
+// WhereP appends storage-level predicates to the UserTweetMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *UserTweetMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.UserTweet, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
 // Op returns the operation name.
 func (m *UserTweetMutation) Op() Op {
 	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *UserTweetMutation) SetOp(op Op) {
+	m.op = op
 }
 
 // Type returns the node type of this mutation (UserTweet).

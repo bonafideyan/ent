@@ -32,9 +32,13 @@ type UserEdges struct {
 	Pets []*Pet `json:"pets,omitempty"`
 	// Groups holds the value of the groups edge.
 	Groups []*Group `json:"groups,omitempty"`
+	// Friends holds the value of the friends edge.
+	Friends []*User `json:"friends,omitempty"`
+	// Friendships holds the value of the friendships edge.
+	Friendships []*Friendship `json:"friendships,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [2]bool
+	loadedTypes [4]bool
 }
 
 // PetsOrErr returns the Pets value or an error if the edge
@@ -53,6 +57,24 @@ func (e UserEdges) GroupsOrErr() ([]*Group, error) {
 		return e.Groups, nil
 	}
 	return nil, &NotLoadedError{edge: "groups"}
+}
+
+// FriendsOrErr returns the Friends value or an error if the edge
+// was not loaded in eager-loading.
+func (e UserEdges) FriendsOrErr() ([]*User, error) {
+	if e.loadedTypes[2] {
+		return e.Friends, nil
+	}
+	return nil, &NotLoadedError{edge: "friends"}
+}
+
+// FriendshipsOrErr returns the Friendships value or an error if the edge
+// was not loaded in eager-loading.
+func (e UserEdges) FriendshipsOrErr() ([]*Friendship, error) {
+	if e.loadedTypes[3] {
+		return e.Friendships, nil
+	}
+	return nil, &NotLoadedError{edge: "friendships"}
 }
 
 // scanValues returns the types for scanning values from sql.Rows.
@@ -98,19 +120,29 @@ func (u *User) assignValues(columns []string, values []any) error {
 
 // QueryPets queries the "pets" edge of the User entity.
 func (u *User) QueryPets() *PetQuery {
-	return (&UserClient{config: u.config}).QueryPets(u)
+	return NewUserClient(u.config).QueryPets(u)
 }
 
 // QueryGroups queries the "groups" edge of the User entity.
 func (u *User) QueryGroups() *GroupQuery {
-	return (&UserClient{config: u.config}).QueryGroups(u)
+	return NewUserClient(u.config).QueryGroups(u)
+}
+
+// QueryFriends queries the "friends" edge of the User entity.
+func (u *User) QueryFriends() *UserQuery {
+	return NewUserClient(u.config).QueryFriends(u)
+}
+
+// QueryFriendships queries the "friendships" edge of the User entity.
+func (u *User) QueryFriendships() *FriendshipQuery {
+	return NewUserClient(u.config).QueryFriendships(u)
 }
 
 // Update returns a builder for updating this User.
 // Note that you need to call User.Unwrap() before calling this method if this User
 // was returned from a transaction, and the transaction was committed or rolled back.
 func (u *User) Update() *UserUpdateOne {
-	return (&UserClient{config: u.config}).UpdateOne(u)
+	return NewUserClient(u.config).UpdateOne(u)
 }
 
 // Unwrap unwraps the User entity that was returned from a transaction after it was closed,
@@ -137,9 +169,3 @@ func (u *User) String() string {
 
 // Users is a parsable slice of User.
 type Users []*User
-
-func (u Users) config(cfg config) {
-	for _i := range u {
-		u[_i].config = cfg
-	}
-}

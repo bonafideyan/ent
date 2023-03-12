@@ -89,48 +89,10 @@ func (rc *RelationshipCreate) Mutation() *RelationshipMutation {
 
 // Save creates the Relationship in the database.
 func (rc *RelationshipCreate) Save(ctx context.Context) (*Relationship, error) {
-	var (
-		err  error
-		node *Relationship
-	)
-	rc.defaults()
-	if len(rc.hooks) == 0 {
-		if err = rc.check(); err != nil {
-			return nil, err
-		}
-		node, err = rc.sqlSave(ctx)
-	} else {
-		var mut Mutator = MutateFunc(func(ctx context.Context, m Mutation) (Value, error) {
-			mutation, ok := m.(*RelationshipMutation)
-			if !ok {
-				return nil, fmt.Errorf("unexpected mutation type %T", m)
-			}
-			if err = rc.check(); err != nil {
-				return nil, err
-			}
-			rc.mutation = mutation
-			if node, err = rc.sqlSave(ctx); err != nil {
-				return nil, err
-			}
-			return node, err
-		})
-		for i := len(rc.hooks) - 1; i >= 0; i-- {
-			if rc.hooks[i] == nil {
-				return nil, fmt.Errorf("ent: uninitialized hook (forgotten import ent/runtime?)")
-			}
-			mut = rc.hooks[i](mut)
-		}
-		v, err := mut.Mutate(ctx, rc.mutation)
-		if err != nil {
-			return nil, err
-		}
-		nv, ok := v.(*Relationship)
-		if !ok {
-			return nil, fmt.Errorf("unexpected node type %T returned from RelationshipMutation", v)
-		}
-		node = nv
+	if err := rc.defaults(); err != nil {
+		return nil, err
 	}
-	return node, err
+	return withHooks[*Relationship, RelationshipMutation](ctx, rc.sqlSave, rc.mutation, rc.hooks)
 }
 
 // SaveX calls Save and panics if Save returns an error.
@@ -156,11 +118,12 @@ func (rc *RelationshipCreate) ExecX(ctx context.Context) {
 }
 
 // defaults sets the default values of the builder before save.
-func (rc *RelationshipCreate) defaults() {
+func (rc *RelationshipCreate) defaults() error {
 	if _, ok := rc.mutation.Weight(); !ok {
 		v := relationship.DefaultWeight
 		rc.mutation.SetWeight(v)
 	}
+	return nil
 }
 
 // check runs all checks and user-defined validators on the builder.
@@ -184,6 +147,9 @@ func (rc *RelationshipCreate) check() error {
 }
 
 func (rc *RelationshipCreate) sqlSave(ctx context.Context) (*Relationship, error) {
+	if err := rc.check(); err != nil {
+		return nil, err
+	}
 	_node, _spec := rc.createSpec()
 	if err := sqlgraph.CreateNode(ctx, rc.driver, _spec); err != nil {
 		if sqlgraph.IsConstraintError(err) {
@@ -197,17 +163,11 @@ func (rc *RelationshipCreate) sqlSave(ctx context.Context) (*Relationship, error
 func (rc *RelationshipCreate) createSpec() (*Relationship, *sqlgraph.CreateSpec) {
 	var (
 		_node = &Relationship{config: rc.config}
-		_spec = &sqlgraph.CreateSpec{
-			Table: relationship.Table,
-		}
+		_spec = sqlgraph.NewCreateSpec(relationship.Table, nil)
 	)
 	_spec.OnConflict = rc.conflict
 	if value, ok := rc.mutation.Weight(); ok {
-		_spec.Fields = append(_spec.Fields, &sqlgraph.FieldSpec{
-			Type:   field.TypeInt,
-			Value:  value,
-			Column: relationship.FieldWeight,
-		})
+		_spec.SetField(relationship.FieldWeight, field.TypeInt, value)
 		_node.Weight = value
 	}
 	if nodes := rc.mutation.UserIDs(); len(nodes) > 0 {
@@ -218,10 +178,7 @@ func (rc *RelationshipCreate) createSpec() (*Relationship, *sqlgraph.CreateSpec)
 			Columns: []string{relationship.UserColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: &sqlgraph.FieldSpec{
-					Type:   field.TypeInt,
-					Column: user.FieldID,
-				},
+				IDSpec: sqlgraph.NewFieldSpec(user.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {
@@ -238,10 +195,7 @@ func (rc *RelationshipCreate) createSpec() (*Relationship, *sqlgraph.CreateSpec)
 			Columns: []string{relationship.RelativeColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: &sqlgraph.FieldSpec{
-					Type:   field.TypeInt,
-					Column: user.FieldID,
-				},
+				IDSpec: sqlgraph.NewFieldSpec(user.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {
@@ -258,10 +212,7 @@ func (rc *RelationshipCreate) createSpec() (*Relationship, *sqlgraph.CreateSpec)
 			Columns: []string{relationship.InfoColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: &sqlgraph.FieldSpec{
-					Type:   field.TypeInt,
-					Column: relationshipinfo.FieldID,
-				},
+				IDSpec: sqlgraph.NewFieldSpec(relationshipinfo.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {

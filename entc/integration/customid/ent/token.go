@@ -103,14 +103,14 @@ func (t *Token) assignValues(columns []string, values []any) error {
 
 // QueryAccount queries the "account" edge of the Token entity.
 func (t *Token) QueryAccount() *AccountQuery {
-	return (&TokenClient{config: t.config}).QueryAccount(t)
+	return NewTokenClient(t.config).QueryAccount(t)
 }
 
 // Update returns a builder for updating this Token.
 // Note that you need to call Token.Unwrap() before calling this method if this Token
 // was returned from a transaction, and the transaction was committed or rolled back.
 func (t *Token) Update() *TokenUpdateOne {
-	return (&TokenClient{config: t.config}).UpdateOne(t)
+	return NewTokenClient(t.config).UpdateOne(t)
 }
 
 // Unwrap unwraps the Token entity that was returned from a transaction after it was closed,
@@ -137,9 +137,3 @@ func (t *Token) String() string {
 
 // Tokens is a parsable slice of Token.
 type Tokens []*Token
-
-func (t Tokens) config(cfg config) {
-	for _i := range t {
-		t[_i].config = cfg
-	}
-}

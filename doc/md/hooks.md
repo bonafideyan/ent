@@ -17,7 +17,7 @@ There are 5 types of mutations:
 - `DeleteOne` - Delete a node from the graph.
 - `Delete` - Delete all nodes that match a predicate.
 
-Each generated node type has its own type of mutation. For example, all [`User` builders](crud.md#create-an-entity), share
+Each generated node type has its own type of mutation. For example, all [`User` builders](crud.mdx#create-an-entity), share
 the same generated `UserMutation` object.
 
 However, all builder types implement the generic <a target="_blank" href="https://pkg.go.dev/entgo.io/ent?tab=doc#Mutation">`ent.Mutation`</a> interface.
@@ -209,6 +209,23 @@ or in the package that creates the `ent.Client`.
 import _ "<project>/ent/runtime"
 ```
 :::
+
+#### Import Cycle Error
+
+At the first attempt to set up schema hooks in your project, you may encounter an error like the following:
+```text
+entc/load: parse schema dir: import cycle not allowed: [ent/schema ent/hook ent/ ent/schema]
+To resolve this issue, move the custom types used by the generated code to a separate package: "Type1", "Type2"
+```
+
+The error may occur because the generated code relies on custom types defined in the `ent/schema` package, but this
+package also imports the `ent/hook` package. This indirect import of the `ent` package creates a loop, causing the error
+to occur. To resolve this issue, follow these instructions:
+
+- First, comment out any usage of hooks, privacy policy, or interceptors from the `ent/schema`.
+- Move the custom types defined in the `ent/schema` to a new package, for example, `ent/schema/schematype`.
+- Run `go generate ./...` to update the generated `ent` package to point to the new package. For example, `schema.T` becomes `schematype.T`.
+- Uncomment the hooks, privacy policy, or interceptors, and run `go generate ./...` again. The code generation should now pass without error.
 
 ## Evaluation order
 
