@@ -39,6 +39,14 @@ func (bu *BlogUpdate) SetOid(i int) *BlogUpdate {
 	return bu
 }
 
+// SetNillableOid sets the "oid" field if the given value is not nil.
+func (bu *BlogUpdate) SetNillableOid(i *int) *BlogUpdate {
+	if i != nil {
+		bu.SetOid(*i)
+	}
+	return bu
+}
+
 // AddOid adds i to the "oid" field.
 func (bu *BlogUpdate) AddOid(i int) *BlogUpdate {
 	bu.mutation.AddOid(i)
@@ -88,7 +96,7 @@ func (bu *BlogUpdate) RemoveAdmins(u ...*User) *BlogUpdate {
 
 // Save executes the query and returns the number of nodes affected by the update operation.
 func (bu *BlogUpdate) Save(ctx context.Context) (int, error) {
-	return withHooks[int, BlogMutation](ctx, bu.sqlSave, bu.mutation, bu.hooks)
+	return withHooks(ctx, bu.sqlSave, bu.mutation, bu.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
@@ -200,6 +208,14 @@ func (buo *BlogUpdateOne) SetOid(i int) *BlogUpdateOne {
 	return buo
 }
 
+// SetNillableOid sets the "oid" field if the given value is not nil.
+func (buo *BlogUpdateOne) SetNillableOid(i *int) *BlogUpdateOne {
+	if i != nil {
+		buo.SetOid(*i)
+	}
+	return buo
+}
+
 // AddOid adds i to the "oid" field.
 func (buo *BlogUpdateOne) AddOid(i int) *BlogUpdateOne {
 	buo.mutation.AddOid(i)
@@ -262,7 +278,7 @@ func (buo *BlogUpdateOne) Select(field string, fields ...string) *BlogUpdateOne 
 
 // Save executes the query and returns the updated Blog entity.
 func (buo *BlogUpdateOne) Save(ctx context.Context) (*Blog, error) {
-	return withHooks[*Blog, BlogMutation](ctx, buo.sqlSave, buo.mutation, buo.hooks)
+	return withHooks(ctx, buo.sqlSave, buo.mutation, buo.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.

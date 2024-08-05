@@ -39,6 +39,14 @@ func (tu *TeamUpdate) SetName(s string) *TeamUpdate {
 	return tu
 }
 
+// SetNillableName sets the "name" field if the given value is not nil.
+func (tu *TeamUpdate) SetNillableName(s *string) *TeamUpdate {
+	if s != nil {
+		tu.SetName(*s)
+	}
+	return tu
+}
+
 // AddTaskIDs adds the "tasks" edge to the Task entity by IDs.
 func (tu *TeamUpdate) AddTaskIDs(ids ...int) *TeamUpdate {
 	tu.mutation.AddTaskIDs(ids...)
@@ -118,7 +126,7 @@ func (tu *TeamUpdate) RemoveUsers(u ...*User) *TeamUpdate {
 
 // Save executes the query and returns the number of nodes affected by the update operation.
 func (tu *TeamUpdate) Save(ctx context.Context) (int, error) {
-	return withHooks[int, TeamMutation](ctx, tu.sqlSave, tu.mutation, tu.hooks)
+	return withHooks(ctx, tu.sqlSave, tu.mutation, tu.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
@@ -284,6 +292,14 @@ func (tuo *TeamUpdateOne) SetName(s string) *TeamUpdateOne {
 	return tuo
 }
 
+// SetNillableName sets the "name" field if the given value is not nil.
+func (tuo *TeamUpdateOne) SetNillableName(s *string) *TeamUpdateOne {
+	if s != nil {
+		tuo.SetName(*s)
+	}
+	return tuo
+}
+
 // AddTaskIDs adds the "tasks" edge to the Task entity by IDs.
 func (tuo *TeamUpdateOne) AddTaskIDs(ids ...int) *TeamUpdateOne {
 	tuo.mutation.AddTaskIDs(ids...)
@@ -376,7 +392,7 @@ func (tuo *TeamUpdateOne) Select(field string, fields ...string) *TeamUpdateOne 
 
 // Save executes the query and returns the updated Team entity.
 func (tuo *TeamUpdateOne) Save(ctx context.Context) (*Team, error) {
-	return withHooks[*Team, TeamMutation](ctx, tuo.sqlSave, tuo.mutation, tuo.hooks)
+	return withHooks(ctx, tuo.sqlSave, tuo.mutation, tuo.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.

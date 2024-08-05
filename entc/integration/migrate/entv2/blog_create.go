@@ -59,7 +59,7 @@ func (bc *BlogCreate) Mutation() *BlogMutation {
 
 // Save creates the Blog in the database.
 func (bc *BlogCreate) Save(ctx context.Context) (*Blog, error) {
-	return withHooks[*Blog, BlogMutation](ctx, bc.sqlSave, bc.mutation, bc.hooks)
+	return withHooks(ctx, bc.sqlSave, bc.mutation, bc.hooks)
 }
 
 // SaveX calls Save and panics if Save returns an error.
@@ -150,11 +150,15 @@ func (bc *BlogCreate) createSpec() (*Blog, *sqlgraph.CreateSpec) {
 // BlogCreateBulk is the builder for creating many Blog entities in bulk.
 type BlogCreateBulk struct {
 	config
+	err      error
 	builders []*BlogCreate
 }
 
 // Save creates the Blog entities in the database.
 func (bcb *BlogCreateBulk) Save(ctx context.Context) ([]*Blog, error) {
+	if bcb.err != nil {
+		return nil, bcb.err
+	}
 	specs := make([]*sqlgraph.CreateSpec, len(bcb.builders))
 	nodes := make([]*Blog, len(bcb.builders))
 	mutators := make([]Mutator, len(bcb.builders))
@@ -170,8 +174,8 @@ func (bcb *BlogCreateBulk) Save(ctx context.Context) ([]*Blog, error) {
 					return nil, err
 				}
 				builder.mutation = mutation
-				nodes[i], specs[i] = builder.createSpec()
 				var err error
+				nodes[i], specs[i] = builder.createSpec()
 				if i < len(mutators)-1 {
 					_, err = mutators[i+1].Mutate(root, bcb.builders[i+1].mutation)
 				} else {

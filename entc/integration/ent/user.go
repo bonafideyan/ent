@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"strings"
 
+	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/entc/integration/ent/card"
 	"entgo.io/ent/entc/integration/ent/pet"
@@ -43,12 +44,15 @@ type User struct {
 	Employment user.Employment `json:"employment,omitempty"`
 	// SSOCert holds the value of the "SSOCert" field.
 	SSOCert string `json:"SSOCert,omitempty"`
+	// FilesCount holds the value of the "files_count" field.
+	FilesCount int `json:"files_count,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the UserQuery when eager-loading is set.
 	Edges         UserEdges `json:"edges"`
 	group_blocked *int
 	user_spouse   *int
 	user_parent   *int
+	selectValues  sql.SelectValues
 }
 
 // UserEdges holds the relations/edges for other nodes in the graph.
@@ -90,12 +94,10 @@ type UserEdges struct {
 // CardOrErr returns the Card value or an error if the edge
 // was not loaded in eager-loading, or loaded but was not found.
 func (e UserEdges) CardOrErr() (*Card, error) {
-	if e.loadedTypes[0] {
-		if e.Card == nil {
-			// Edge was loaded but was not found.
-			return nil, &NotFoundError{label: card.Label}
-		}
+	if e.Card != nil {
 		return e.Card, nil
+	} else if e.loadedTypes[0] {
+		return nil, &NotFoundError{label: card.Label}
 	}
 	return nil, &NotLoadedError{edge: "card"}
 }
@@ -157,12 +159,10 @@ func (e UserEdges) FollowingOrErr() ([]*User, error) {
 // TeamOrErr returns the Team value or an error if the edge
 // was not loaded in eager-loading, or loaded but was not found.
 func (e UserEdges) TeamOrErr() (*Pet, error) {
-	if e.loadedTypes[7] {
-		if e.Team == nil {
-			// Edge was loaded but was not found.
-			return nil, &NotFoundError{label: pet.Label}
-		}
+	if e.Team != nil {
 		return e.Team, nil
+	} else if e.loadedTypes[7] {
+		return nil, &NotFoundError{label: pet.Label}
 	}
 	return nil, &NotLoadedError{edge: "team"}
 }
@@ -170,12 +170,10 @@ func (e UserEdges) TeamOrErr() (*Pet, error) {
 // SpouseOrErr returns the Spouse value or an error if the edge
 // was not loaded in eager-loading, or loaded but was not found.
 func (e UserEdges) SpouseOrErr() (*User, error) {
-	if e.loadedTypes[8] {
-		if e.Spouse == nil {
-			// Edge was loaded but was not found.
-			return nil, &NotFoundError{label: user.Label}
-		}
+	if e.Spouse != nil {
 		return e.Spouse, nil
+	} else if e.loadedTypes[8] {
+		return nil, &NotFoundError{label: user.Label}
 	}
 	return nil, &NotLoadedError{edge: "spouse"}
 }
@@ -192,12 +190,10 @@ func (e UserEdges) ChildrenOrErr() ([]*User, error) {
 // ParentOrErr returns the Parent value or an error if the edge
 // was not loaded in eager-loading, or loaded but was not found.
 func (e UserEdges) ParentOrErr() (*User, error) {
-	if e.loadedTypes[10] {
-		if e.Parent == nil {
-			// Edge was loaded but was not found.
-			return nil, &NotFoundError{label: user.Label}
-		}
+	if e.Parent != nil {
 		return e.Parent, nil
+	} else if e.loadedTypes[10] {
+		return nil, &NotFoundError{label: user.Label}
 	}
 	return nil, &NotLoadedError{edge: "parent"}
 }
@@ -207,7 +203,7 @@ func (*User) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case user.FieldID, user.FieldOptionalInt, user.FieldAge:
+		case user.FieldID, user.FieldOptionalInt, user.FieldAge, user.FieldFilesCount:
 			values[i] = new(sql.NullInt64)
 		case user.FieldName, user.FieldLast, user.FieldNickname, user.FieldAddress, user.FieldPhone, user.FieldPassword, user.FieldRole, user.FieldEmployment, user.FieldSSOCert:
 			values[i] = new(sql.NullString)
@@ -218,7 +214,7 @@ func (*User) scanValues(columns []string) ([]any, error) {
 		case user.ForeignKeys[2]: // user_parent
 			values[i] = new(sql.NullInt64)
 		default:
-			return nil, fmt.Errorf("unexpected column %q for type User", columns[i])
+			values[i] = new(sql.UnknownType)
 		}
 	}
 	return values, nil
@@ -304,6 +300,12 @@ func (u *User) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				u.SSOCert = value.String
 			}
+		case user.FieldFilesCount:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field files_count", values[i])
+			} else if value.Valid {
+				u.FilesCount = int(value.Int64)
+			}
 		case user.ForeignKeys[0]:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
 				return fmt.Errorf("unexpected type %T for edge-field group_blocked", value)
@@ -325,9 +327,17 @@ func (u *User) assignValues(columns []string, values []any) error {
 				u.user_parent = new(int)
 				*u.user_parent = int(value.Int64)
 			}
+		default:
+			u.selectValues.Set(columns[i], values[i])
 		}
 	}
 	return nil
+}
+
+// Value returns the ent.Value that was dynamically selected and assigned to the User.
+// This includes values selected through modifiers, order, etc.
+func (u *User) Value(name string) (ent.Value, error) {
+	return u.selectValues.Get(name)
 }
 
 // QueryCard queries the "card" edge of the User entity.
@@ -439,6 +449,9 @@ func (u *User) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("SSOCert=")
 	builder.WriteString(u.SSOCert)
+	builder.WriteString(", ")
+	builder.WriteString("files_count=")
+	builder.WriteString(fmt.Sprintf("%v", u.FilesCount))
 	builder.WriteByte(')')
 	return builder.String()
 }

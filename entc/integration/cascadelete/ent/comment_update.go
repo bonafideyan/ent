@@ -38,9 +38,25 @@ func (cu *CommentUpdate) SetText(s string) *CommentUpdate {
 	return cu
 }
 
+// SetNillableText sets the "text" field if the given value is not nil.
+func (cu *CommentUpdate) SetNillableText(s *string) *CommentUpdate {
+	if s != nil {
+		cu.SetText(*s)
+	}
+	return cu
+}
+
 // SetPostID sets the "post_id" field.
 func (cu *CommentUpdate) SetPostID(i int) *CommentUpdate {
 	cu.mutation.SetPostID(i)
+	return cu
+}
+
+// SetNillablePostID sets the "post_id" field if the given value is not nil.
+func (cu *CommentUpdate) SetNillablePostID(i *int) *CommentUpdate {
+	if i != nil {
+		cu.SetPostID(*i)
+	}
 	return cu
 }
 
@@ -62,7 +78,7 @@ func (cu *CommentUpdate) ClearPost() *CommentUpdate {
 
 // Save executes the query and returns the number of nodes affected by the update operation.
 func (cu *CommentUpdate) Save(ctx context.Context) (int, error) {
-	return withHooks[int, CommentMutation](ctx, cu.sqlSave, cu.mutation, cu.hooks)
+	return withHooks(ctx, cu.sqlSave, cu.mutation, cu.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
@@ -89,7 +105,7 @@ func (cu *CommentUpdate) ExecX(ctx context.Context) {
 
 // check runs all checks and user-defined validators on the builder.
 func (cu *CommentUpdate) check() error {
-	if _, ok := cu.mutation.PostID(); cu.mutation.PostCleared() && !ok {
+	if cu.mutation.PostCleared() && len(cu.mutation.PostIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "Comment.post"`)
 	}
 	return nil
@@ -165,9 +181,25 @@ func (cuo *CommentUpdateOne) SetText(s string) *CommentUpdateOne {
 	return cuo
 }
 
+// SetNillableText sets the "text" field if the given value is not nil.
+func (cuo *CommentUpdateOne) SetNillableText(s *string) *CommentUpdateOne {
+	if s != nil {
+		cuo.SetText(*s)
+	}
+	return cuo
+}
+
 // SetPostID sets the "post_id" field.
 func (cuo *CommentUpdateOne) SetPostID(i int) *CommentUpdateOne {
 	cuo.mutation.SetPostID(i)
+	return cuo
+}
+
+// SetNillablePostID sets the "post_id" field if the given value is not nil.
+func (cuo *CommentUpdateOne) SetNillablePostID(i *int) *CommentUpdateOne {
+	if i != nil {
+		cuo.SetPostID(*i)
+	}
 	return cuo
 }
 
@@ -202,7 +234,7 @@ func (cuo *CommentUpdateOne) Select(field string, fields ...string) *CommentUpda
 
 // Save executes the query and returns the updated Comment entity.
 func (cuo *CommentUpdateOne) Save(ctx context.Context) (*Comment, error) {
-	return withHooks[*Comment, CommentMutation](ctx, cuo.sqlSave, cuo.mutation, cuo.hooks)
+	return withHooks(ctx, cuo.sqlSave, cuo.mutation, cuo.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
@@ -229,7 +261,7 @@ func (cuo *CommentUpdateOne) ExecX(ctx context.Context) {
 
 // check runs all checks and user-defined validators on the builder.
 func (cuo *CommentUpdateOne) check() error {
-	if _, ok := cuo.mutation.PostID(); cuo.mutation.PostCleared() && !ok {
+	if cuo.mutation.PostCleared() && len(cuo.mutation.PostIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "Comment.post"`)
 	}
 	return nil

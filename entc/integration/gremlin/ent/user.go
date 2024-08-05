@@ -43,6 +43,8 @@ type User struct {
 	Employment user.Employment `json:"employment,omitempty"`
 	// SSOCert holds the value of the "SSOCert" field.
 	SSOCert string `json:"SSOCert,omitempty"`
+	// FilesCount holds the value of the "files_count" field.
+	FilesCount int `json:"files_count,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the UserQuery when eager-loading is set.
 	Edges UserEdges `json:"edges"`
@@ -80,12 +82,10 @@ type UserEdges struct {
 // CardOrErr returns the Card value or an error if the edge
 // was not loaded in eager-loading, or loaded but was not found.
 func (e UserEdges) CardOrErr() (*Card, error) {
-	if e.loadedTypes[0] {
-		if e.Card == nil {
-			// Edge was loaded but was not found.
-			return nil, &NotFoundError{label: card.Label}
-		}
+	if e.Card != nil {
 		return e.Card, nil
+	} else if e.loadedTypes[0] {
+		return nil, &NotFoundError{label: card.Label}
 	}
 	return nil, &NotLoadedError{edge: "card"}
 }
@@ -147,12 +147,10 @@ func (e UserEdges) FollowingOrErr() ([]*User, error) {
 // TeamOrErr returns the Team value or an error if the edge
 // was not loaded in eager-loading, or loaded but was not found.
 func (e UserEdges) TeamOrErr() (*Pet, error) {
-	if e.loadedTypes[7] {
-		if e.Team == nil {
-			// Edge was loaded but was not found.
-			return nil, &NotFoundError{label: pet.Label}
-		}
+	if e.Team != nil {
 		return e.Team, nil
+	} else if e.loadedTypes[7] {
+		return nil, &NotFoundError{label: pet.Label}
 	}
 	return nil, &NotLoadedError{edge: "team"}
 }
@@ -160,12 +158,10 @@ func (e UserEdges) TeamOrErr() (*Pet, error) {
 // SpouseOrErr returns the Spouse value or an error if the edge
 // was not loaded in eager-loading, or loaded but was not found.
 func (e UserEdges) SpouseOrErr() (*User, error) {
-	if e.loadedTypes[8] {
-		if e.Spouse == nil {
-			// Edge was loaded but was not found.
-			return nil, &NotFoundError{label: user.Label}
-		}
+	if e.Spouse != nil {
 		return e.Spouse, nil
+	} else if e.loadedTypes[8] {
+		return nil, &NotFoundError{label: user.Label}
 	}
 	return nil, &NotLoadedError{edge: "spouse"}
 }
@@ -182,12 +178,10 @@ func (e UserEdges) ChildrenOrErr() ([]*User, error) {
 // ParentOrErr returns the Parent value or an error if the edge
 // was not loaded in eager-loading, or loaded but was not found.
 func (e UserEdges) ParentOrErr() (*User, error) {
-	if e.loadedTypes[10] {
-		if e.Parent == nil {
-			// Edge was loaded but was not found.
-			return nil, &NotFoundError{label: user.Label}
-		}
+	if e.Parent != nil {
 		return e.Parent, nil
+	} else if e.loadedTypes[10] {
+		return nil, &NotFoundError{label: user.Label}
 	}
 	return nil, &NotLoadedError{edge: "parent"}
 }
@@ -211,6 +205,7 @@ func (u *User) FromResponse(res *gremlin.Response) error {
 		Role        user.Role       `json:"role,omitempty"`
 		Employment  user.Employment `json:"employment,omitempty"`
 		SSOCert     string          `json:"sso_cert,omitempty"`
+		FilesCount  int             `json:"files_count,omitempty"`
 	}
 	if err := vmap.Decode(&scanu); err != nil {
 		return err
@@ -227,6 +222,7 @@ func (u *User) FromResponse(res *gremlin.Response) error {
 	u.Role = scanu.Role
 	u.Employment = scanu.Employment
 	u.SSOCert = scanu.SSOCert
+	u.FilesCount = scanu.FilesCount
 	return nil
 }
 
@@ -339,6 +335,9 @@ func (u *User) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("SSOCert=")
 	builder.WriteString(u.SSOCert)
+	builder.WriteString(", ")
+	builder.WriteString("files_count=")
+	builder.WriteString(fmt.Sprintf("%v", u.FilesCount))
 	builder.WriteByte(')')
 	return builder.String()
 }
@@ -365,6 +364,7 @@ func (u *Users) FromResponse(res *gremlin.Response) error {
 		Role        user.Role       `json:"role,omitempty"`
 		Employment  user.Employment `json:"employment,omitempty"`
 		SSOCert     string          `json:"sso_cert,omitempty"`
+		FilesCount  int             `json:"files_count,omitempty"`
 	}
 	if err := vmap.Decode(&scanu); err != nil {
 		return err
@@ -382,6 +382,7 @@ func (u *Users) FromResponse(res *gremlin.Response) error {
 		node.Role = v.Role
 		node.Employment = v.Employment
 		node.SSOCert = v.SSOCert
+		node.FilesCount = v.FilesCount
 		*u = append(*u, node)
 	}
 	return nil

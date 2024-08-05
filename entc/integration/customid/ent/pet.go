@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"strings"
 
+	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/entc/integration/customid/ent/pet"
 	"entgo.io/ent/entc/integration/customid/ent/user"
@@ -25,6 +26,7 @@ type Pet struct {
 	Edges           PetEdges `json:"edges"`
 	pet_best_friend *string
 	user_pets       *int
+	selectValues    sql.SelectValues
 }
 
 // PetEdges holds the relations/edges for other nodes in the graph.
@@ -45,12 +47,10 @@ type PetEdges struct {
 // OwnerOrErr returns the Owner value or an error if the edge
 // was not loaded in eager-loading, or loaded but was not found.
 func (e PetEdges) OwnerOrErr() (*User, error) {
-	if e.loadedTypes[0] {
-		if e.Owner == nil {
-			// Edge was loaded but was not found.
-			return nil, &NotFoundError{label: user.Label}
-		}
+	if e.Owner != nil {
 		return e.Owner, nil
+	} else if e.loadedTypes[0] {
+		return nil, &NotFoundError{label: user.Label}
 	}
 	return nil, &NotLoadedError{edge: "owner"}
 }
@@ -76,12 +76,10 @@ func (e PetEdges) FriendsOrErr() ([]*Pet, error) {
 // BestFriendOrErr returns the BestFriend value or an error if the edge
 // was not loaded in eager-loading, or loaded but was not found.
 func (e PetEdges) BestFriendOrErr() (*Pet, error) {
-	if e.loadedTypes[3] {
-		if e.BestFriend == nil {
-			// Edge was loaded but was not found.
-			return nil, &NotFoundError{label: pet.Label}
-		}
+	if e.BestFriend != nil {
 		return e.BestFriend, nil
+	} else if e.loadedTypes[3] {
+		return nil, &NotFoundError{label: pet.Label}
 	}
 	return nil, &NotLoadedError{edge: "best_friend"}
 }
@@ -98,7 +96,7 @@ func (*Pet) scanValues(columns []string) ([]any, error) {
 		case pet.ForeignKeys[1]: // user_pets
 			values[i] = new(sql.NullInt64)
 		default:
-			return nil, fmt.Errorf("unexpected column %q for type Pet", columns[i])
+			values[i] = new(sql.UnknownType)
 		}
 	}
 	return values, nil
@@ -132,9 +130,17 @@ func (pe *Pet) assignValues(columns []string, values []any) error {
 				pe.user_pets = new(int)
 				*pe.user_pets = int(value.Int64)
 			}
+		default:
+			pe.selectValues.Set(columns[i], values[i])
 		}
 	}
 	return nil
+}
+
+// Value returns the ent.Value that was dynamically selected and assigned to the Pet.
+// This includes values selected through modifiers, order, etc.
+func (pe *Pet) Value(name string) (ent.Value, error) {
+	return pe.selectValues.Get(name)
 }
 
 // QueryOwner queries the "owner" edge of the Pet entity.

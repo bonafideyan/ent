@@ -78,7 +78,7 @@ func (afc *AttachedFileCreate) Mutation() *AttachedFileMutation {
 // Save creates the AttachedFile in the database.
 func (afc *AttachedFileCreate) Save(ctx context.Context) (*AttachedFile, error) {
 	afc.defaults()
-	return withHooks[*AttachedFile, AttachedFileMutation](ctx, afc.sqlSave, afc.mutation, afc.hooks)
+	return withHooks(ctx, afc.sqlSave, afc.mutation, afc.hooks)
 }
 
 // SaveX calls Save and panics if Save returns an error.
@@ -122,10 +122,10 @@ func (afc *AttachedFileCreate) check() error {
 	if _, ok := afc.mutation.ProcID(); !ok {
 		return &ValidationError{Name: "proc_id", err: errors.New(`ent: missing required field "AttachedFile.proc_id"`)}
 	}
-	if _, ok := afc.mutation.FiID(); !ok {
+	if len(afc.mutation.FiIDs()) == 0 {
 		return &ValidationError{Name: "fi", err: errors.New(`ent: missing required edge "AttachedFile.fi"`)}
 	}
-	if _, ok := afc.mutation.ProcID(); !ok {
+	if len(afc.mutation.ProcIDs()) == 0 {
 		return &ValidationError{Name: "proc", err: errors.New(`ent: missing required edge "AttachedFile.proc"`)}
 	}
 	return nil
@@ -399,12 +399,16 @@ func (u *AttachedFileUpsertOne) IDX(ctx context.Context) int {
 // AttachedFileCreateBulk is the builder for creating many AttachedFile entities in bulk.
 type AttachedFileCreateBulk struct {
 	config
+	err      error
 	builders []*AttachedFileCreate
 	conflict []sql.ConflictOption
 }
 
 // Save creates the AttachedFile entities in the database.
 func (afcb *AttachedFileCreateBulk) Save(ctx context.Context) ([]*AttachedFile, error) {
+	if afcb.err != nil {
+		return nil, afcb.err
+	}
 	specs := make([]*sqlgraph.CreateSpec, len(afcb.builders))
 	nodes := make([]*AttachedFile, len(afcb.builders))
 	mutators := make([]Mutator, len(afcb.builders))
@@ -421,8 +425,8 @@ func (afcb *AttachedFileCreateBulk) Save(ctx context.Context) ([]*AttachedFile, 
 					return nil, err
 				}
 				builder.mutation = mutation
-				nodes[i], specs[i] = builder.createSpec()
 				var err error
+				nodes[i], specs[i] = builder.createSpec()
 				if i < len(mutators)-1 {
 					_, err = mutators[i+1].Mutate(root, afcb.builders[i+1].mutation)
 				} else {
@@ -607,6 +611,9 @@ func (u *AttachedFileUpsertBulk) UpdateProcID() *AttachedFileUpsertBulk {
 
 // Exec executes the query.
 func (u *AttachedFileUpsertBulk) Exec(ctx context.Context) error {
+	if u.create.err != nil {
+		return u.create.err
+	}
 	for i, b := range u.create.builders {
 		if len(b.conflict) != 0 {
 			return fmt.Errorf("ent: OnConflict was set for builder %d. Set it on the AttachedFileCreateBulk instead", i)

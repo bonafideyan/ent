@@ -10,10 +10,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/examples/migration/ent/card"
+	"entgo.io/ent/examples/migration/ent/payment"
 	"entgo.io/ent/examples/migration/ent/predicate"
 	"entgo.io/ent/examples/migration/ent/user"
 	"entgo.io/ent/schema/field"
@@ -29,6 +31,68 @@ type CardUpdate struct {
 // Where appends a list predicates to the CardUpdate builder.
 func (cu *CardUpdate) Where(ps ...predicate.Card) *CardUpdate {
 	cu.mutation.Where(ps...)
+	return cu
+}
+
+// SetType sets the "type" field.
+func (cu *CardUpdate) SetType(s string) *CardUpdate {
+	cu.mutation.SetType(s)
+	return cu
+}
+
+// SetNillableType sets the "type" field if the given value is not nil.
+func (cu *CardUpdate) SetNillableType(s *string) *CardUpdate {
+	if s != nil {
+		cu.SetType(*s)
+	}
+	return cu
+}
+
+// SetNumberHash sets the "number_hash" field.
+func (cu *CardUpdate) SetNumberHash(s string) *CardUpdate {
+	cu.mutation.SetNumberHash(s)
+	return cu
+}
+
+// SetNillableNumberHash sets the "number_hash" field if the given value is not nil.
+func (cu *CardUpdate) SetNillableNumberHash(s *string) *CardUpdate {
+	if s != nil {
+		cu.SetNumberHash(*s)
+	}
+	return cu
+}
+
+// SetCvvHash sets the "cvv_hash" field.
+func (cu *CardUpdate) SetCvvHash(s string) *CardUpdate {
+	cu.mutation.SetCvvHash(s)
+	return cu
+}
+
+// SetNillableCvvHash sets the "cvv_hash" field if the given value is not nil.
+func (cu *CardUpdate) SetNillableCvvHash(s *string) *CardUpdate {
+	if s != nil {
+		cu.SetCvvHash(*s)
+	}
+	return cu
+}
+
+// SetExpiresAt sets the "expires_at" field.
+func (cu *CardUpdate) SetExpiresAt(t time.Time) *CardUpdate {
+	cu.mutation.SetExpiresAt(t)
+	return cu
+}
+
+// SetNillableExpiresAt sets the "expires_at" field if the given value is not nil.
+func (cu *CardUpdate) SetNillableExpiresAt(t *time.Time) *CardUpdate {
+	if t != nil {
+		cu.SetExpiresAt(*t)
+	}
+	return cu
+}
+
+// ClearExpiresAt clears the value of the "expires_at" field.
+func (cu *CardUpdate) ClearExpiresAt() *CardUpdate {
+	cu.mutation.ClearExpiresAt()
 	return cu
 }
 
@@ -51,6 +115,21 @@ func (cu *CardUpdate) SetOwner(u *User) *CardUpdate {
 	return cu.SetOwnerID(u.ID)
 }
 
+// AddPaymentIDs adds the "payments" edge to the Payment entity by IDs.
+func (cu *CardUpdate) AddPaymentIDs(ids ...int) *CardUpdate {
+	cu.mutation.AddPaymentIDs(ids...)
+	return cu
+}
+
+// AddPayments adds the "payments" edges to the Payment entity.
+func (cu *CardUpdate) AddPayments(p ...*Payment) *CardUpdate {
+	ids := make([]int, len(p))
+	for i := range p {
+		ids[i] = p[i].ID
+	}
+	return cu.AddPaymentIDs(ids...)
+}
+
 // Mutation returns the CardMutation object of the builder.
 func (cu *CardUpdate) Mutation() *CardMutation {
 	return cu.mutation
@@ -62,9 +141,30 @@ func (cu *CardUpdate) ClearOwner() *CardUpdate {
 	return cu
 }
 
+// ClearPayments clears all "payments" edges to the Payment entity.
+func (cu *CardUpdate) ClearPayments() *CardUpdate {
+	cu.mutation.ClearPayments()
+	return cu
+}
+
+// RemovePaymentIDs removes the "payments" edge to Payment entities by IDs.
+func (cu *CardUpdate) RemovePaymentIDs(ids ...int) *CardUpdate {
+	cu.mutation.RemovePaymentIDs(ids...)
+	return cu
+}
+
+// RemovePayments removes "payments" edges to Payment entities.
+func (cu *CardUpdate) RemovePayments(p ...*Payment) *CardUpdate {
+	ids := make([]int, len(p))
+	for i := range p {
+		ids[i] = p[i].ID
+	}
+	return cu.RemovePaymentIDs(ids...)
+}
+
 // Save executes the query and returns the number of nodes affected by the update operation.
 func (cu *CardUpdate) Save(ctx context.Context) (int, error) {
-	return withHooks[int, CardMutation](ctx, cu.sqlSave, cu.mutation, cu.hooks)
+	return withHooks(ctx, cu.sqlSave, cu.mutation, cu.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
@@ -91,7 +191,7 @@ func (cu *CardUpdate) ExecX(ctx context.Context) {
 
 // check runs all checks and user-defined validators on the builder.
 func (cu *CardUpdate) check() error {
-	if _, ok := cu.mutation.OwnerID(); cu.mutation.OwnerCleared() && !ok {
+	if cu.mutation.OwnerCleared() && len(cu.mutation.OwnerIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "Card.owner"`)
 	}
 	return nil
@@ -108,6 +208,21 @@ func (cu *CardUpdate) sqlSave(ctx context.Context) (n int, err error) {
 				ps[i](selector)
 			}
 		}
+	}
+	if value, ok := cu.mutation.GetType(); ok {
+		_spec.SetField(card.FieldType, field.TypeString, value)
+	}
+	if value, ok := cu.mutation.NumberHash(); ok {
+		_spec.SetField(card.FieldNumberHash, field.TypeString, value)
+	}
+	if value, ok := cu.mutation.CvvHash(); ok {
+		_spec.SetField(card.FieldCvvHash, field.TypeString, value)
+	}
+	if value, ok := cu.mutation.ExpiresAt(); ok {
+		_spec.SetField(card.FieldExpiresAt, field.TypeTime, value)
+	}
+	if cu.mutation.ExpiresAtCleared() {
+		_spec.ClearField(card.FieldExpiresAt, field.TypeTime)
 	}
 	if cu.mutation.OwnerCleared() {
 		edge := &sqlgraph.EdgeSpec{
@@ -138,6 +253,51 @@ func (cu *CardUpdate) sqlSave(ctx context.Context) (n int, err error) {
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	if cu.mutation.PaymentsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   card.PaymentsTable,
+			Columns: []string{card.PaymentsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(payment.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := cu.mutation.RemovedPaymentsIDs(); len(nodes) > 0 && !cu.mutation.PaymentsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   card.PaymentsTable,
+			Columns: []string{card.PaymentsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(payment.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := cu.mutation.PaymentsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   card.PaymentsTable,
+			Columns: []string{card.PaymentsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(payment.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
 	if n, err = sqlgraph.UpdateNodes(ctx, cu.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{card.Label}
@@ -156,6 +316,68 @@ type CardUpdateOne struct {
 	fields   []string
 	hooks    []Hook
 	mutation *CardMutation
+}
+
+// SetType sets the "type" field.
+func (cuo *CardUpdateOne) SetType(s string) *CardUpdateOne {
+	cuo.mutation.SetType(s)
+	return cuo
+}
+
+// SetNillableType sets the "type" field if the given value is not nil.
+func (cuo *CardUpdateOne) SetNillableType(s *string) *CardUpdateOne {
+	if s != nil {
+		cuo.SetType(*s)
+	}
+	return cuo
+}
+
+// SetNumberHash sets the "number_hash" field.
+func (cuo *CardUpdateOne) SetNumberHash(s string) *CardUpdateOne {
+	cuo.mutation.SetNumberHash(s)
+	return cuo
+}
+
+// SetNillableNumberHash sets the "number_hash" field if the given value is not nil.
+func (cuo *CardUpdateOne) SetNillableNumberHash(s *string) *CardUpdateOne {
+	if s != nil {
+		cuo.SetNumberHash(*s)
+	}
+	return cuo
+}
+
+// SetCvvHash sets the "cvv_hash" field.
+func (cuo *CardUpdateOne) SetCvvHash(s string) *CardUpdateOne {
+	cuo.mutation.SetCvvHash(s)
+	return cuo
+}
+
+// SetNillableCvvHash sets the "cvv_hash" field if the given value is not nil.
+func (cuo *CardUpdateOne) SetNillableCvvHash(s *string) *CardUpdateOne {
+	if s != nil {
+		cuo.SetCvvHash(*s)
+	}
+	return cuo
+}
+
+// SetExpiresAt sets the "expires_at" field.
+func (cuo *CardUpdateOne) SetExpiresAt(t time.Time) *CardUpdateOne {
+	cuo.mutation.SetExpiresAt(t)
+	return cuo
+}
+
+// SetNillableExpiresAt sets the "expires_at" field if the given value is not nil.
+func (cuo *CardUpdateOne) SetNillableExpiresAt(t *time.Time) *CardUpdateOne {
+	if t != nil {
+		cuo.SetExpiresAt(*t)
+	}
+	return cuo
+}
+
+// ClearExpiresAt clears the value of the "expires_at" field.
+func (cuo *CardUpdateOne) ClearExpiresAt() *CardUpdateOne {
+	cuo.mutation.ClearExpiresAt()
+	return cuo
 }
 
 // SetOwnerID sets the "owner_id" field.
@@ -177,6 +399,21 @@ func (cuo *CardUpdateOne) SetOwner(u *User) *CardUpdateOne {
 	return cuo.SetOwnerID(u.ID)
 }
 
+// AddPaymentIDs adds the "payments" edge to the Payment entity by IDs.
+func (cuo *CardUpdateOne) AddPaymentIDs(ids ...int) *CardUpdateOne {
+	cuo.mutation.AddPaymentIDs(ids...)
+	return cuo
+}
+
+// AddPayments adds the "payments" edges to the Payment entity.
+func (cuo *CardUpdateOne) AddPayments(p ...*Payment) *CardUpdateOne {
+	ids := make([]int, len(p))
+	for i := range p {
+		ids[i] = p[i].ID
+	}
+	return cuo.AddPaymentIDs(ids...)
+}
+
 // Mutation returns the CardMutation object of the builder.
 func (cuo *CardUpdateOne) Mutation() *CardMutation {
 	return cuo.mutation
@@ -186,6 +423,27 @@ func (cuo *CardUpdateOne) Mutation() *CardMutation {
 func (cuo *CardUpdateOne) ClearOwner() *CardUpdateOne {
 	cuo.mutation.ClearOwner()
 	return cuo
+}
+
+// ClearPayments clears all "payments" edges to the Payment entity.
+func (cuo *CardUpdateOne) ClearPayments() *CardUpdateOne {
+	cuo.mutation.ClearPayments()
+	return cuo
+}
+
+// RemovePaymentIDs removes the "payments" edge to Payment entities by IDs.
+func (cuo *CardUpdateOne) RemovePaymentIDs(ids ...int) *CardUpdateOne {
+	cuo.mutation.RemovePaymentIDs(ids...)
+	return cuo
+}
+
+// RemovePayments removes "payments" edges to Payment entities.
+func (cuo *CardUpdateOne) RemovePayments(p ...*Payment) *CardUpdateOne {
+	ids := make([]int, len(p))
+	for i := range p {
+		ids[i] = p[i].ID
+	}
+	return cuo.RemovePaymentIDs(ids...)
 }
 
 // Where appends a list predicates to the CardUpdate builder.
@@ -203,7 +461,7 @@ func (cuo *CardUpdateOne) Select(field string, fields ...string) *CardUpdateOne 
 
 // Save executes the query and returns the updated Card entity.
 func (cuo *CardUpdateOne) Save(ctx context.Context) (*Card, error) {
-	return withHooks[*Card, CardMutation](ctx, cuo.sqlSave, cuo.mutation, cuo.hooks)
+	return withHooks(ctx, cuo.sqlSave, cuo.mutation, cuo.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
@@ -230,7 +488,7 @@ func (cuo *CardUpdateOne) ExecX(ctx context.Context) {
 
 // check runs all checks and user-defined validators on the builder.
 func (cuo *CardUpdateOne) check() error {
-	if _, ok := cuo.mutation.OwnerID(); cuo.mutation.OwnerCleared() && !ok {
+	if cuo.mutation.OwnerCleared() && len(cuo.mutation.OwnerIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "Card.owner"`)
 	}
 	return nil
@@ -265,6 +523,21 @@ func (cuo *CardUpdateOne) sqlSave(ctx context.Context) (_node *Card, err error) 
 			}
 		}
 	}
+	if value, ok := cuo.mutation.GetType(); ok {
+		_spec.SetField(card.FieldType, field.TypeString, value)
+	}
+	if value, ok := cuo.mutation.NumberHash(); ok {
+		_spec.SetField(card.FieldNumberHash, field.TypeString, value)
+	}
+	if value, ok := cuo.mutation.CvvHash(); ok {
+		_spec.SetField(card.FieldCvvHash, field.TypeString, value)
+	}
+	if value, ok := cuo.mutation.ExpiresAt(); ok {
+		_spec.SetField(card.FieldExpiresAt, field.TypeTime, value)
+	}
+	if cuo.mutation.ExpiresAtCleared() {
+		_spec.ClearField(card.FieldExpiresAt, field.TypeTime)
+	}
 	if cuo.mutation.OwnerCleared() {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.M2O,
@@ -287,6 +560,51 @@ func (cuo *CardUpdateOne) sqlSave(ctx context.Context) (_node *Card, err error) 
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(user.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if cuo.mutation.PaymentsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   card.PaymentsTable,
+			Columns: []string{card.PaymentsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(payment.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := cuo.mutation.RemovedPaymentsIDs(); len(nodes) > 0 && !cuo.mutation.PaymentsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   card.PaymentsTable,
+			Columns: []string{card.PaymentsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(payment.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := cuo.mutation.PaymentsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   card.PaymentsTable,
+			Columns: []string{card.PaymentsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(payment.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {

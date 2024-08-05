@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"strings"
 
+	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/entc/integration/customid/ent/account"
 	"entgo.io/ent/entc/integration/customid/ent/token"
@@ -27,6 +28,7 @@ type Token struct {
 	// The values are being populated by the TokenQuery when eager-loading is set.
 	Edges         TokenEdges `json:"edges"`
 	account_token *sid.ID
+	selectValues  sql.SelectValues
 }
 
 // TokenEdges holds the relations/edges for other nodes in the graph.
@@ -41,12 +43,10 @@ type TokenEdges struct {
 // AccountOrErr returns the Account value or an error if the edge
 // was not loaded in eager-loading, or loaded but was not found.
 func (e TokenEdges) AccountOrErr() (*Account, error) {
-	if e.loadedTypes[0] {
-		if e.Account == nil {
-			// Edge was loaded but was not found.
-			return nil, &NotFoundError{label: account.Label}
-		}
+	if e.Account != nil {
 		return e.Account, nil
+	} else if e.loadedTypes[0] {
+		return nil, &NotFoundError{label: account.Label}
 	}
 	return nil, &NotLoadedError{edge: "account"}
 }
@@ -63,7 +63,7 @@ func (*Token) scanValues(columns []string) ([]any, error) {
 		case token.ForeignKeys[0]: // account_token
 			values[i] = &sql.NullScanner{S: new(sid.ID)}
 		default:
-			return nil, fmt.Errorf("unexpected column %q for type Token", columns[i])
+			values[i] = new(sql.UnknownType)
 		}
 	}
 	return values, nil
@@ -96,9 +96,17 @@ func (t *Token) assignValues(columns []string, values []any) error {
 				t.account_token = new(sid.ID)
 				*t.account_token = *value.S.(*sid.ID)
 			}
+		default:
+			t.selectValues.Set(columns[i], values[i])
 		}
 	}
 	return nil
+}
+
+// Value returns the ent.Value that was dynamically selected and assigned to the Token.
+// This includes values selected through modifiers, order, etc.
+func (t *Token) Value(name string) (ent.Value, error) {
+	return t.selectValues.Get(name)
 }
 
 // QueryAccount queries the "account" edge of the Token entity.

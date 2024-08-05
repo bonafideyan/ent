@@ -89,6 +89,48 @@ func (tc *TaskCreate) SetNillableOwner(s *string) *TaskCreate {
 	return tc
 }
 
+// SetOrder sets the "order" field.
+func (tc *TaskCreate) SetOrder(i int) *TaskCreate {
+	tc.mutation.SetOrder(i)
+	return tc
+}
+
+// SetNillableOrder sets the "order" field if the given value is not nil.
+func (tc *TaskCreate) SetNillableOrder(i *int) *TaskCreate {
+	if i != nil {
+		tc.SetOrder(*i)
+	}
+	return tc
+}
+
+// SetOrderOption sets the "order_option" field.
+func (tc *TaskCreate) SetOrderOption(i int) *TaskCreate {
+	tc.mutation.SetOrderOption(i)
+	return tc
+}
+
+// SetNillableOrderOption sets the "order_option" field if the given value is not nil.
+func (tc *TaskCreate) SetNillableOrderOption(i *int) *TaskCreate {
+	if i != nil {
+		tc.SetOrderOption(*i)
+	}
+	return tc
+}
+
+// SetOp sets the "op" field.
+func (tc *TaskCreate) SetOp(s string) *TaskCreate {
+	tc.mutation.SetOpField(s)
+	return tc
+}
+
+// SetNillableOp sets the "op" field if the given value is not nil.
+func (tc *TaskCreate) SetNillableOp(s *string) *TaskCreate {
+	if s != nil {
+		tc.SetOp(*s)
+	}
+	return tc
+}
+
 // Mutation returns the TaskMutation object of the builder.
 func (tc *TaskCreate) Mutation() *TaskMutation {
 	return tc.mutation
@@ -97,7 +139,7 @@ func (tc *TaskCreate) Mutation() *TaskMutation {
 // Save creates the Task in the database.
 func (tc *TaskCreate) Save(ctx context.Context) (*Task, error) {
 	tc.defaults()
-	return withHooks[*Task, TaskMutation](ctx, tc.sqlSave, tc.mutation, tc.hooks)
+	return withHooks(ctx, tc.sqlSave, tc.mutation, tc.hooks)
 }
 
 // SaveX calls Save and panics if Save returns an error.
@@ -132,6 +174,10 @@ func (tc *TaskCreate) defaults() {
 		v := enttask.DefaultCreatedAt()
 		tc.mutation.SetCreatedAt(v)
 	}
+	if _, ok := tc.mutation.GetOp(); !ok {
+		v := enttask.DefaultOp
+		tc.mutation.SetOpField(v)
+	}
 }
 
 // check runs all checks and user-defined validators on the builder.
@@ -146,6 +192,14 @@ func (tc *TaskCreate) check() error {
 	}
 	if _, ok := tc.mutation.CreatedAt(); !ok {
 		return &ValidationError{Name: "created_at", err: errors.New(`ent: missing required field "Task.created_at"`)}
+	}
+	if _, ok := tc.mutation.GetOp(); !ok {
+		return &ValidationError{Name: "op", err: errors.New(`ent: missing required field "Task.op"`)}
+	}
+	if v, ok := tc.mutation.GetOp(); ok {
+		if err := enttask.OpValidator(v); err != nil {
+			return &ValidationError{Name: "op", err: fmt.Errorf(`ent: validator failed for field "Task.op": %w`, err)}
+		}
 	}
 	return nil
 }
@@ -193,6 +247,18 @@ func (tc *TaskCreate) createSpec() (*Task, *sqlgraph.CreateSpec) {
 	if value, ok := tc.mutation.Owner(); ok {
 		_spec.SetField(enttask.FieldOwner, field.TypeString, value)
 		_node.Owner = value
+	}
+	if value, ok := tc.mutation.Order(); ok {
+		_spec.SetField(enttask.FieldOrder, field.TypeInt, value)
+		_node.Order = value
+	}
+	if value, ok := tc.mutation.OrderOption(); ok {
+		_spec.SetField(enttask.FieldOrderOption, field.TypeInt, value)
+		_node.OrderOption = value
+	}
+	if value, ok := tc.mutation.GetOp(); ok {
+		_spec.SetField(enttask.FieldOp, field.TypeString, value)
+		_node.Op = value
 	}
 	return _node, _spec
 }
@@ -315,6 +381,66 @@ func (u *TaskUpsert) UpdateOwner() *TaskUpsert {
 // ClearOwner clears the value of the "owner" field.
 func (u *TaskUpsert) ClearOwner() *TaskUpsert {
 	u.SetNull(enttask.FieldOwner)
+	return u
+}
+
+// SetOrder sets the "order" field.
+func (u *TaskUpsert) SetOrder(v int) *TaskUpsert {
+	u.Set(enttask.FieldOrder, v)
+	return u
+}
+
+// UpdateOrder sets the "order" field to the value that was provided on create.
+func (u *TaskUpsert) UpdateOrder() *TaskUpsert {
+	u.SetExcluded(enttask.FieldOrder)
+	return u
+}
+
+// AddOrder adds v to the "order" field.
+func (u *TaskUpsert) AddOrder(v int) *TaskUpsert {
+	u.Add(enttask.FieldOrder, v)
+	return u
+}
+
+// ClearOrder clears the value of the "order" field.
+func (u *TaskUpsert) ClearOrder() *TaskUpsert {
+	u.SetNull(enttask.FieldOrder)
+	return u
+}
+
+// SetOrderOption sets the "order_option" field.
+func (u *TaskUpsert) SetOrderOption(v int) *TaskUpsert {
+	u.Set(enttask.FieldOrderOption, v)
+	return u
+}
+
+// UpdateOrderOption sets the "order_option" field to the value that was provided on create.
+func (u *TaskUpsert) UpdateOrderOption() *TaskUpsert {
+	u.SetExcluded(enttask.FieldOrderOption)
+	return u
+}
+
+// AddOrderOption adds v to the "order_option" field.
+func (u *TaskUpsert) AddOrderOption(v int) *TaskUpsert {
+	u.Add(enttask.FieldOrderOption, v)
+	return u
+}
+
+// ClearOrderOption clears the value of the "order_option" field.
+func (u *TaskUpsert) ClearOrderOption() *TaskUpsert {
+	u.SetNull(enttask.FieldOrderOption)
+	return u
+}
+
+// SetOp sets the "op" field.
+func (u *TaskUpsert) SetOp(v string) *TaskUpsert {
+	u.Set(enttask.FieldOp, v)
+	return u
+}
+
+// UpdateOp sets the "op" field to the value that was provided on create.
+func (u *TaskUpsert) UpdateOp() *TaskUpsert {
+	u.SetExcluded(enttask.FieldOp)
 	return u
 }
 
@@ -447,6 +573,76 @@ func (u *TaskUpsertOne) ClearOwner() *TaskUpsertOne {
 	})
 }
 
+// SetOrder sets the "order" field.
+func (u *TaskUpsertOne) SetOrder(v int) *TaskUpsertOne {
+	return u.Update(func(s *TaskUpsert) {
+		s.SetOrder(v)
+	})
+}
+
+// AddOrder adds v to the "order" field.
+func (u *TaskUpsertOne) AddOrder(v int) *TaskUpsertOne {
+	return u.Update(func(s *TaskUpsert) {
+		s.AddOrder(v)
+	})
+}
+
+// UpdateOrder sets the "order" field to the value that was provided on create.
+func (u *TaskUpsertOne) UpdateOrder() *TaskUpsertOne {
+	return u.Update(func(s *TaskUpsert) {
+		s.UpdateOrder()
+	})
+}
+
+// ClearOrder clears the value of the "order" field.
+func (u *TaskUpsertOne) ClearOrder() *TaskUpsertOne {
+	return u.Update(func(s *TaskUpsert) {
+		s.ClearOrder()
+	})
+}
+
+// SetOrderOption sets the "order_option" field.
+func (u *TaskUpsertOne) SetOrderOption(v int) *TaskUpsertOne {
+	return u.Update(func(s *TaskUpsert) {
+		s.SetOrderOption(v)
+	})
+}
+
+// AddOrderOption adds v to the "order_option" field.
+func (u *TaskUpsertOne) AddOrderOption(v int) *TaskUpsertOne {
+	return u.Update(func(s *TaskUpsert) {
+		s.AddOrderOption(v)
+	})
+}
+
+// UpdateOrderOption sets the "order_option" field to the value that was provided on create.
+func (u *TaskUpsertOne) UpdateOrderOption() *TaskUpsertOne {
+	return u.Update(func(s *TaskUpsert) {
+		s.UpdateOrderOption()
+	})
+}
+
+// ClearOrderOption clears the value of the "order_option" field.
+func (u *TaskUpsertOne) ClearOrderOption() *TaskUpsertOne {
+	return u.Update(func(s *TaskUpsert) {
+		s.ClearOrderOption()
+	})
+}
+
+// SetOp sets the "op" field.
+func (u *TaskUpsertOne) SetOp(v string) *TaskUpsertOne {
+	return u.Update(func(s *TaskUpsert) {
+		s.SetOp(v)
+	})
+}
+
+// UpdateOp sets the "op" field to the value that was provided on create.
+func (u *TaskUpsertOne) UpdateOp() *TaskUpsertOne {
+	return u.Update(func(s *TaskUpsert) {
+		s.UpdateOp()
+	})
+}
+
 // Exec executes the query.
 func (u *TaskUpsertOne) Exec(ctx context.Context) error {
 	if len(u.create.conflict) == 0 {
@@ -483,12 +679,16 @@ func (u *TaskUpsertOne) IDX(ctx context.Context) int {
 // TaskCreateBulk is the builder for creating many Task entities in bulk.
 type TaskCreateBulk struct {
 	config
+	err      error
 	builders []*TaskCreate
 	conflict []sql.ConflictOption
 }
 
 // Save creates the Task entities in the database.
 func (tcb *TaskCreateBulk) Save(ctx context.Context) ([]*Task, error) {
+	if tcb.err != nil {
+		return nil, tcb.err
+	}
 	specs := make([]*sqlgraph.CreateSpec, len(tcb.builders))
 	nodes := make([]*Task, len(tcb.builders))
 	mutators := make([]Mutator, len(tcb.builders))
@@ -505,8 +705,8 @@ func (tcb *TaskCreateBulk) Save(ctx context.Context) ([]*Task, error) {
 					return nil, err
 				}
 				builder.mutation = mutation
-				nodes[i], specs[i] = builder.createSpec()
 				var err error
+				nodes[i], specs[i] = builder.createSpec()
 				if i < len(mutators)-1 {
 					_, err = mutators[i+1].Mutate(root, tcb.builders[i+1].mutation)
 				} else {
@@ -738,8 +938,81 @@ func (u *TaskUpsertBulk) ClearOwner() *TaskUpsertBulk {
 	})
 }
 
+// SetOrder sets the "order" field.
+func (u *TaskUpsertBulk) SetOrder(v int) *TaskUpsertBulk {
+	return u.Update(func(s *TaskUpsert) {
+		s.SetOrder(v)
+	})
+}
+
+// AddOrder adds v to the "order" field.
+func (u *TaskUpsertBulk) AddOrder(v int) *TaskUpsertBulk {
+	return u.Update(func(s *TaskUpsert) {
+		s.AddOrder(v)
+	})
+}
+
+// UpdateOrder sets the "order" field to the value that was provided on create.
+func (u *TaskUpsertBulk) UpdateOrder() *TaskUpsertBulk {
+	return u.Update(func(s *TaskUpsert) {
+		s.UpdateOrder()
+	})
+}
+
+// ClearOrder clears the value of the "order" field.
+func (u *TaskUpsertBulk) ClearOrder() *TaskUpsertBulk {
+	return u.Update(func(s *TaskUpsert) {
+		s.ClearOrder()
+	})
+}
+
+// SetOrderOption sets the "order_option" field.
+func (u *TaskUpsertBulk) SetOrderOption(v int) *TaskUpsertBulk {
+	return u.Update(func(s *TaskUpsert) {
+		s.SetOrderOption(v)
+	})
+}
+
+// AddOrderOption adds v to the "order_option" field.
+func (u *TaskUpsertBulk) AddOrderOption(v int) *TaskUpsertBulk {
+	return u.Update(func(s *TaskUpsert) {
+		s.AddOrderOption(v)
+	})
+}
+
+// UpdateOrderOption sets the "order_option" field to the value that was provided on create.
+func (u *TaskUpsertBulk) UpdateOrderOption() *TaskUpsertBulk {
+	return u.Update(func(s *TaskUpsert) {
+		s.UpdateOrderOption()
+	})
+}
+
+// ClearOrderOption clears the value of the "order_option" field.
+func (u *TaskUpsertBulk) ClearOrderOption() *TaskUpsertBulk {
+	return u.Update(func(s *TaskUpsert) {
+		s.ClearOrderOption()
+	})
+}
+
+// SetOp sets the "op" field.
+func (u *TaskUpsertBulk) SetOp(v string) *TaskUpsertBulk {
+	return u.Update(func(s *TaskUpsert) {
+		s.SetOp(v)
+	})
+}
+
+// UpdateOp sets the "op" field to the value that was provided on create.
+func (u *TaskUpsertBulk) UpdateOp() *TaskUpsertBulk {
+	return u.Update(func(s *TaskUpsert) {
+		s.UpdateOp()
+	})
+}
+
 // Exec executes the query.
 func (u *TaskUpsertBulk) Exec(ctx context.Context) error {
+	if u.create.err != nil {
+		return u.create.err
+	}
 	for i, b := range u.create.builders {
 		if len(b.conflict) != 0 {
 			return fmt.Errorf("ent: OnConflict was set for builder %d. Set it on the TaskCreateBulk instead", i)

@@ -54,9 +54,25 @@ func (ttu *TweetTagUpdate) SetTagID(i int) *TweetTagUpdate {
 	return ttu
 }
 
+// SetNillableTagID sets the "tag_id" field if the given value is not nil.
+func (ttu *TweetTagUpdate) SetNillableTagID(i *int) *TweetTagUpdate {
+	if i != nil {
+		ttu.SetTagID(*i)
+	}
+	return ttu
+}
+
 // SetTweetID sets the "tweet_id" field.
 func (ttu *TweetTagUpdate) SetTweetID(i int) *TweetTagUpdate {
 	ttu.mutation.SetTweetID(i)
+	return ttu
+}
+
+// SetNillableTweetID sets the "tweet_id" field if the given value is not nil.
+func (ttu *TweetTagUpdate) SetNillableTweetID(i *int) *TweetTagUpdate {
+	if i != nil {
+		ttu.SetTweetID(*i)
+	}
 	return ttu
 }
 
@@ -89,7 +105,7 @@ func (ttu *TweetTagUpdate) ClearTweet() *TweetTagUpdate {
 
 // Save executes the query and returns the number of nodes affected by the update operation.
 func (ttu *TweetTagUpdate) Save(ctx context.Context) (int, error) {
-	return withHooks[int, TweetTagMutation](ctx, ttu.sqlSave, ttu.mutation, ttu.hooks)
+	return withHooks(ctx, ttu.sqlSave, ttu.mutation, ttu.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
@@ -116,10 +132,10 @@ func (ttu *TweetTagUpdate) ExecX(ctx context.Context) {
 
 // check runs all checks and user-defined validators on the builder.
 func (ttu *TweetTagUpdate) check() error {
-	if _, ok := ttu.mutation.TagID(); ttu.mutation.TagCleared() && !ok {
+	if ttu.mutation.TagCleared() && len(ttu.mutation.TagIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "TweetTag.tag"`)
 	}
-	if _, ok := ttu.mutation.TweetID(); ttu.mutation.TweetCleared() && !ok {
+	if ttu.mutation.TweetCleared() && len(ttu.mutation.TweetIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "TweetTag.tweet"`)
 	}
 	return nil
@@ -238,9 +254,25 @@ func (ttuo *TweetTagUpdateOne) SetTagID(i int) *TweetTagUpdateOne {
 	return ttuo
 }
 
+// SetNillableTagID sets the "tag_id" field if the given value is not nil.
+func (ttuo *TweetTagUpdateOne) SetNillableTagID(i *int) *TweetTagUpdateOne {
+	if i != nil {
+		ttuo.SetTagID(*i)
+	}
+	return ttuo
+}
+
 // SetTweetID sets the "tweet_id" field.
 func (ttuo *TweetTagUpdateOne) SetTweetID(i int) *TweetTagUpdateOne {
 	ttuo.mutation.SetTweetID(i)
+	return ttuo
+}
+
+// SetNillableTweetID sets the "tweet_id" field if the given value is not nil.
+func (ttuo *TweetTagUpdateOne) SetNillableTweetID(i *int) *TweetTagUpdateOne {
+	if i != nil {
+		ttuo.SetTweetID(*i)
+	}
 	return ttuo
 }
 
@@ -286,7 +318,7 @@ func (ttuo *TweetTagUpdateOne) Select(field string, fields ...string) *TweetTagU
 
 // Save executes the query and returns the updated TweetTag entity.
 func (ttuo *TweetTagUpdateOne) Save(ctx context.Context) (*TweetTag, error) {
-	return withHooks[*TweetTag, TweetTagMutation](ctx, ttuo.sqlSave, ttuo.mutation, ttuo.hooks)
+	return withHooks(ctx, ttuo.sqlSave, ttuo.mutation, ttuo.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
@@ -313,10 +345,10 @@ func (ttuo *TweetTagUpdateOne) ExecX(ctx context.Context) {
 
 // check runs all checks and user-defined validators on the builder.
 func (ttuo *TweetTagUpdateOne) check() error {
-	if _, ok := ttuo.mutation.TagID(); ttuo.mutation.TagCleared() && !ok {
+	if ttuo.mutation.TagCleared() && len(ttuo.mutation.TagIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "TweetTag.tag"`)
 	}
-	if _, ok := ttuo.mutation.TweetID(); ttuo.mutation.TweetCleared() && !ok {
+	if ttuo.mutation.TweetCleared() && len(ttuo.mutation.TweetIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "TweetTag.tweet"`)
 	}
 	return nil

@@ -17,7 +17,7 @@ in the LICENSE file in the root directory of this source tree.
 {{ end }}
 
 {{ $builder := $.CreateName }}
-{{ $receiver := receiver $builder }}
+{{ $receiver := $.CreateReceiver }}
 {{ $mutation := print $receiver ".mutation" }}
 
 // {{ $builder }} is the builder for creating a {{ $.Name }} entity.
@@ -32,7 +32,7 @@ type {{ $builder }} struct {
 	{{- end }}
 }
 
-{{ with extend $ "Builder" $builder }}
+{{ with extend $ "Receiver" $receiver "Builder" $builder }}
 	{{ template "setter" . }}
 {{ end }}
 
@@ -47,7 +47,7 @@ func ({{ $receiver }} *{{ $builder }}) Save(ctx context.Context) (*{{ $.Name }},
 			{{ $receiver }}.defaults()
 		{{- end }}
 	{{- end }}
-	return withHooks[*{{ $.Name }}, {{ $.MutationName }}](ctx, {{ $receiver }}.{{ $.Storage }}Save, {{ $mutation }}, {{ $receiver }}.hooks)
+	return withHooks(ctx, {{ $receiver }}.{{ $.Storage }}Save, {{ $mutation }}, {{ $receiver }}.hooks)
 }
 
 // SaveX calls Save and panics if Save returns an error.
@@ -85,7 +85,7 @@ func ({{ $receiver }} *{{ $builder }}) ExecX(ctx context.Context) {
 						}
 					{{- end }}
 					v := {{ $.Package }}.{{ $f.DefaultName }}{{ if $f.DefaultFunc }}(){{ end }}
-					{{ $mutation }}.Set{{ $f.StructField }}(v)
+					{{ $mutation }}.{{ $f.MutationSet }}(v)
 				}
 			{{- end }}
 		{{- end }}
@@ -127,11 +127,7 @@ func ({{ $receiver }} *{{ $builder }}) check() error {
 	{{- end }}
 	{{- range $e := $.EdgesWithID }}
 		{{- if not $e.Optional }}
-			{{- if $e.Unique }}
-				if _, ok := {{ $mutation }}.{{ $e.StructField }}ID(); !ok {
-			{{- else }}
-				if len({{ $mutation }}.{{ $e.StructField }}IDs()) == 0 {
-			{{- end }}
+			if len({{ $mutation }}.{{ $e.StructField }}IDs()) == 0 {
 				return &ValidationError{Name: "{{ $e.Name }}", err: errors.New(`{{ $pkg }}: missing required edge "{{ $.Name }}.{{ $e.Name }}"`)}
 			}
 		{{- end }}
@@ -139,7 +135,7 @@ func ({{ $receiver }} *{{ $builder }}) check() error {
 	return nil
 }
 
-{{ with extend $ "Builder" $builder }}
+{{ with extend $ "Receiver" $receiver "Builder" $builder }}
 	{{ $tmpl := printf "dialect/%s/create" $.Storage }}
 	{{ xtemplate $tmpl . }}
 {{ end }}
@@ -157,6 +153,7 @@ func ({{ $receiver }} *{{ $builder }}) check() error {
 // {{ $bulk }} is the builder for creating many {{ $.Name }} entities in bulk.
 type {{ $bulk }} struct {
 	config
+	err error
 	builders []*{{  $builder }}
 	{{- /* Additional fields to add to the builder. */}}
 	{{- $tmpl = printf "dialect/%s/create_bulk/fields" $.Storage }}

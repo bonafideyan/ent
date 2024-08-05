@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"strings"
 
+	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/entc/integration/customid/ent/note"
 	"entgo.io/ent/entc/integration/customid/ent/schema"
@@ -26,6 +27,7 @@ type Note struct {
 	// The values are being populated by the NoteQuery when eager-loading is set.
 	Edges         NoteEdges `json:"edges"`
 	note_children *schema.NoteID
+	selectValues  sql.SelectValues
 }
 
 // NoteEdges holds the relations/edges for other nodes in the graph.
@@ -42,12 +44,10 @@ type NoteEdges struct {
 // ParentOrErr returns the Parent value or an error if the edge
 // was not loaded in eager-loading, or loaded but was not found.
 func (e NoteEdges) ParentOrErr() (*Note, error) {
-	if e.loadedTypes[0] {
-		if e.Parent == nil {
-			// Edge was loaded but was not found.
-			return nil, &NotFoundError{label: note.Label}
-		}
+	if e.Parent != nil {
 		return e.Parent, nil
+	} else if e.loadedTypes[0] {
+		return nil, &NotFoundError{label: note.Label}
 	}
 	return nil, &NotLoadedError{edge: "parent"}
 }
@@ -71,7 +71,7 @@ func (*Note) scanValues(columns []string) ([]any, error) {
 		case note.ForeignKeys[0]: // note_children
 			values[i] = new(sql.NullString)
 		default:
-			return nil, fmt.Errorf("unexpected column %q for type Note", columns[i])
+			values[i] = new(sql.UnknownType)
 		}
 	}
 	return values, nil
@@ -104,9 +104,17 @@ func (n *Note) assignValues(columns []string, values []any) error {
 				n.note_children = new(schema.NoteID)
 				*n.note_children = schema.NoteID(value.String)
 			}
+		default:
+			n.selectValues.Set(columns[i], values[i])
 		}
 	}
 	return nil
+}
+
+// Value returns the ent.Value that was dynamically selected and assigned to the Note.
+// This includes values selected through modifiers, order, etc.
+func (n *Note) Value(name string) (ent.Value, error) {
+	return n.selectValues.Get(name)
 }
 
 // QueryParent queries the "parent" edge of the Note entity.

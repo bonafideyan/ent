@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"strings"
 
+	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/entc/integration/customid/ent/doc"
 	"entgo.io/ent/entc/integration/customid/ent/schema"
@@ -26,6 +27,7 @@ type Doc struct {
 	// The values are being populated by the DocQuery when eager-loading is set.
 	Edges        DocEdges `json:"edges"`
 	doc_children *schema.DocID
+	selectValues sql.SelectValues
 }
 
 // DocEdges holds the relations/edges for other nodes in the graph.
@@ -44,12 +46,10 @@ type DocEdges struct {
 // ParentOrErr returns the Parent value or an error if the edge
 // was not loaded in eager-loading, or loaded but was not found.
 func (e DocEdges) ParentOrErr() (*Doc, error) {
-	if e.loadedTypes[0] {
-		if e.Parent == nil {
-			// Edge was loaded but was not found.
-			return nil, &NotFoundError{label: doc.Label}
-		}
+	if e.Parent != nil {
 		return e.Parent, nil
+	} else if e.loadedTypes[0] {
+		return nil, &NotFoundError{label: doc.Label}
 	}
 	return nil, &NotLoadedError{edge: "parent"}
 }
@@ -84,7 +84,7 @@ func (*Doc) scanValues(columns []string) ([]any, error) {
 		case doc.ForeignKeys[0]: // doc_children
 			values[i] = &sql.NullScanner{S: new(schema.DocID)}
 		default:
-			return nil, fmt.Errorf("unexpected column %q for type Doc", columns[i])
+			values[i] = new(sql.UnknownType)
 		}
 	}
 	return values, nil
@@ -117,9 +117,17 @@ func (d *Doc) assignValues(columns []string, values []any) error {
 				d.doc_children = new(schema.DocID)
 				*d.doc_children = *value.S.(*schema.DocID)
 			}
+		default:
+			d.selectValues.Set(columns[i], values[i])
 		}
 	}
 	return nil
+}
+
+// Value returns the ent.Value that was dynamically selected and assigned to the Doc.
+// This includes values selected through modifiers, order, etc.
+func (d *Doc) Value(name string) (ent.Value, error) {
+	return d.selectValues.Get(name)
 }
 
 // QueryParent queries the "parent" edge of the Doc entity.

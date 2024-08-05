@@ -74,7 +74,7 @@ func (tlc *TweetLikeCreate) Save(ctx context.Context) (*TweetLike, error) {
 	if err := tlc.defaults(); err != nil {
 		return nil, err
 	}
-	return withHooks[*TweetLike, TweetLikeMutation](ctx, tlc.sqlSave, tlc.mutation, tlc.hooks)
+	return withHooks(ctx, tlc.sqlSave, tlc.mutation, tlc.hooks)
 }
 
 // SaveX calls Save and panics if Save returns an error.
@@ -122,10 +122,10 @@ func (tlc *TweetLikeCreate) check() error {
 	if _, ok := tlc.mutation.TweetID(); !ok {
 		return &ValidationError{Name: "tweet_id", err: errors.New(`ent: missing required field "TweetLike.tweet_id"`)}
 	}
-	if _, ok := tlc.mutation.TweetID(); !ok {
+	if len(tlc.mutation.TweetIDs()) == 0 {
 		return &ValidationError{Name: "tweet", err: errors.New(`ent: missing required edge "TweetLike.tweet"`)}
 	}
-	if _, ok := tlc.mutation.UserID(); !ok {
+	if len(tlc.mutation.UserIDs()) == 0 {
 		return &ValidationError{Name: "user", err: errors.New(`ent: missing required edge "TweetLike.user"`)}
 	}
 	return nil
@@ -377,12 +377,16 @@ func (u *TweetLikeUpsertOne) ExecX(ctx context.Context) {
 // TweetLikeCreateBulk is the builder for creating many TweetLike entities in bulk.
 type TweetLikeCreateBulk struct {
 	config
+	err      error
 	builders []*TweetLikeCreate
 	conflict []sql.ConflictOption
 }
 
 // Save creates the TweetLike entities in the database.
 func (tlcb *TweetLikeCreateBulk) Save(ctx context.Context) ([]*TweetLike, error) {
+	if tlcb.err != nil {
+		return nil, tlcb.err
+	}
 	specs := make([]*sqlgraph.CreateSpec, len(tlcb.builders))
 	nodes := make([]*TweetLike, len(tlcb.builders))
 	mutators := make([]Mutator, len(tlcb.builders))
@@ -399,8 +403,8 @@ func (tlcb *TweetLikeCreateBulk) Save(ctx context.Context) ([]*TweetLike, error)
 					return nil, err
 				}
 				builder.mutation = mutation
-				nodes[i], specs[i] = builder.createSpec()
 				var err error
+				nodes[i], specs[i] = builder.createSpec()
 				if i < len(mutators)-1 {
 					_, err = mutators[i+1].Mutate(root, tlcb.builders[i+1].mutation)
 				} else {
@@ -580,6 +584,9 @@ func (u *TweetLikeUpsertBulk) UpdateTweetID() *TweetLikeUpsertBulk {
 
 // Exec executes the query.
 func (u *TweetLikeUpsertBulk) Exec(ctx context.Context) error {
+	if u.create.err != nil {
+		return u.create.err
+	}
 	for i, b := range u.create.builders {
 		if len(b.conflict) != 0 {
 			return fmt.Errorf("ent: OnConflict was set for builder %d. Set it on the TweetLikeCreateBulk instead", i)

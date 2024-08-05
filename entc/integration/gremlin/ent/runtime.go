@@ -8,13 +8,16 @@ package ent
 
 import (
 	"database/sql"
+	"math/big"
 	"net"
 	"net/http"
+	"net/url"
 	"time"
 
 	"entgo.io/ent/entc/integration/ent/schema"
 	"entgo.io/ent/entc/integration/ent/schema/task"
 	"entgo.io/ent/entc/integration/gremlin/ent/card"
+	"entgo.io/ent/entc/integration/gremlin/ent/exvaluescan"
 	"entgo.io/ent/entc/integration/gremlin/ent/fieldtype"
 	"entgo.io/ent/entc/integration/gremlin/ent/file"
 	"entgo.io/ent/entc/integration/gremlin/ent/group"
@@ -25,6 +28,8 @@ import (
 	"entgo.io/ent/entc/integration/gremlin/ent/pet"
 	enttask "entgo.io/ent/entc/integration/gremlin/ent/task"
 	"entgo.io/ent/entc/integration/gremlin/ent/user"
+
+	"entgo.io/ent/schema/field"
 )
 
 // The init function reads all schema descriptors with runtime code
@@ -58,6 +63,32 @@ func init() {
 	cardDescName := cardFields[2].Descriptor()
 	// card.NameValidator is a validator for the "name" field. It is called by the builders before save.
 	card.NameValidator = cardDescName.Validators[0].(func(string) error)
+	exvaluescanFields := schema.ExValueScan{}.Fields()
+	_ = exvaluescanFields
+	// exvaluescanDescBinary is the schema descriptor for binary field.
+	exvaluescanDescBinary := exvaluescanFields[0].Descriptor()
+	exvaluescan.ValueScanner.Binary = exvaluescanDescBinary.ValueScanner.(field.TypeValueScanner[*url.URL])
+	// exvaluescanDescBinaryBytes is the schema descriptor for binary_bytes field.
+	exvaluescanDescBinaryBytes := exvaluescanFields[1].Descriptor()
+	exvaluescan.ValueScanner.BinaryBytes = exvaluescanDescBinaryBytes.ValueScanner.(field.TypeValueScanner[*url.URL])
+	// exvaluescanDescBinaryOptional is the schema descriptor for binary_optional field.
+	exvaluescanDescBinaryOptional := exvaluescanFields[2].Descriptor()
+	exvaluescan.ValueScanner.BinaryOptional = exvaluescanDescBinaryOptional.ValueScanner.(field.TypeValueScanner[*url.URL])
+	// exvaluescanDescText is the schema descriptor for text field.
+	exvaluescanDescText := exvaluescanFields[3].Descriptor()
+	exvaluescan.ValueScanner.Text = exvaluescanDescText.ValueScanner.(field.TypeValueScanner[*big.Int])
+	// exvaluescanDescTextOptional is the schema descriptor for text_optional field.
+	exvaluescanDescTextOptional := exvaluescanFields[4].Descriptor()
+	exvaluescan.ValueScanner.TextOptional = exvaluescanDescTextOptional.ValueScanner.(field.TypeValueScanner[*big.Int])
+	// exvaluescanDescBase64 is the schema descriptor for base64 field.
+	exvaluescanDescBase64 := exvaluescanFields[5].Descriptor()
+	exvaluescan.ValueScanner.Base64 = exvaluescanDescBase64.ValueScanner.(field.TypeValueScanner[string])
+	// exvaluescanDescCustom is the schema descriptor for custom field.
+	exvaluescanDescCustom := exvaluescanFields[6].Descriptor()
+	exvaluescan.ValueScanner.Custom = exvaluescanDescCustom.ValueScanner.(field.TypeValueScanner[string])
+	// exvaluescanDescCustomOptional is the schema descriptor for custom_optional field.
+	exvaluescanDescCustomOptional := exvaluescanFields[7].Descriptor()
+	exvaluescan.ValueScanner.CustomOptional = exvaluescanDescCustomOptional.ValueScanner.(field.TypeValueScanner[string])
 	fieldtypeFields := schema.FieldType{}.Fields()
 	_ = fieldtypeFields
 	// fieldtypeDescInt64 is the schema descriptor for int64 field.
@@ -148,8 +179,12 @@ func init() {
 	fieldtype.DefaultTriple = fieldtypeDescTriple.Default.(func() schema.Triple)
 	fileFields := schema.File{}.Fields()
 	_ = fileFields
+	// fileDescSetID is the schema descriptor for set_id field.
+	fileDescSetID := fileFields[0].Descriptor()
+	// file.SetIDValidator is a validator for the "set_id" field. It is called by the builders before save.
+	file.SetIDValidator = fileDescSetID.Validators[0].(func(int) error)
 	// fileDescSize is the schema descriptor for size field.
-	fileDescSize := fileFields[0].Descriptor()
+	fileDescSize := fileFields[1].Descriptor()
 	// file.DefaultSize holds the default value on creation for the size field.
 	file.DefaultSize = fileDescSize.Default.(int)
 	// file.SizeValidator is a validator for the "size" field. It is called by the builders before save.
@@ -263,6 +298,12 @@ func init() {
 	enttaskDescCreatedAt := enttaskFields[2].Descriptor()
 	// enttask.DefaultCreatedAt holds the default value on creation for the created_at field.
 	enttask.DefaultCreatedAt = enttaskDescCreatedAt.Default.(func() time.Time)
+	// enttaskDescOp is the schema descriptor for op field.
+	enttaskDescOp := enttaskFields[7].Descriptor()
+	// enttask.DefaultOp holds the default value on creation for the op field.
+	enttask.DefaultOp = enttaskDescOp.Default.(string)
+	// enttask.OpValidator is a validator for the "op" field. It is called by the builders before save.
+	enttask.OpValidator = enttaskDescOp.Validators[0].(func(string) error)
 	userMixin := schema.User{}.Mixin()
 	userMixinFields0 := userMixin[0].Fields()
 	_ = userMixinFields0

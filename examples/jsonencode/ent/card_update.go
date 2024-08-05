@@ -37,6 +37,14 @@ func (cu *CardUpdate) SetNumber(s string) *CardUpdate {
 	return cu
 }
 
+// SetNillableNumber sets the "number" field if the given value is not nil.
+func (cu *CardUpdate) SetNillableNumber(s *string) *CardUpdate {
+	if s != nil {
+		cu.SetNumber(*s)
+	}
+	return cu
+}
+
 // Mutation returns the CardMutation object of the builder.
 func (cu *CardUpdate) Mutation() *CardMutation {
 	return cu.mutation
@@ -44,7 +52,7 @@ func (cu *CardUpdate) Mutation() *CardMutation {
 
 // Save executes the query and returns the number of nodes affected by the update operation.
 func (cu *CardUpdate) Save(ctx context.Context) (int, error) {
-	return withHooks[int, CardMutation](ctx, cu.sqlSave, cu.mutation, cu.hooks)
+	return withHooks(ctx, cu.sqlSave, cu.mutation, cu.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
@@ -107,6 +115,14 @@ func (cuo *CardUpdateOne) SetNumber(s string) *CardUpdateOne {
 	return cuo
 }
 
+// SetNillableNumber sets the "number" field if the given value is not nil.
+func (cuo *CardUpdateOne) SetNillableNumber(s *string) *CardUpdateOne {
+	if s != nil {
+		cuo.SetNumber(*s)
+	}
+	return cuo
+}
+
 // Mutation returns the CardMutation object of the builder.
 func (cuo *CardUpdateOne) Mutation() *CardMutation {
 	return cuo.mutation
@@ -127,7 +143,7 @@ func (cuo *CardUpdateOne) Select(field string, fields ...string) *CardUpdateOne 
 
 // Save executes the query and returns the updated Card entity.
 func (cuo *CardUpdateOne) Save(ctx context.Context) (*Card, error) {
-	return withHooks[*Card, CardMutation](ctx, cuo.sqlSave, cuo.mutation, cuo.hooks)
+	return withHooks(ctx, cuo.sqlSave, cuo.mutation, cuo.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.

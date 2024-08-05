@@ -92,6 +92,14 @@ func (cu *CarUpdate) SetModel(s string) *CarUpdate {
 	return cu
 }
 
+// SetNillableModel sets the "model" field if the given value is not nil.
+func (cu *CarUpdate) SetNillableModel(s *string) *CarUpdate {
+	if s != nil {
+		cu.SetModel(*s)
+	}
+	return cu
+}
+
 // SetOwnerID sets the "owner" edge to the Pet entity by ID.
 func (cu *CarUpdate) SetOwnerID(id string) *CarUpdate {
 	cu.mutation.SetOwnerID(id)
@@ -124,7 +132,7 @@ func (cu *CarUpdate) ClearOwner() *CarUpdate {
 
 // Save executes the query and returns the number of nodes affected by the update operation.
 func (cu *CarUpdate) Save(ctx context.Context) (int, error) {
-	return withHooks[int, CarMutation](ctx, cu.sqlSave, cu.mutation, cu.hooks)
+	return withHooks(ctx, cu.sqlSave, cu.mutation, cu.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
@@ -306,6 +314,14 @@ func (cuo *CarUpdateOne) SetModel(s string) *CarUpdateOne {
 	return cuo
 }
 
+// SetNillableModel sets the "model" field if the given value is not nil.
+func (cuo *CarUpdateOne) SetNillableModel(s *string) *CarUpdateOne {
+	if s != nil {
+		cuo.SetModel(*s)
+	}
+	return cuo
+}
+
 // SetOwnerID sets the "owner" edge to the Pet entity by ID.
 func (cuo *CarUpdateOne) SetOwnerID(id string) *CarUpdateOne {
 	cuo.mutation.SetOwnerID(id)
@@ -351,7 +367,7 @@ func (cuo *CarUpdateOne) Select(field string, fields ...string) *CarUpdateOne {
 
 // Save executes the query and returns the updated Car entity.
 func (cuo *CarUpdateOne) Save(ctx context.Context) (*Car, error) {
-	return withHooks[*Car, CarMutation](ctx, cuo.sqlSave, cuo.mutation, cuo.hooks)
+	return withHooks(ctx, cuo.sqlSave, cuo.mutation, cuo.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.

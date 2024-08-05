@@ -37,6 +37,14 @@ func (fu *FileUpdate) SetName(s string) *FileUpdate {
 	return fu
 }
 
+// SetNillableName sets the "name" field if the given value is not nil.
+func (fu *FileUpdate) SetNillableName(s *string) *FileUpdate {
+	if s != nil {
+		fu.SetName(*s)
+	}
+	return fu
+}
+
 // SetDeleted sets the "deleted" field.
 func (fu *FileUpdate) SetDeleted(b bool) *FileUpdate {
 	fu.mutation.SetDeleted(b)
@@ -125,7 +133,7 @@ func (fu *FileUpdate) RemoveChildren(f ...*File) *FileUpdate {
 
 // Save executes the query and returns the number of nodes affected by the update operation.
 func (fu *FileUpdate) Save(ctx context.Context) (int, error) {
-	return withHooks[int, FileMutation](ctx, fu.sqlSave, fu.mutation, fu.hooks)
+	return withHooks(ctx, fu.sqlSave, fu.mutation, fu.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
@@ -265,6 +273,14 @@ func (fuo *FileUpdateOne) SetName(s string) *FileUpdateOne {
 	return fuo
 }
 
+// SetNillableName sets the "name" field if the given value is not nil.
+func (fuo *FileUpdateOne) SetNillableName(s *string) *FileUpdateOne {
+	if s != nil {
+		fuo.SetName(*s)
+	}
+	return fuo
+}
+
 // SetDeleted sets the "deleted" field.
 func (fuo *FileUpdateOne) SetDeleted(b bool) *FileUpdateOne {
 	fuo.mutation.SetDeleted(b)
@@ -366,7 +382,7 @@ func (fuo *FileUpdateOne) Select(field string, fields ...string) *FileUpdateOne 
 
 // Save executes the query and returns the updated File entity.
 func (fuo *FileUpdateOne) Save(ctx context.Context) (*File, error) {
-	return withHooks[*File, FileMutation](ctx, fuo.sqlSave, fuo.mutation, fuo.hooks)
+	return withHooks(ctx, fuo.sqlSave, fuo.mutation, fuo.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.

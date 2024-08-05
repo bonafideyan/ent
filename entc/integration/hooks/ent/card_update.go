@@ -73,6 +73,14 @@ func (cu *CardUpdate) SetInHook(s string) *CardUpdate {
 	return cu
 }
 
+// SetNillableInHook sets the "in_hook" field if the given value is not nil.
+func (cu *CardUpdate) SetNillableInHook(s *string) *CardUpdate {
+	if s != nil {
+		cu.SetInHook(*s)
+	}
+	return cu
+}
+
 // SetExpiredAt sets the "expired_at" field.
 func (cu *CardUpdate) SetExpiredAt(t time.Time) *CardUpdate {
 	cu.mutation.SetExpiredAt(t)
@@ -125,7 +133,7 @@ func (cu *CardUpdate) ClearOwner() *CardUpdate {
 
 // Save executes the query and returns the number of nodes affected by the update operation.
 func (cu *CardUpdate) Save(ctx context.Context) (int, error) {
-	return withHooks[int, CardMutation](ctx, cu.sqlSave, cu.mutation, cu.hooks)
+	return withHooks(ctx, cu.sqlSave, cu.mutation, cu.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
@@ -266,6 +274,14 @@ func (cuo *CardUpdateOne) SetInHook(s string) *CardUpdateOne {
 	return cuo
 }
 
+// SetNillableInHook sets the "in_hook" field if the given value is not nil.
+func (cuo *CardUpdateOne) SetNillableInHook(s *string) *CardUpdateOne {
+	if s != nil {
+		cuo.SetInHook(*s)
+	}
+	return cuo
+}
+
 // SetExpiredAt sets the "expired_at" field.
 func (cuo *CardUpdateOne) SetExpiredAt(t time.Time) *CardUpdateOne {
 	cuo.mutation.SetExpiredAt(t)
@@ -331,7 +347,7 @@ func (cuo *CardUpdateOne) Select(field string, fields ...string) *CardUpdateOne 
 
 // Save executes the query and returns the updated Card entity.
 func (cuo *CardUpdateOne) Save(ctx context.Context) (*Card, error) {
-	return withHooks[*Card, CardMutation](ctx, cuo.sqlSave, cuo.mutation, cuo.hooks)
+	return withHooks(ctx, cuo.sqlSave, cuo.mutation, cuo.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.

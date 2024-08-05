@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"math"
 
+	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/entc/integration/edgeschema/ent/predicate"
@@ -23,7 +24,7 @@ import (
 type RoleUserQuery struct {
 	config
 	ctx        *QueryContext
-	order      []OrderFunc
+	order      []roleuser.OrderOption
 	inters     []Interceptor
 	predicates []predicate.RoleUser
 	withRole   *RoleQuery
@@ -59,7 +60,7 @@ func (ruq *RoleUserQuery) Unique(unique bool) *RoleUserQuery {
 }
 
 // Order specifies how the records should be ordered.
-func (ruq *RoleUserQuery) Order(o ...OrderFunc) *RoleUserQuery {
+func (ruq *RoleUserQuery) Order(o ...roleuser.OrderOption) *RoleUserQuery {
 	ruq.order = append(ruq.order, o...)
 	return ruq
 }
@@ -111,7 +112,7 @@ func (ruq *RoleUserQuery) QueryUser() *UserQuery {
 // First returns the first RoleUser entity from the query.
 // Returns a *NotFoundError when no RoleUser was found.
 func (ruq *RoleUserQuery) First(ctx context.Context) (*RoleUser, error) {
-	nodes, err := ruq.Limit(1).All(setContextOp(ctx, ruq.ctx, "First"))
+	nodes, err := ruq.Limit(1).All(setContextOp(ctx, ruq.ctx, ent.OpQueryFirst))
 	if err != nil {
 		return nil, err
 	}
@@ -134,7 +135,7 @@ func (ruq *RoleUserQuery) FirstX(ctx context.Context) *RoleUser {
 // Returns a *NotSingularError when more than one RoleUser entity is found.
 // Returns a *NotFoundError when no RoleUser entities are found.
 func (ruq *RoleUserQuery) Only(ctx context.Context) (*RoleUser, error) {
-	nodes, err := ruq.Limit(2).All(setContextOp(ctx, ruq.ctx, "Only"))
+	nodes, err := ruq.Limit(2).All(setContextOp(ctx, ruq.ctx, ent.OpQueryOnly))
 	if err != nil {
 		return nil, err
 	}
@@ -159,7 +160,7 @@ func (ruq *RoleUserQuery) OnlyX(ctx context.Context) *RoleUser {
 
 // All executes the query and returns a list of RoleUsers.
 func (ruq *RoleUserQuery) All(ctx context.Context) ([]*RoleUser, error) {
-	ctx = setContextOp(ctx, ruq.ctx, "All")
+	ctx = setContextOp(ctx, ruq.ctx, ent.OpQueryAll)
 	if err := ruq.prepareQuery(ctx); err != nil {
 		return nil, err
 	}
@@ -178,7 +179,7 @@ func (ruq *RoleUserQuery) AllX(ctx context.Context) []*RoleUser {
 
 // Count returns the count of the given query.
 func (ruq *RoleUserQuery) Count(ctx context.Context) (int, error) {
-	ctx = setContextOp(ctx, ruq.ctx, "Count")
+	ctx = setContextOp(ctx, ruq.ctx, ent.OpQueryCount)
 	if err := ruq.prepareQuery(ctx); err != nil {
 		return 0, err
 	}
@@ -196,7 +197,7 @@ func (ruq *RoleUserQuery) CountX(ctx context.Context) int {
 
 // Exist returns true if the query has elements in the graph.
 func (ruq *RoleUserQuery) Exist(ctx context.Context) (bool, error) {
-	ctx = setContextOp(ctx, ruq.ctx, "Exist")
+	ctx = setContextOp(ctx, ruq.ctx, ent.OpQueryExist)
 	switch _, err := ruq.First(ctx); {
 	case IsNotFound(err):
 		return false, nil
@@ -225,7 +226,7 @@ func (ruq *RoleUserQuery) Clone() *RoleUserQuery {
 	return &RoleUserQuery{
 		config:     ruq.config,
 		ctx:        ruq.ctx.Clone(),
-		order:      append([]OrderFunc{}, ruq.order...),
+		order:      append([]roleuser.OrderOption{}, ruq.order...),
 		inters:     append([]Interceptor{}, ruq.inters...),
 		predicates: append([]predicate.RoleUser{}, ruq.predicates...),
 		withRole:   ruq.withRole.Clone(),
@@ -453,6 +454,12 @@ func (ruq *RoleUserQuery) querySpec() *sqlgraph.QuerySpec {
 		for i := range fields {
 			_spec.Node.Columns = append(_spec.Node.Columns, fields[i])
 		}
+		if ruq.withRole != nil {
+			_spec.Node.AddColumnOnce(roleuser.FieldRoleID)
+		}
+		if ruq.withUser != nil {
+			_spec.Node.AddColumnOnce(roleuser.FieldUserID)
+		}
 	}
 	if ps := ruq.predicates; len(ps) > 0 {
 		_spec.Predicate = func(selector *sql.Selector) {
@@ -523,7 +530,7 @@ func (rugb *RoleUserGroupBy) Aggregate(fns ...AggregateFunc) *RoleUserGroupBy {
 
 // Scan applies the selector query and scans the result into the given value.
 func (rugb *RoleUserGroupBy) Scan(ctx context.Context, v any) error {
-	ctx = setContextOp(ctx, rugb.build.ctx, "GroupBy")
+	ctx = setContextOp(ctx, rugb.build.ctx, ent.OpQueryGroupBy)
 	if err := rugb.build.prepareQuery(ctx); err != nil {
 		return err
 	}
@@ -571,7 +578,7 @@ func (rus *RoleUserSelect) Aggregate(fns ...AggregateFunc) *RoleUserSelect {
 
 // Scan applies the selector query and scans the result into the given value.
 func (rus *RoleUserSelect) Scan(ctx context.Context, v any) error {
-	ctx = setContextOp(ctx, rus.ctx, "Select")
+	ctx = setContextOp(ctx, rus.ctx, ent.OpQuerySelect)
 	if err := rus.prepareQuery(ctx); err != nil {
 		return err
 	}

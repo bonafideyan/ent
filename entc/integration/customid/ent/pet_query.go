@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"math"
 
+	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/entc/integration/customid/ent/car"
@@ -25,7 +26,7 @@ import (
 type PetQuery struct {
 	config
 	ctx            *QueryContext
-	order          []OrderFunc
+	order          []pet.OrderOption
 	inters         []Interceptor
 	predicates     []predicate.Pet
 	withOwner      *UserQuery
@@ -64,7 +65,7 @@ func (pq *PetQuery) Unique(unique bool) *PetQuery {
 }
 
 // Order specifies how the records should be ordered.
-func (pq *PetQuery) Order(o ...OrderFunc) *PetQuery {
+func (pq *PetQuery) Order(o ...pet.OrderOption) *PetQuery {
 	pq.order = append(pq.order, o...)
 	return pq
 }
@@ -160,7 +161,7 @@ func (pq *PetQuery) QueryBestFriend() *PetQuery {
 // First returns the first Pet entity from the query.
 // Returns a *NotFoundError when no Pet was found.
 func (pq *PetQuery) First(ctx context.Context) (*Pet, error) {
-	nodes, err := pq.Limit(1).All(setContextOp(ctx, pq.ctx, "First"))
+	nodes, err := pq.Limit(1).All(setContextOp(ctx, pq.ctx, ent.OpQueryFirst))
 	if err != nil {
 		return nil, err
 	}
@@ -183,7 +184,7 @@ func (pq *PetQuery) FirstX(ctx context.Context) *Pet {
 // Returns a *NotFoundError when no Pet ID was found.
 func (pq *PetQuery) FirstID(ctx context.Context) (id string, err error) {
 	var ids []string
-	if ids, err = pq.Limit(1).IDs(setContextOp(ctx, pq.ctx, "FirstID")); err != nil {
+	if ids, err = pq.Limit(1).IDs(setContextOp(ctx, pq.ctx, ent.OpQueryFirstID)); err != nil {
 		return
 	}
 	if len(ids) == 0 {
@@ -206,7 +207,7 @@ func (pq *PetQuery) FirstIDX(ctx context.Context) string {
 // Returns a *NotSingularError when more than one Pet entity is found.
 // Returns a *NotFoundError when no Pet entities are found.
 func (pq *PetQuery) Only(ctx context.Context) (*Pet, error) {
-	nodes, err := pq.Limit(2).All(setContextOp(ctx, pq.ctx, "Only"))
+	nodes, err := pq.Limit(2).All(setContextOp(ctx, pq.ctx, ent.OpQueryOnly))
 	if err != nil {
 		return nil, err
 	}
@@ -234,7 +235,7 @@ func (pq *PetQuery) OnlyX(ctx context.Context) *Pet {
 // Returns a *NotFoundError when no entities are found.
 func (pq *PetQuery) OnlyID(ctx context.Context) (id string, err error) {
 	var ids []string
-	if ids, err = pq.Limit(2).IDs(setContextOp(ctx, pq.ctx, "OnlyID")); err != nil {
+	if ids, err = pq.Limit(2).IDs(setContextOp(ctx, pq.ctx, ent.OpQueryOnlyID)); err != nil {
 		return
 	}
 	switch len(ids) {
@@ -259,7 +260,7 @@ func (pq *PetQuery) OnlyIDX(ctx context.Context) string {
 
 // All executes the query and returns a list of Pets.
 func (pq *PetQuery) All(ctx context.Context) ([]*Pet, error) {
-	ctx = setContextOp(ctx, pq.ctx, "All")
+	ctx = setContextOp(ctx, pq.ctx, ent.OpQueryAll)
 	if err := pq.prepareQuery(ctx); err != nil {
 		return nil, err
 	}
@@ -281,7 +282,7 @@ func (pq *PetQuery) IDs(ctx context.Context) (ids []string, err error) {
 	if pq.ctx.Unique == nil && pq.path != nil {
 		pq.Unique(true)
 	}
-	ctx = setContextOp(ctx, pq.ctx, "IDs")
+	ctx = setContextOp(ctx, pq.ctx, ent.OpQueryIDs)
 	if err = pq.Select(pet.FieldID).Scan(ctx, &ids); err != nil {
 		return nil, err
 	}
@@ -299,7 +300,7 @@ func (pq *PetQuery) IDsX(ctx context.Context) []string {
 
 // Count returns the count of the given query.
 func (pq *PetQuery) Count(ctx context.Context) (int, error) {
-	ctx = setContextOp(ctx, pq.ctx, "Count")
+	ctx = setContextOp(ctx, pq.ctx, ent.OpQueryCount)
 	if err := pq.prepareQuery(ctx); err != nil {
 		return 0, err
 	}
@@ -317,7 +318,7 @@ func (pq *PetQuery) CountX(ctx context.Context) int {
 
 // Exist returns true if the query has elements in the graph.
 func (pq *PetQuery) Exist(ctx context.Context) (bool, error) {
-	ctx = setContextOp(ctx, pq.ctx, "Exist")
+	ctx = setContextOp(ctx, pq.ctx, ent.OpQueryExist)
 	switch _, err := pq.FirstID(ctx); {
 	case IsNotFound(err):
 		return false, nil
@@ -346,7 +347,7 @@ func (pq *PetQuery) Clone() *PetQuery {
 	return &PetQuery{
 		config:         pq.config,
 		ctx:            pq.ctx.Clone(),
-		order:          append([]OrderFunc{}, pq.order...),
+		order:          append([]pet.OrderOption{}, pq.order...),
 		inters:         append([]Interceptor{}, pq.inters...),
 		predicates:     append([]predicate.Pet{}, pq.predicates...),
 		withOwner:      pq.withOwner.Clone(),
@@ -564,7 +565,7 @@ func (pq *PetQuery) loadCars(ctx context.Context, query *CarQuery, nodes []*Pet,
 	}
 	query.withFKs = true
 	query.Where(predicate.Car(func(s *sql.Selector) {
-		s.Where(sql.InValues(pet.CarsColumn, fks...))
+		s.Where(sql.InValues(s.C(pet.CarsColumn), fks...))
 	}))
 	neighbors, err := query.All(ctx)
 	if err != nil {
@@ -577,7 +578,7 @@ func (pq *PetQuery) loadCars(ctx context.Context, query *CarQuery, nodes []*Pet,
 		}
 		node, ok := nodeids[*fk]
 		if !ok {
-			return fmt.Errorf(`unexpected foreign-key "pet_cars" returned %v for node %v`, *fk, n.ID)
+			return fmt.Errorf(`unexpected referenced foreign-key "pet_cars" returned %v for node %v`, *fk, n.ID)
 		}
 		assign(node, n)
 	}
@@ -772,7 +773,7 @@ func (pgb *PetGroupBy) Aggregate(fns ...AggregateFunc) *PetGroupBy {
 
 // Scan applies the selector query and scans the result into the given value.
 func (pgb *PetGroupBy) Scan(ctx context.Context, v any) error {
-	ctx = setContextOp(ctx, pgb.build.ctx, "GroupBy")
+	ctx = setContextOp(ctx, pgb.build.ctx, ent.OpQueryGroupBy)
 	if err := pgb.build.prepareQuery(ctx); err != nil {
 		return err
 	}
@@ -820,7 +821,7 @@ func (ps *PetSelect) Aggregate(fns ...AggregateFunc) *PetSelect {
 
 // Scan applies the selector query and scans the result into the given value.
 func (ps *PetSelect) Scan(ctx context.Context, v any) error {
-	ctx = setContextOp(ctx, ps.ctx, "Select")
+	ctx = setContextOp(ctx, ps.ctx, ent.OpQuerySelect)
 	if err := ps.prepareQuery(ctx); err != nil {
 		return err
 	}

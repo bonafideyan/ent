@@ -40,6 +40,14 @@ func (pu *PetUpdate) SetAge(i int) *PetUpdate {
 	return pu
 }
 
+// SetNillableAge sets the "age" field if the given value is not nil.
+func (pu *PetUpdate) SetNillableAge(i *int) *PetUpdate {
+	if i != nil {
+		pu.SetAge(*i)
+	}
+	return pu
+}
+
 // AddAge adds i to the "age" field.
 func (pu *PetUpdate) AddAge(i int) *PetUpdate {
 	pu.mutation.AddAge(i)
@@ -98,7 +106,7 @@ func (pu *PetUpdate) ClearOwner() *PetUpdate {
 
 // Save executes the query and returns the number of nodes affected by the update operation.
 func (pu *PetUpdate) Save(ctx context.Context) (int, error) {
-	return withHooks[int, PetMutation](ctx, pu.sqlSave, pu.mutation, pu.hooks)
+	return withHooks(ctx, pu.sqlSave, pu.mutation, pu.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
@@ -200,6 +208,14 @@ func (puo *PetUpdateOne) SetAge(i int) *PetUpdateOne {
 	return puo
 }
 
+// SetNillableAge sets the "age" field if the given value is not nil.
+func (puo *PetUpdateOne) SetNillableAge(i *int) *PetUpdateOne {
+	if i != nil {
+		puo.SetAge(*i)
+	}
+	return puo
+}
+
 // AddAge adds i to the "age" field.
 func (puo *PetUpdateOne) AddAge(i int) *PetUpdateOne {
 	puo.mutation.AddAge(i)
@@ -271,7 +287,7 @@ func (puo *PetUpdateOne) Select(field string, fields ...string) *PetUpdateOne {
 
 // Save executes the query and returns the updated Pet entity.
 func (puo *PetUpdateOne) Save(ctx context.Context) (*Pet, error) {
-	return withHooks[*Pet, PetMutation](ctx, puo.sqlSave, puo.mutation, puo.hooks)
+	return withHooks(ctx, puo.sqlSave, puo.mutation, puo.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.

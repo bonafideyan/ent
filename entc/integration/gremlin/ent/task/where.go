@@ -116,6 +116,20 @@ func Owner(v string) predicate.Task {
 	})
 }
 
+// Order applies equality check predicate on the "order" field. It's identical to OrderEQ.
+func Order(v int) predicate.Task {
+	return predicate.Task(func(t *dsl.Traversal) {
+		t.Has(Label, FieldOrder, p.EQ(v))
+	})
+}
+
+// Op applies equality check predicate on the "op" field. It's identical to OpEQ.
+func Op(v string) predicate.Task {
+	return predicate.Task(func(t *dsl.Traversal) {
+		t.Has(Label, FieldOp, p.EQ(v))
+	})
+}
+
 // PriorityEQ applies the EQ predicate on the "priority" field.
 func PriorityEQ(v task.Priority) predicate.Task {
 	vc := int(v)
@@ -435,6 +449,223 @@ func OwnerIsNil() predicate.Task {
 func OwnerNotNil() predicate.Task {
 	return predicate.Task(func(t *dsl.Traversal) {
 		t.HasLabel(Label).Has(FieldOwner)
+	})
+}
+
+// OrderEQ applies the EQ predicate on the "order" field.
+func OrderEQ(v int) predicate.Task {
+	return predicate.Task(func(t *dsl.Traversal) {
+		t.Has(Label, FieldOrder, p.EQ(v))
+	})
+}
+
+// OrderNEQ applies the NEQ predicate on the "order" field.
+func OrderNEQ(v int) predicate.Task {
+	return predicate.Task(func(t *dsl.Traversal) {
+		t.Has(Label, FieldOrder, p.NEQ(v))
+	})
+}
+
+// OrderIn applies the In predicate on the "order" field.
+func OrderIn(vs ...int) predicate.Task {
+	return predicate.Task(func(t *dsl.Traversal) {
+		t.Has(Label, FieldOrder, p.Within(vs...))
+	})
+}
+
+// OrderNotIn applies the NotIn predicate on the "order" field.
+func OrderNotIn(vs ...int) predicate.Task {
+	return predicate.Task(func(t *dsl.Traversal) {
+		t.Has(Label, FieldOrder, p.Without(vs...))
+	})
+}
+
+// OrderGT applies the GT predicate on the "order" field.
+func OrderGT(v int) predicate.Task {
+	return predicate.Task(func(t *dsl.Traversal) {
+		t.Has(Label, FieldOrder, p.GT(v))
+	})
+}
+
+// OrderGTE applies the GTE predicate on the "order" field.
+func OrderGTE(v int) predicate.Task {
+	return predicate.Task(func(t *dsl.Traversal) {
+		t.Has(Label, FieldOrder, p.GTE(v))
+	})
+}
+
+// OrderLT applies the LT predicate on the "order" field.
+func OrderLT(v int) predicate.Task {
+	return predicate.Task(func(t *dsl.Traversal) {
+		t.Has(Label, FieldOrder, p.LT(v))
+	})
+}
+
+// OrderLTE applies the LTE predicate on the "order" field.
+func OrderLTE(v int) predicate.Task {
+	return predicate.Task(func(t *dsl.Traversal) {
+		t.Has(Label, FieldOrder, p.LTE(v))
+	})
+}
+
+// OrderIsNil applies the IsNil predicate on the "order" field.
+func OrderIsNil() predicate.Task {
+	return predicate.Task(func(t *dsl.Traversal) {
+		t.HasLabel(Label).HasNot(FieldOrder)
+	})
+}
+
+// OrderNotNil applies the NotNil predicate on the "order" field.
+func OrderNotNil() predicate.Task {
+	return predicate.Task(func(t *dsl.Traversal) {
+		t.HasLabel(Label).Has(FieldOrder)
+	})
+}
+
+// OrderOptionEQ applies the EQ predicate on the "order_option" field.
+func OrderOptionEQ(v int) predicate.Task {
+	return predicate.Task(func(t *dsl.Traversal) {
+		t.Has(Label, FieldOrderOption, p.EQ(v))
+	})
+}
+
+// OrderOptionNEQ applies the NEQ predicate on the "order_option" field.
+func OrderOptionNEQ(v int) predicate.Task {
+	return predicate.Task(func(t *dsl.Traversal) {
+		t.Has(Label, FieldOrderOption, p.NEQ(v))
+	})
+}
+
+// OrderOptionIn applies the In predicate on the "order_option" field.
+func OrderOptionIn(vs ...int) predicate.Task {
+	return predicate.Task(func(t *dsl.Traversal) {
+		t.Has(Label, FieldOrderOption, p.Within(vs...))
+	})
+}
+
+// OrderOptionNotIn applies the NotIn predicate on the "order_option" field.
+func OrderOptionNotIn(vs ...int) predicate.Task {
+	return predicate.Task(func(t *dsl.Traversal) {
+		t.Has(Label, FieldOrderOption, p.Without(vs...))
+	})
+}
+
+// OrderOptionGT applies the GT predicate on the "order_option" field.
+func OrderOptionGT(v int) predicate.Task {
+	return predicate.Task(func(t *dsl.Traversal) {
+		t.Has(Label, FieldOrderOption, p.GT(v))
+	})
+}
+
+// OrderOptionGTE applies the GTE predicate on the "order_option" field.
+func OrderOptionGTE(v int) predicate.Task {
+	return predicate.Task(func(t *dsl.Traversal) {
+		t.Has(Label, FieldOrderOption, p.GTE(v))
+	})
+}
+
+// OrderOptionLT applies the LT predicate on the "order_option" field.
+func OrderOptionLT(v int) predicate.Task {
+	return predicate.Task(func(t *dsl.Traversal) {
+		t.Has(Label, FieldOrderOption, p.LT(v))
+	})
+}
+
+// OrderOptionLTE applies the LTE predicate on the "order_option" field.
+func OrderOptionLTE(v int) predicate.Task {
+	return predicate.Task(func(t *dsl.Traversal) {
+		t.Has(Label, FieldOrderOption, p.LTE(v))
+	})
+}
+
+// OrderOptionIsNil applies the IsNil predicate on the "order_option" field.
+func OrderOptionIsNil() predicate.Task {
+	return predicate.Task(func(t *dsl.Traversal) {
+		t.HasLabel(Label).HasNot(FieldOrderOption)
+	})
+}
+
+// OrderOptionNotNil applies the NotNil predicate on the "order_option" field.
+func OrderOptionNotNil() predicate.Task {
+	return predicate.Task(func(t *dsl.Traversal) {
+		t.HasLabel(Label).Has(FieldOrderOption)
+	})
+}
+
+// OpEQ applies the EQ predicate on the "op" field.
+func OpEQ(v string) predicate.Task {
+	return predicate.Task(func(t *dsl.Traversal) {
+		t.Has(Label, FieldOp, p.EQ(v))
+	})
+}
+
+// OpNEQ applies the NEQ predicate on the "op" field.
+func OpNEQ(v string) predicate.Task {
+	return predicate.Task(func(t *dsl.Traversal) {
+		t.Has(Label, FieldOp, p.NEQ(v))
+	})
+}
+
+// OpIn applies the In predicate on the "op" field.
+func OpIn(vs ...string) predicate.Task {
+	return predicate.Task(func(t *dsl.Traversal) {
+		t.Has(Label, FieldOp, p.Within(vs...))
+	})
+}
+
+// OpNotIn applies the NotIn predicate on the "op" field.
+func OpNotIn(vs ...string) predicate.Task {
+	return predicate.Task(func(t *dsl.Traversal) {
+		t.Has(Label, FieldOp, p.Without(vs...))
+	})
+}
+
+// OpGT applies the GT predicate on the "op" field.
+func OpGT(v string) predicate.Task {
+	return predicate.Task(func(t *dsl.Traversal) {
+		t.Has(Label, FieldOp, p.GT(v))
+	})
+}
+
+// OpGTE applies the GTE predicate on the "op" field.
+func OpGTE(v string) predicate.Task {
+	return predicate.Task(func(t *dsl.Traversal) {
+		t.Has(Label, FieldOp, p.GTE(v))
+	})
+}
+
+// OpLT applies the LT predicate on the "op" field.
+func OpLT(v string) predicate.Task {
+	return predicate.Task(func(t *dsl.Traversal) {
+		t.Has(Label, FieldOp, p.LT(v))
+	})
+}
+
+// OpLTE applies the LTE predicate on the "op" field.
+func OpLTE(v string) predicate.Task {
+	return predicate.Task(func(t *dsl.Traversal) {
+		t.Has(Label, FieldOp, p.LTE(v))
+	})
+}
+
+// OpContains applies the Contains predicate on the "op" field.
+func OpContains(v string) predicate.Task {
+	return predicate.Task(func(t *dsl.Traversal) {
+		t.Has(Label, FieldOp, p.Containing(v))
+	})
+}
+
+// OpHasPrefix applies the HasPrefix predicate on the "op" field.
+func OpHasPrefix(v string) predicate.Task {
+	return predicate.Task(func(t *dsl.Traversal) {
+		t.Has(Label, FieldOp, p.StartingWith(v))
+	})
+}
+
+// OpHasSuffix applies the HasSuffix predicate on the "op" field.
+func OpHasSuffix(v string) predicate.Task {
+	return predicate.Task(func(t *dsl.Traversal) {
+		t.Has(Label, FieldOp, p.EndingWith(v))
 	})
 }
 

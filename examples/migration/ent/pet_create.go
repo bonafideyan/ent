@@ -25,6 +25,24 @@ type PetCreate struct {
 	hooks    []Hook
 }
 
+// SetName sets the "name" field.
+func (pc *PetCreate) SetName(s string) *PetCreate {
+	pc.mutation.SetName(s)
+	return pc
+}
+
+// SetAge sets the "age" field.
+func (pc *PetCreate) SetAge(f float64) *PetCreate {
+	pc.mutation.SetAge(f)
+	return pc
+}
+
+// SetWeight sets the "weight" field.
+func (pc *PetCreate) SetWeight(f float64) *PetCreate {
+	pc.mutation.SetWeight(f)
+	return pc
+}
+
 // SetBestFriendID sets the "best_friend_id" field.
 func (pc *PetCreate) SetBestFriendID(u uuid.UUID) *PetCreate {
 	pc.mutation.SetBestFriendID(u)
@@ -77,7 +95,7 @@ func (pc *PetCreate) Mutation() *PetMutation {
 // Save creates the Pet in the database.
 func (pc *PetCreate) Save(ctx context.Context) (*Pet, error) {
 	pc.defaults()
-	return withHooks[*Pet, PetMutation](ctx, pc.sqlSave, pc.mutation, pc.hooks)
+	return withHooks(ctx, pc.sqlSave, pc.mutation, pc.hooks)
 }
 
 // SaveX calls Save and panics if Save returns an error.
@@ -116,16 +134,25 @@ func (pc *PetCreate) defaults() {
 
 // check runs all checks and user-defined validators on the builder.
 func (pc *PetCreate) check() error {
+	if _, ok := pc.mutation.Name(); !ok {
+		return &ValidationError{Name: "name", err: errors.New(`ent: missing required field "Pet.name"`)}
+	}
+	if _, ok := pc.mutation.Age(); !ok {
+		return &ValidationError{Name: "age", err: errors.New(`ent: missing required field "Pet.age"`)}
+	}
+	if _, ok := pc.mutation.Weight(); !ok {
+		return &ValidationError{Name: "weight", err: errors.New(`ent: missing required field "Pet.weight"`)}
+	}
 	if _, ok := pc.mutation.BestFriendID(); !ok {
 		return &ValidationError{Name: "best_friend_id", err: errors.New(`ent: missing required field "Pet.best_friend_id"`)}
 	}
 	if _, ok := pc.mutation.OwnerID(); !ok {
 		return &ValidationError{Name: "owner_id", err: errors.New(`ent: missing required field "Pet.owner_id"`)}
 	}
-	if _, ok := pc.mutation.BestFriendID(); !ok {
+	if len(pc.mutation.BestFriendIDs()) == 0 {
 		return &ValidationError{Name: "best_friend", err: errors.New(`ent: missing required edge "Pet.best_friend"`)}
 	}
-	if _, ok := pc.mutation.OwnerID(); !ok {
+	if len(pc.mutation.OwnerIDs()) == 0 {
 		return &ValidationError{Name: "owner", err: errors.New(`ent: missing required edge "Pet.owner"`)}
 	}
 	return nil
@@ -162,6 +189,18 @@ func (pc *PetCreate) createSpec() (*Pet, *sqlgraph.CreateSpec) {
 	if id, ok := pc.mutation.ID(); ok {
 		_node.ID = id
 		_spec.ID.Value = &id
+	}
+	if value, ok := pc.mutation.Name(); ok {
+		_spec.SetField(pet.FieldName, field.TypeString, value)
+		_node.Name = value
+	}
+	if value, ok := pc.mutation.Age(); ok {
+		_spec.SetField(pet.FieldAge, field.TypeFloat64, value)
+		_node.Age = value
+	}
+	if value, ok := pc.mutation.Weight(); ok {
+		_spec.SetField(pet.FieldWeight, field.TypeFloat64, value)
+		_node.Weight = value
 	}
 	if nodes := pc.mutation.BestFriendIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{
@@ -203,11 +242,15 @@ func (pc *PetCreate) createSpec() (*Pet, *sqlgraph.CreateSpec) {
 // PetCreateBulk is the builder for creating many Pet entities in bulk.
 type PetCreateBulk struct {
 	config
+	err      error
 	builders []*PetCreate
 }
 
 // Save creates the Pet entities in the database.
 func (pcb *PetCreateBulk) Save(ctx context.Context) ([]*Pet, error) {
+	if pcb.err != nil {
+		return nil, pcb.err
+	}
 	specs := make([]*sqlgraph.CreateSpec, len(pcb.builders))
 	nodes := make([]*Pet, len(pcb.builders))
 	mutators := make([]Mutator, len(pcb.builders))
@@ -224,8 +267,8 @@ func (pcb *PetCreateBulk) Save(ctx context.Context) ([]*Pet, error) {
 					return nil, err
 				}
 				builder.mutation = mutation
-				nodes[i], specs[i] = builder.createSpec()
 				var err error
+				nodes[i], specs[i] = builder.createSpec()
 				if i < len(mutators)-1 {
 					_, err = mutators[i+1].Mutate(root, pcb.builders[i+1].mutation)
 				} else {

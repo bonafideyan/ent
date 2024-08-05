@@ -72,7 +72,7 @@ func (utc *UserTweetCreate) Mutation() *UserTweetMutation {
 // Save creates the UserTweet in the database.
 func (utc *UserTweetCreate) Save(ctx context.Context) (*UserTweet, error) {
 	utc.defaults()
-	return withHooks[*UserTweet, UserTweetMutation](ctx, utc.sqlSave, utc.mutation, utc.hooks)
+	return withHooks(ctx, utc.sqlSave, utc.mutation, utc.hooks)
 }
 
 // SaveX calls Save and panics if Save returns an error.
@@ -116,10 +116,10 @@ func (utc *UserTweetCreate) check() error {
 	if _, ok := utc.mutation.TweetID(); !ok {
 		return &ValidationError{Name: "tweet_id", err: errors.New(`ent: missing required field "UserTweet.tweet_id"`)}
 	}
-	if _, ok := utc.mutation.UserID(); !ok {
+	if len(utc.mutation.UserIDs()) == 0 {
 		return &ValidationError{Name: "user", err: errors.New(`ent: missing required edge "UserTweet.user"`)}
 	}
-	if _, ok := utc.mutation.TweetID(); !ok {
+	if len(utc.mutation.TweetIDs()) == 0 {
 		return &ValidationError{Name: "tweet", err: errors.New(`ent: missing required edge "UserTweet.tweet"`)}
 	}
 	return nil
@@ -393,12 +393,16 @@ func (u *UserTweetUpsertOne) IDX(ctx context.Context) int {
 // UserTweetCreateBulk is the builder for creating many UserTweet entities in bulk.
 type UserTweetCreateBulk struct {
 	config
+	err      error
 	builders []*UserTweetCreate
 	conflict []sql.ConflictOption
 }
 
 // Save creates the UserTweet entities in the database.
 func (utcb *UserTweetCreateBulk) Save(ctx context.Context) ([]*UserTweet, error) {
+	if utcb.err != nil {
+		return nil, utcb.err
+	}
 	specs := make([]*sqlgraph.CreateSpec, len(utcb.builders))
 	nodes := make([]*UserTweet, len(utcb.builders))
 	mutators := make([]Mutator, len(utcb.builders))
@@ -415,8 +419,8 @@ func (utcb *UserTweetCreateBulk) Save(ctx context.Context) ([]*UserTweet, error)
 					return nil, err
 				}
 				builder.mutation = mutation
-				nodes[i], specs[i] = builder.createSpec()
 				var err error
+				nodes[i], specs[i] = builder.createSpec()
 				if i < len(mutators)-1 {
 					_, err = mutators[i+1].Mutate(root, utcb.builders[i+1].mutation)
 				} else {
@@ -601,6 +605,9 @@ func (u *UserTweetUpsertBulk) UpdateTweetID() *UserTweetUpsertBulk {
 
 // Exec executes the query.
 func (u *UserTweetUpsertBulk) Exec(ctx context.Context) error {
+	if u.create.err != nil {
+		return u.create.err
+	}
 	for i, b := range u.create.builders {
 		if len(b.conflict) != 0 {
 			return fmt.Errorf("ent: OnConflict was set for builder %d. Set it on the UserTweetCreateBulk instead", i)

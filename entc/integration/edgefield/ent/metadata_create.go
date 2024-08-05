@@ -105,7 +105,7 @@ func (mc *MetadataCreate) Mutation() *MetadataMutation {
 // Save creates the Metadata in the database.
 func (mc *MetadataCreate) Save(ctx context.Context) (*Metadata, error) {
 	mc.defaults()
-	return withHooks[*Metadata, MetadataMutation](ctx, mc.sqlSave, mc.mutation, mc.hooks)
+	return withHooks(ctx, mc.sqlSave, mc.mutation, mc.hooks)
 }
 
 // SaveX calls Save and panics if Save returns an error.
@@ -235,11 +235,15 @@ func (mc *MetadataCreate) createSpec() (*Metadata, *sqlgraph.CreateSpec) {
 // MetadataCreateBulk is the builder for creating many Metadata entities in bulk.
 type MetadataCreateBulk struct {
 	config
+	err      error
 	builders []*MetadataCreate
 }
 
 // Save creates the Metadata entities in the database.
 func (mcb *MetadataCreateBulk) Save(ctx context.Context) ([]*Metadata, error) {
+	if mcb.err != nil {
+		return nil, mcb.err
+	}
 	specs := make([]*sqlgraph.CreateSpec, len(mcb.builders))
 	nodes := make([]*Metadata, len(mcb.builders))
 	mutators := make([]Mutator, len(mcb.builders))
@@ -256,8 +260,8 @@ func (mcb *MetadataCreateBulk) Save(ctx context.Context) ([]*Metadata, error) {
 					return nil, err
 				}
 				builder.mutation = mutation
-				nodes[i], specs[i] = builder.createSpec()
 				var err error
+				nodes[i], specs[i] = builder.createSpec()
 				if i < len(mutators)-1 {
 					_, err = mutators[i+1].Mutate(root, mcb.builders[i+1].mutation)
 				} else {

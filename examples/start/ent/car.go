@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/examples/start/ent/car"
 	"entgo.io/ent/examples/start/ent/user"
@@ -27,8 +28,9 @@ type Car struct {
 	RegisteredAt time.Time `json:"registered_at,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the CarQuery when eager-loading is set.
-	Edges     CarEdges `json:"edges"`
-	user_cars *int
+	Edges        CarEdges `json:"edges"`
+	user_cars    *int
+	selectValues sql.SelectValues
 }
 
 // CarEdges holds the relations/edges for other nodes in the graph.
@@ -43,12 +45,10 @@ type CarEdges struct {
 // OwnerOrErr returns the Owner value or an error if the edge
 // was not loaded in eager-loading, or loaded but was not found.
 func (e CarEdges) OwnerOrErr() (*User, error) {
-	if e.loadedTypes[0] {
-		if e.Owner == nil {
-			// Edge was loaded but was not found.
-			return nil, &NotFoundError{label: user.Label}
-		}
+	if e.Owner != nil {
 		return e.Owner, nil
+	} else if e.loadedTypes[0] {
+		return nil, &NotFoundError{label: user.Label}
 	}
 	return nil, &NotLoadedError{edge: "owner"}
 }
@@ -67,7 +67,7 @@ func (*Car) scanValues(columns []string) ([]any, error) {
 		case car.ForeignKeys[0]: // user_cars
 			values[i] = new(sql.NullInt64)
 		default:
-			return nil, fmt.Errorf("unexpected column %q for type Car", columns[i])
+			values[i] = new(sql.UnknownType)
 		}
 	}
 	return values, nil
@@ -106,9 +106,17 @@ func (c *Car) assignValues(columns []string, values []any) error {
 				c.user_cars = new(int)
 				*c.user_cars = int(value.Int64)
 			}
+		default:
+			c.selectValues.Set(columns[i], values[i])
 		}
 	}
 	return nil
+}
+
+// Value returns the ent.Value that was dynamically selected and assigned to the Car.
+// This includes values selected through modifiers, order, etc.
+func (c *Car) Value(name string) (ent.Value, error) {
+	return c.selectValues.Get(name)
 }
 
 // QueryOwner queries the "owner" edge of the Car entity.

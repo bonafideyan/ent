@@ -39,9 +39,25 @@ func (gtu *GroupTagUpdate) SetTagID(i int) *GroupTagUpdate {
 	return gtu
 }
 
+// SetNillableTagID sets the "tag_id" field if the given value is not nil.
+func (gtu *GroupTagUpdate) SetNillableTagID(i *int) *GroupTagUpdate {
+	if i != nil {
+		gtu.SetTagID(*i)
+	}
+	return gtu
+}
+
 // SetGroupID sets the "group_id" field.
 func (gtu *GroupTagUpdate) SetGroupID(i int) *GroupTagUpdate {
 	gtu.mutation.SetGroupID(i)
+	return gtu
+}
+
+// SetNillableGroupID sets the "group_id" field if the given value is not nil.
+func (gtu *GroupTagUpdate) SetNillableGroupID(i *int) *GroupTagUpdate {
+	if i != nil {
+		gtu.SetGroupID(*i)
+	}
 	return gtu
 }
 
@@ -74,7 +90,7 @@ func (gtu *GroupTagUpdate) ClearGroup() *GroupTagUpdate {
 
 // Save executes the query and returns the number of nodes affected by the update operation.
 func (gtu *GroupTagUpdate) Save(ctx context.Context) (int, error) {
-	return withHooks[int, GroupTagMutation](ctx, gtu.sqlSave, gtu.mutation, gtu.hooks)
+	return withHooks(ctx, gtu.sqlSave, gtu.mutation, gtu.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
@@ -101,10 +117,10 @@ func (gtu *GroupTagUpdate) ExecX(ctx context.Context) {
 
 // check runs all checks and user-defined validators on the builder.
 func (gtu *GroupTagUpdate) check() error {
-	if _, ok := gtu.mutation.TagID(); gtu.mutation.TagCleared() && !ok {
+	if gtu.mutation.TagCleared() && len(gtu.mutation.TagIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "GroupTag.tag"`)
 	}
-	if _, ok := gtu.mutation.GroupID(); gtu.mutation.GroupCleared() && !ok {
+	if gtu.mutation.GroupCleared() && len(gtu.mutation.GroupIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "GroupTag.group"`)
 	}
 	return nil
@@ -206,9 +222,25 @@ func (gtuo *GroupTagUpdateOne) SetTagID(i int) *GroupTagUpdateOne {
 	return gtuo
 }
 
+// SetNillableTagID sets the "tag_id" field if the given value is not nil.
+func (gtuo *GroupTagUpdateOne) SetNillableTagID(i *int) *GroupTagUpdateOne {
+	if i != nil {
+		gtuo.SetTagID(*i)
+	}
+	return gtuo
+}
+
 // SetGroupID sets the "group_id" field.
 func (gtuo *GroupTagUpdateOne) SetGroupID(i int) *GroupTagUpdateOne {
 	gtuo.mutation.SetGroupID(i)
+	return gtuo
+}
+
+// SetNillableGroupID sets the "group_id" field if the given value is not nil.
+func (gtuo *GroupTagUpdateOne) SetNillableGroupID(i *int) *GroupTagUpdateOne {
+	if i != nil {
+		gtuo.SetGroupID(*i)
+	}
 	return gtuo
 }
 
@@ -254,7 +286,7 @@ func (gtuo *GroupTagUpdateOne) Select(field string, fields ...string) *GroupTagU
 
 // Save executes the query and returns the updated GroupTag entity.
 func (gtuo *GroupTagUpdateOne) Save(ctx context.Context) (*GroupTag, error) {
-	return withHooks[*GroupTag, GroupTagMutation](ctx, gtuo.sqlSave, gtuo.mutation, gtuo.hooks)
+	return withHooks(ctx, gtuo.sqlSave, gtuo.mutation, gtuo.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
@@ -281,10 +313,10 @@ func (gtuo *GroupTagUpdateOne) ExecX(ctx context.Context) {
 
 // check runs all checks and user-defined validators on the builder.
 func (gtuo *GroupTagUpdateOne) check() error {
-	if _, ok := gtuo.mutation.TagID(); gtuo.mutation.TagCleared() && !ok {
+	if gtuo.mutation.TagCleared() && len(gtuo.mutation.TagIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "GroupTag.tag"`)
 	}
-	if _, ok := gtuo.mutation.GroupID(); gtuo.mutation.GroupCleared() && !ok {
+	if gtuo.mutation.GroupCleared() && len(gtuo.mutation.GroupIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "GroupTag.group"`)
 	}
 	return nil

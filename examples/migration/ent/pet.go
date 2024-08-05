@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"strings"
 
+	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/examples/migration/ent/pet"
 	"entgo.io/ent/examples/migration/ent/user"
@@ -21,13 +22,20 @@ type Pet struct {
 	config `json:"-"`
 	// ID of the ent.
 	ID uuid.UUID `json:"id,omitempty"`
+	// Name holds the value of the "name" field.
+	Name string `json:"name,omitempty"`
+	// Age holds the value of the "age" field.
+	Age float64 `json:"age,omitempty"`
+	// Weight holds the value of the "weight" field.
+	Weight float64 `json:"weight,omitempty"`
 	// BestFriendID holds the value of the "best_friend_id" field.
 	BestFriendID uuid.UUID `json:"best_friend_id,omitempty"`
 	// OwnerID holds the value of the "owner_id" field.
 	OwnerID int `json:"owner_id,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the PetQuery when eager-loading is set.
-	Edges PetEdges `json:"edges"`
+	Edges        PetEdges `json:"edges"`
+	selectValues sql.SelectValues
 }
 
 // PetEdges holds the relations/edges for other nodes in the graph.
@@ -44,12 +52,10 @@ type PetEdges struct {
 // BestFriendOrErr returns the BestFriend value or an error if the edge
 // was not loaded in eager-loading, or loaded but was not found.
 func (e PetEdges) BestFriendOrErr() (*Pet, error) {
-	if e.loadedTypes[0] {
-		if e.BestFriend == nil {
-			// Edge was loaded but was not found.
-			return nil, &NotFoundError{label: pet.Label}
-		}
+	if e.BestFriend != nil {
 		return e.BestFriend, nil
+	} else if e.loadedTypes[0] {
+		return nil, &NotFoundError{label: pet.Label}
 	}
 	return nil, &NotLoadedError{edge: "best_friend"}
 }
@@ -57,12 +63,10 @@ func (e PetEdges) BestFriendOrErr() (*Pet, error) {
 // OwnerOrErr returns the Owner value or an error if the edge
 // was not loaded in eager-loading, or loaded but was not found.
 func (e PetEdges) OwnerOrErr() (*User, error) {
-	if e.loadedTypes[1] {
-		if e.Owner == nil {
-			// Edge was loaded but was not found.
-			return nil, &NotFoundError{label: user.Label}
-		}
+	if e.Owner != nil {
 		return e.Owner, nil
+	} else if e.loadedTypes[1] {
+		return nil, &NotFoundError{label: user.Label}
 	}
 	return nil, &NotLoadedError{edge: "owner"}
 }
@@ -72,12 +76,16 @@ func (*Pet) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
+		case pet.FieldAge, pet.FieldWeight:
+			values[i] = new(sql.NullFloat64)
 		case pet.FieldOwnerID:
 			values[i] = new(sql.NullInt64)
+		case pet.FieldName:
+			values[i] = new(sql.NullString)
 		case pet.FieldID, pet.FieldBestFriendID:
 			values[i] = new(uuid.UUID)
 		default:
-			return nil, fmt.Errorf("unexpected column %q for type Pet", columns[i])
+			values[i] = new(sql.UnknownType)
 		}
 	}
 	return values, nil
@@ -97,6 +105,24 @@ func (pe *Pet) assignValues(columns []string, values []any) error {
 			} else if value != nil {
 				pe.ID = *value
 			}
+		case pet.FieldName:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field name", values[i])
+			} else if value.Valid {
+				pe.Name = value.String
+			}
+		case pet.FieldAge:
+			if value, ok := values[i].(*sql.NullFloat64); !ok {
+				return fmt.Errorf("unexpected type %T for field age", values[i])
+			} else if value.Valid {
+				pe.Age = value.Float64
+			}
+		case pet.FieldWeight:
+			if value, ok := values[i].(*sql.NullFloat64); !ok {
+				return fmt.Errorf("unexpected type %T for field weight", values[i])
+			} else if value.Valid {
+				pe.Weight = value.Float64
+			}
 		case pet.FieldBestFriendID:
 			if value, ok := values[i].(*uuid.UUID); !ok {
 				return fmt.Errorf("unexpected type %T for field best_friend_id", values[i])
@@ -109,9 +135,17 @@ func (pe *Pet) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				pe.OwnerID = int(value.Int64)
 			}
+		default:
+			pe.selectValues.Set(columns[i], values[i])
 		}
 	}
 	return nil
+}
+
+// Value returns the ent.Value that was dynamically selected and assigned to the Pet.
+// This includes values selected through modifiers, order, etc.
+func (pe *Pet) Value(name string) (ent.Value, error) {
+	return pe.selectValues.Get(name)
 }
 
 // QueryBestFriend queries the "best_friend" edge of the Pet entity.
@@ -147,6 +181,15 @@ func (pe *Pet) String() string {
 	var builder strings.Builder
 	builder.WriteString("Pet(")
 	builder.WriteString(fmt.Sprintf("id=%v, ", pe.ID))
+	builder.WriteString("name=")
+	builder.WriteString(pe.Name)
+	builder.WriteString(", ")
+	builder.WriteString("age=")
+	builder.WriteString(fmt.Sprintf("%v", pe.Age))
+	builder.WriteString(", ")
+	builder.WriteString("weight=")
+	builder.WriteString(fmt.Sprintf("%v", pe.Weight))
+	builder.WriteString(", ")
 	builder.WriteString("best_friend_id=")
 	builder.WriteString(fmt.Sprintf("%v", pe.BestFriendID))
 	builder.WriteString(", ")

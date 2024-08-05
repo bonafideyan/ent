@@ -20,6 +20,8 @@ type File struct {
 	config `json:"-"`
 	// ID of the ent.
 	ID string `json:"id,omitempty"`
+	// SetID holds the value of the "set_id" field.
+	SetID int `json:"set_id,omitempty"`
 	// Size holds the value of the "size" field.
 	Size int `json:"size,omitempty"`
 	// Name holds the value of the "name" field.
@@ -53,12 +55,10 @@ type FileEdges struct {
 // OwnerOrErr returns the Owner value or an error if the edge
 // was not loaded in eager-loading, or loaded but was not found.
 func (e FileEdges) OwnerOrErr() (*User, error) {
-	if e.loadedTypes[0] {
-		if e.Owner == nil {
-			// Edge was loaded but was not found.
-			return nil, &NotFoundError{label: user.Label}
-		}
+	if e.Owner != nil {
 		return e.Owner, nil
+	} else if e.loadedTypes[0] {
+		return nil, &NotFoundError{label: user.Label}
 	}
 	return nil, &NotLoadedError{edge: "owner"}
 }
@@ -66,12 +66,10 @@ func (e FileEdges) OwnerOrErr() (*User, error) {
 // TypeOrErr returns the Type value or an error if the edge
 // was not loaded in eager-loading, or loaded but was not found.
 func (e FileEdges) TypeOrErr() (*FileType, error) {
-	if e.loadedTypes[1] {
-		if e.Type == nil {
-			// Edge was loaded but was not found.
-			return nil, &NotFoundError{label: filetype.Label}
-		}
+	if e.Type != nil {
 		return e.Type, nil
+	} else if e.loadedTypes[1] {
+		return nil, &NotFoundError{label: filetype.Label}
 	}
 	return nil, &NotLoadedError{edge: "type"}
 }
@@ -93,6 +91,7 @@ func (f *File) FromResponse(res *gremlin.Response) error {
 	}
 	var scanf struct {
 		ID      string  `json:"id,omitempty"`
+		SetID   int     `json:"set_id,omitempty"`
 		Size    int     `json:"fsize,omitempty"`
 		Name    string  `json:"name,omitempty"`
 		User    *string `json:"user,omitempty"`
@@ -104,6 +103,7 @@ func (f *File) FromResponse(res *gremlin.Response) error {
 		return err
 	}
 	f.ID = scanf.ID
+	f.SetID = scanf.SetID
 	f.Size = scanf.Size
 	f.Name = scanf.Name
 	f.User = scanf.User
@@ -151,6 +151,9 @@ func (f *File) String() string {
 	var builder strings.Builder
 	builder.WriteString("File(")
 	builder.WriteString(fmt.Sprintf("id=%v, ", f.ID))
+	builder.WriteString("set_id=")
+	builder.WriteString(fmt.Sprintf("%v", f.SetID))
+	builder.WriteString(", ")
 	builder.WriteString("size=")
 	builder.WriteString(fmt.Sprintf("%v", f.Size))
 	builder.WriteString(", ")
@@ -185,6 +188,7 @@ func (f *Files) FromResponse(res *gremlin.Response) error {
 	}
 	var scanf []struct {
 		ID      string  `json:"id,omitempty"`
+		SetID   int     `json:"set_id,omitempty"`
 		Size    int     `json:"fsize,omitempty"`
 		Name    string  `json:"name,omitempty"`
 		User    *string `json:"user,omitempty"`
@@ -197,6 +201,7 @@ func (f *Files) FromResponse(res *gremlin.Response) error {
 	}
 	for _, v := range scanf {
 		node := &File{ID: v.ID}
+		node.SetID = v.SetID
 		node.Size = v.Size
 		node.Name = v.Name
 		node.User = v.User

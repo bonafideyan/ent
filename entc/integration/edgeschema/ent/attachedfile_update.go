@@ -54,9 +54,25 @@ func (afu *AttachedFileUpdate) SetFID(i int) *AttachedFileUpdate {
 	return afu
 }
 
+// SetNillableFID sets the "f_id" field if the given value is not nil.
+func (afu *AttachedFileUpdate) SetNillableFID(i *int) *AttachedFileUpdate {
+	if i != nil {
+		afu.SetFID(*i)
+	}
+	return afu
+}
+
 // SetProcID sets the "proc_id" field.
 func (afu *AttachedFileUpdate) SetProcID(i int) *AttachedFileUpdate {
 	afu.mutation.SetProcID(i)
+	return afu
+}
+
+// SetNillableProcID sets the "proc_id" field if the given value is not nil.
+func (afu *AttachedFileUpdate) SetNillableProcID(i *int) *AttachedFileUpdate {
+	if i != nil {
+		afu.SetProcID(*i)
+	}
 	return afu
 }
 
@@ -95,7 +111,7 @@ func (afu *AttachedFileUpdate) ClearProc() *AttachedFileUpdate {
 
 // Save executes the query and returns the number of nodes affected by the update operation.
 func (afu *AttachedFileUpdate) Save(ctx context.Context) (int, error) {
-	return withHooks[int, AttachedFileMutation](ctx, afu.sqlSave, afu.mutation, afu.hooks)
+	return withHooks(ctx, afu.sqlSave, afu.mutation, afu.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
@@ -122,10 +138,10 @@ func (afu *AttachedFileUpdate) ExecX(ctx context.Context) {
 
 // check runs all checks and user-defined validators on the builder.
 func (afu *AttachedFileUpdate) check() error {
-	if _, ok := afu.mutation.FiID(); afu.mutation.FiCleared() && !ok {
+	if afu.mutation.FiCleared() && len(afu.mutation.FiIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "AttachedFile.fi"`)
 	}
-	if _, ok := afu.mutation.ProcID(); afu.mutation.ProcCleared() && !ok {
+	if afu.mutation.ProcCleared() && len(afu.mutation.ProcIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "AttachedFile.proc"`)
 	}
 	return nil
@@ -244,9 +260,25 @@ func (afuo *AttachedFileUpdateOne) SetFID(i int) *AttachedFileUpdateOne {
 	return afuo
 }
 
+// SetNillableFID sets the "f_id" field if the given value is not nil.
+func (afuo *AttachedFileUpdateOne) SetNillableFID(i *int) *AttachedFileUpdateOne {
+	if i != nil {
+		afuo.SetFID(*i)
+	}
+	return afuo
+}
+
 // SetProcID sets the "proc_id" field.
 func (afuo *AttachedFileUpdateOne) SetProcID(i int) *AttachedFileUpdateOne {
 	afuo.mutation.SetProcID(i)
+	return afuo
+}
+
+// SetNillableProcID sets the "proc_id" field if the given value is not nil.
+func (afuo *AttachedFileUpdateOne) SetNillableProcID(i *int) *AttachedFileUpdateOne {
+	if i != nil {
+		afuo.SetProcID(*i)
+	}
 	return afuo
 }
 
@@ -298,7 +330,7 @@ func (afuo *AttachedFileUpdateOne) Select(field string, fields ...string) *Attac
 
 // Save executes the query and returns the updated AttachedFile entity.
 func (afuo *AttachedFileUpdateOne) Save(ctx context.Context) (*AttachedFile, error) {
-	return withHooks[*AttachedFile, AttachedFileMutation](ctx, afuo.sqlSave, afuo.mutation, afuo.hooks)
+	return withHooks(ctx, afuo.sqlSave, afuo.mutation, afuo.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
@@ -325,10 +357,10 @@ func (afuo *AttachedFileUpdateOne) ExecX(ctx context.Context) {
 
 // check runs all checks and user-defined validators on the builder.
 func (afuo *AttachedFileUpdateOne) check() error {
-	if _, ok := afuo.mutation.FiID(); afuo.mutation.FiCleared() && !ok {
+	if afuo.mutation.FiCleared() && len(afuo.mutation.FiIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "AttachedFile.fi"`)
 	}
-	if _, ok := afuo.mutation.ProcID(); afuo.mutation.ProcCleared() && !ok {
+	if afuo.mutation.ProcCleared() && len(afuo.mutation.ProcIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "AttachedFile.proc"`)
 	}
 	return nil

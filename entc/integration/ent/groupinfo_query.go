@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"math"
 
+	"entgo.io/ent"
 	"entgo.io/ent/dialect"
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
@@ -25,7 +26,7 @@ import (
 type GroupInfoQuery struct {
 	config
 	ctx             *QueryContext
-	order           []OrderFunc
+	order           []groupinfo.OrderOption
 	inters          []Interceptor
 	predicates      []predicate.GroupInfo
 	withGroups      *GroupQuery
@@ -62,7 +63,7 @@ func (giq *GroupInfoQuery) Unique(unique bool) *GroupInfoQuery {
 }
 
 // Order specifies how the records should be ordered.
-func (giq *GroupInfoQuery) Order(o ...OrderFunc) *GroupInfoQuery {
+func (giq *GroupInfoQuery) Order(o ...groupinfo.OrderOption) *GroupInfoQuery {
 	giq.order = append(giq.order, o...)
 	return giq
 }
@@ -92,7 +93,7 @@ func (giq *GroupInfoQuery) QueryGroups() *GroupQuery {
 // First returns the first GroupInfo entity from the query.
 // Returns a *NotFoundError when no GroupInfo was found.
 func (giq *GroupInfoQuery) First(ctx context.Context) (*GroupInfo, error) {
-	nodes, err := giq.Limit(1).All(setContextOp(ctx, giq.ctx, "First"))
+	nodes, err := giq.Limit(1).All(setContextOp(ctx, giq.ctx, ent.OpQueryFirst))
 	if err != nil {
 		return nil, err
 	}
@@ -115,7 +116,7 @@ func (giq *GroupInfoQuery) FirstX(ctx context.Context) *GroupInfo {
 // Returns a *NotFoundError when no GroupInfo ID was found.
 func (giq *GroupInfoQuery) FirstID(ctx context.Context) (id int, err error) {
 	var ids []int
-	if ids, err = giq.Limit(1).IDs(setContextOp(ctx, giq.ctx, "FirstID")); err != nil {
+	if ids, err = giq.Limit(1).IDs(setContextOp(ctx, giq.ctx, ent.OpQueryFirstID)); err != nil {
 		return
 	}
 	if len(ids) == 0 {
@@ -138,7 +139,7 @@ func (giq *GroupInfoQuery) FirstIDX(ctx context.Context) int {
 // Returns a *NotSingularError when more than one GroupInfo entity is found.
 // Returns a *NotFoundError when no GroupInfo entities are found.
 func (giq *GroupInfoQuery) Only(ctx context.Context) (*GroupInfo, error) {
-	nodes, err := giq.Limit(2).All(setContextOp(ctx, giq.ctx, "Only"))
+	nodes, err := giq.Limit(2).All(setContextOp(ctx, giq.ctx, ent.OpQueryOnly))
 	if err != nil {
 		return nil, err
 	}
@@ -166,7 +167,7 @@ func (giq *GroupInfoQuery) OnlyX(ctx context.Context) *GroupInfo {
 // Returns a *NotFoundError when no entities are found.
 func (giq *GroupInfoQuery) OnlyID(ctx context.Context) (id int, err error) {
 	var ids []int
-	if ids, err = giq.Limit(2).IDs(setContextOp(ctx, giq.ctx, "OnlyID")); err != nil {
+	if ids, err = giq.Limit(2).IDs(setContextOp(ctx, giq.ctx, ent.OpQueryOnlyID)); err != nil {
 		return
 	}
 	switch len(ids) {
@@ -191,7 +192,7 @@ func (giq *GroupInfoQuery) OnlyIDX(ctx context.Context) int {
 
 // All executes the query and returns a list of GroupInfos.
 func (giq *GroupInfoQuery) All(ctx context.Context) ([]*GroupInfo, error) {
-	ctx = setContextOp(ctx, giq.ctx, "All")
+	ctx = setContextOp(ctx, giq.ctx, ent.OpQueryAll)
 	if err := giq.prepareQuery(ctx); err != nil {
 		return nil, err
 	}
@@ -213,7 +214,7 @@ func (giq *GroupInfoQuery) IDs(ctx context.Context) (ids []int, err error) {
 	if giq.ctx.Unique == nil && giq.path != nil {
 		giq.Unique(true)
 	}
-	ctx = setContextOp(ctx, giq.ctx, "IDs")
+	ctx = setContextOp(ctx, giq.ctx, ent.OpQueryIDs)
 	if err = giq.Select(groupinfo.FieldID).Scan(ctx, &ids); err != nil {
 		return nil, err
 	}
@@ -231,7 +232,7 @@ func (giq *GroupInfoQuery) IDsX(ctx context.Context) []int {
 
 // Count returns the count of the given query.
 func (giq *GroupInfoQuery) Count(ctx context.Context) (int, error) {
-	ctx = setContextOp(ctx, giq.ctx, "Count")
+	ctx = setContextOp(ctx, giq.ctx, ent.OpQueryCount)
 	if err := giq.prepareQuery(ctx); err != nil {
 		return 0, err
 	}
@@ -249,7 +250,7 @@ func (giq *GroupInfoQuery) CountX(ctx context.Context) int {
 
 // Exist returns true if the query has elements in the graph.
 func (giq *GroupInfoQuery) Exist(ctx context.Context) (bool, error) {
-	ctx = setContextOp(ctx, giq.ctx, "Exist")
+	ctx = setContextOp(ctx, giq.ctx, ent.OpQueryExist)
 	switch _, err := giq.FirstID(ctx); {
 	case IsNotFound(err):
 		return false, nil
@@ -278,7 +279,7 @@ func (giq *GroupInfoQuery) Clone() *GroupInfoQuery {
 	return &GroupInfoQuery{
 		config:     giq.config,
 		ctx:        giq.ctx.Clone(),
-		order:      append([]OrderFunc{}, giq.order...),
+		order:      append([]groupinfo.OrderOption{}, giq.order...),
 		inters:     append([]Interceptor{}, giq.inters...),
 		predicates: append([]predicate.GroupInfo{}, giq.predicates...),
 		withGroups: giq.withGroups.Clone(),
@@ -405,14 +406,24 @@ func (giq *GroupInfoQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*G
 	if query := giq.withGroups; query != nil {
 		if err := giq.loadGroups(ctx, query, nodes,
 			func(n *GroupInfo) { n.Edges.Groups = []*Group{} },
-			func(n *GroupInfo, e *Group) { n.Edges.Groups = append(n.Edges.Groups, e) }); err != nil {
+			func(n *GroupInfo, e *Group) {
+				n.Edges.Groups = append(n.Edges.Groups, e)
+				if !e.Edges.loadedTypes[3] {
+					e.Edges.Info = n
+				}
+			}); err != nil {
 			return nil, err
 		}
 	}
 	for name, query := range giq.withNamedGroups {
 		if err := giq.loadGroups(ctx, query, nodes,
 			func(n *GroupInfo) { n.appendNamedGroups(name) },
-			func(n *GroupInfo, e *Group) { n.appendNamedGroups(name, e) }); err != nil {
+			func(n *GroupInfo, e *Group) {
+				n.appendNamedGroups(name, e)
+				if !e.Edges.loadedTypes[3] {
+					e.Edges.Info = n
+				}
+			}); err != nil {
 			return nil, err
 		}
 	}
@@ -431,7 +442,7 @@ func (giq *GroupInfoQuery) loadGroups(ctx context.Context, query *GroupQuery, no
 	}
 	query.withFKs = true
 	query.Where(predicate.Group(func(s *sql.Selector) {
-		s.Where(sql.InValues(groupinfo.GroupsColumn, fks...))
+		s.Where(sql.InValues(s.C(groupinfo.GroupsColumn), fks...))
 	}))
 	neighbors, err := query.All(ctx)
 	if err != nil {
@@ -444,7 +455,7 @@ func (giq *GroupInfoQuery) loadGroups(ctx context.Context, query *GroupQuery, no
 		}
 		node, ok := nodeids[*fk]
 		if !ok {
-			return fmt.Errorf(`unexpected foreign-key "group_info" returned %v for node %v`, *fk, n.ID)
+			return fmt.Errorf(`unexpected referenced foreign-key "group_info" returned %v for node %v`, *fk, n.ID)
 		}
 		assign(node, n)
 	}
@@ -598,7 +609,7 @@ func (gigb *GroupInfoGroupBy) Aggregate(fns ...AggregateFunc) *GroupInfoGroupBy 
 
 // Scan applies the selector query and scans the result into the given value.
 func (gigb *GroupInfoGroupBy) Scan(ctx context.Context, v any) error {
-	ctx = setContextOp(ctx, gigb.build.ctx, "GroupBy")
+	ctx = setContextOp(ctx, gigb.build.ctx, ent.OpQueryGroupBy)
 	if err := gigb.build.prepareQuery(ctx); err != nil {
 		return err
 	}
@@ -646,7 +657,7 @@ func (gis *GroupInfoSelect) Aggregate(fns ...AggregateFunc) *GroupInfoSelect {
 
 // Scan applies the selector query and scans the result into the given value.
 func (gis *GroupInfoSelect) Scan(ctx context.Context, v any) error {
-	ctx = setContextOp(ctx, gis.ctx, "Select")
+	ctx = setContextOp(ctx, gis.ctx, ent.OpQuerySelect)
 	if err := gis.prepareQuery(ctx); err != nil {
 		return err
 	}

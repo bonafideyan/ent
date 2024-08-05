@@ -71,7 +71,7 @@ func (rc *RentalCreate) Mutation() *RentalMutation {
 // Save creates the Rental in the database.
 func (rc *RentalCreate) Save(ctx context.Context) (*Rental, error) {
 	rc.defaults()
-	return withHooks[*Rental, RentalMutation](ctx, rc.sqlSave, rc.mutation, rc.hooks)
+	return withHooks(ctx, rc.sqlSave, rc.mutation, rc.hooks)
 }
 
 // SaveX calls Save and panics if Save returns an error.
@@ -115,10 +115,10 @@ func (rc *RentalCreate) check() error {
 	if _, ok := rc.mutation.CarID(); !ok {
 		return &ValidationError{Name: "car_id", err: errors.New(`ent: missing required field "Rental.car_id"`)}
 	}
-	if _, ok := rc.mutation.UserID(); !ok {
+	if len(rc.mutation.UserIDs()) == 0 {
 		return &ValidationError{Name: "user", err: errors.New(`ent: missing required edge "Rental.user"`)}
 	}
-	if _, ok := rc.mutation.CarID(); !ok {
+	if len(rc.mutation.CarIDs()) == 0 {
 		return &ValidationError{Name: "car", err: errors.New(`ent: missing required edge "Rental.car"`)}
 	}
 	return nil
@@ -191,11 +191,15 @@ func (rc *RentalCreate) createSpec() (*Rental, *sqlgraph.CreateSpec) {
 // RentalCreateBulk is the builder for creating many Rental entities in bulk.
 type RentalCreateBulk struct {
 	config
+	err      error
 	builders []*RentalCreate
 }
 
 // Save creates the Rental entities in the database.
 func (rcb *RentalCreateBulk) Save(ctx context.Context) ([]*Rental, error) {
+	if rcb.err != nil {
+		return nil, rcb.err
+	}
 	specs := make([]*sqlgraph.CreateSpec, len(rcb.builders))
 	nodes := make([]*Rental, len(rcb.builders))
 	mutators := make([]Mutator, len(rcb.builders))
@@ -212,8 +216,8 @@ func (rcb *RentalCreateBulk) Save(ctx context.Context) ([]*Rental, error) {
 					return nil, err
 				}
 				builder.mutation = mutation
-				nodes[i], specs[i] = builder.createSpec()
 				var err error
+				nodes[i], specs[i] = builder.createSpec()
 				if i < len(mutators)-1 {
 					_, err = mutators[i+1].Mutate(root, rcb.builders[i+1].mutation)
 				} else {

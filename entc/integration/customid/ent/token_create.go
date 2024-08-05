@@ -67,7 +67,7 @@ func (tc *TokenCreate) Mutation() *TokenMutation {
 // Save creates the Token in the database.
 func (tc *TokenCreate) Save(ctx context.Context) (*Token, error) {
 	tc.defaults()
-	return withHooks[*Token, TokenMutation](ctx, tc.sqlSave, tc.mutation, tc.hooks)
+	return withHooks(ctx, tc.sqlSave, tc.mutation, tc.hooks)
 }
 
 // SaveX calls Save and panics if Save returns an error.
@@ -110,7 +110,7 @@ func (tc *TokenCreate) check() error {
 			return &ValidationError{Name: "body", err: fmt.Errorf(`ent: validator failed for field "Token.body": %w`, err)}
 		}
 	}
-	if _, ok := tc.mutation.AccountID(); !ok {
+	if len(tc.mutation.AccountIDs()) == 0 {
 		return &ValidationError{Name: "account", err: errors.New(`ent: missing required edge "Token.account"`)}
 	}
 	return nil
@@ -337,12 +337,16 @@ func (u *TokenUpsertOne) IDX(ctx context.Context) sid.ID {
 // TokenCreateBulk is the builder for creating many Token entities in bulk.
 type TokenCreateBulk struct {
 	config
+	err      error
 	builders []*TokenCreate
 	conflict []sql.ConflictOption
 }
 
 // Save creates the Token entities in the database.
 func (tcb *TokenCreateBulk) Save(ctx context.Context) ([]*Token, error) {
+	if tcb.err != nil {
+		return nil, tcb.err
+	}
 	specs := make([]*sqlgraph.CreateSpec, len(tcb.builders))
 	nodes := make([]*Token, len(tcb.builders))
 	mutators := make([]Mutator, len(tcb.builders))
@@ -359,8 +363,8 @@ func (tcb *TokenCreateBulk) Save(ctx context.Context) ([]*Token, error) {
 					return nil, err
 				}
 				builder.mutation = mutation
-				nodes[i], specs[i] = builder.createSpec()
 				var err error
+				nodes[i], specs[i] = builder.createSpec()
 				if i < len(mutators)-1 {
 					_, err = mutators[i+1].Mutate(root, tcb.builders[i+1].mutation)
 				} else {
@@ -523,6 +527,9 @@ func (u *TokenUpsertBulk) UpdateBody() *TokenUpsertBulk {
 
 // Exec executes the query.
 func (u *TokenUpsertBulk) Exec(ctx context.Context) error {
+	if u.create.err != nil {
+		return u.create.err
+	}
 	for i, b := range u.create.builders {
 		if len(b.conflict) != 0 {
 			return fmt.Errorf("ent: OnConflict was set for builder %d. Set it on the TokenCreateBulk instead", i)

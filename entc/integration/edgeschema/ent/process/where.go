@@ -71,11 +71,7 @@ func HasFiles() predicate.Process {
 // HasFilesWith applies the HasEdge predicate on the "files" edge with a given conditions (other predicates).
 func HasFilesWith(preds ...predicate.File) predicate.Process {
 	return predicate.Process(func(s *sql.Selector) {
-		step := sqlgraph.NewStep(
-			sqlgraph.From(Table, FieldID),
-			sqlgraph.To(FilesInverseTable, FieldID),
-			sqlgraph.Edge(sqlgraph.M2M, false, FilesTable, FilesPrimaryKey...),
-		)
+		step := newFilesStep()
 		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
 			for _, p := range preds {
 				p(s)
@@ -98,11 +94,7 @@ func HasAttachedFiles() predicate.Process {
 // HasAttachedFilesWith applies the HasEdge predicate on the "attached_files" edge with a given conditions (other predicates).
 func HasAttachedFilesWith(preds ...predicate.AttachedFile) predicate.Process {
 	return predicate.Process(func(s *sql.Selector) {
-		step := sqlgraph.NewStep(
-			sqlgraph.From(Table, FieldID),
-			sqlgraph.To(AttachedFilesInverseTable, FieldID),
-			sqlgraph.Edge(sqlgraph.O2M, true, AttachedFilesTable, AttachedFilesColumn),
-		)
+		step := newAttachedFilesStep()
 		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
 			for _, p := range preds {
 				p(s)
@@ -113,32 +105,15 @@ func HasAttachedFilesWith(preds ...predicate.AttachedFile) predicate.Process {
 
 // And groups predicates with the AND operator between them.
 func And(predicates ...predicate.Process) predicate.Process {
-	return predicate.Process(func(s *sql.Selector) {
-		s1 := s.Clone().SetP(nil)
-		for _, p := range predicates {
-			p(s1)
-		}
-		s.Where(s1.P())
-	})
+	return predicate.Process(sql.AndPredicates(predicates...))
 }
 
 // Or groups predicates with the OR operator between them.
 func Or(predicates ...predicate.Process) predicate.Process {
-	return predicate.Process(func(s *sql.Selector) {
-		s1 := s.Clone().SetP(nil)
-		for i, p := range predicates {
-			if i > 0 {
-				s1.Or()
-			}
-			p(s1)
-		}
-		s.Where(s1.P())
-	})
+	return predicate.Process(sql.OrPredicates(predicates...))
 }
 
 // Not applies the not operator on the given predicate.
 func Not(p predicate.Process) predicate.Process {
-	return predicate.Process(func(s *sql.Selector) {
-		p(s.Not())
-	})
+	return predicate.Process(sql.NotPredicates(p))
 }

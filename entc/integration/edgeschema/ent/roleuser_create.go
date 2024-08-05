@@ -72,7 +72,7 @@ func (ruc *RoleUserCreate) Mutation() *RoleUserMutation {
 // Save creates the RoleUser in the database.
 func (ruc *RoleUserCreate) Save(ctx context.Context) (*RoleUser, error) {
 	ruc.defaults()
-	return withHooks[*RoleUser, RoleUserMutation](ctx, ruc.sqlSave, ruc.mutation, ruc.hooks)
+	return withHooks(ctx, ruc.sqlSave, ruc.mutation, ruc.hooks)
 }
 
 // SaveX calls Save and panics if Save returns an error.
@@ -116,10 +116,10 @@ func (ruc *RoleUserCreate) check() error {
 	if _, ok := ruc.mutation.UserID(); !ok {
 		return &ValidationError{Name: "user_id", err: errors.New(`ent: missing required field "RoleUser.user_id"`)}
 	}
-	if _, ok := ruc.mutation.RoleID(); !ok {
+	if len(ruc.mutation.RoleIDs()) == 0 {
 		return &ValidationError{Name: "role", err: errors.New(`ent: missing required edge "RoleUser.role"`)}
 	}
-	if _, ok := ruc.mutation.UserID(); !ok {
+	if len(ruc.mutation.UserIDs()) == 0 {
 		return &ValidationError{Name: "user", err: errors.New(`ent: missing required edge "RoleUser.user"`)}
 	}
 	return nil
@@ -371,12 +371,16 @@ func (u *RoleUserUpsertOne) ExecX(ctx context.Context) {
 // RoleUserCreateBulk is the builder for creating many RoleUser entities in bulk.
 type RoleUserCreateBulk struct {
 	config
+	err      error
 	builders []*RoleUserCreate
 	conflict []sql.ConflictOption
 }
 
 // Save creates the RoleUser entities in the database.
 func (rucb *RoleUserCreateBulk) Save(ctx context.Context) ([]*RoleUser, error) {
+	if rucb.err != nil {
+		return nil, rucb.err
+	}
 	specs := make([]*sqlgraph.CreateSpec, len(rucb.builders))
 	nodes := make([]*RoleUser, len(rucb.builders))
 	mutators := make([]Mutator, len(rucb.builders))
@@ -393,8 +397,8 @@ func (rucb *RoleUserCreateBulk) Save(ctx context.Context) ([]*RoleUser, error) {
 					return nil, err
 				}
 				builder.mutation = mutation
-				nodes[i], specs[i] = builder.createSpec()
 				var err error
+				nodes[i], specs[i] = builder.createSpec()
 				if i < len(mutators)-1 {
 					_, err = mutators[i+1].Mutate(root, rucb.builders[i+1].mutation)
 				} else {
@@ -574,6 +578,9 @@ func (u *RoleUserUpsertBulk) UpdateUserID() *RoleUserUpsertBulk {
 
 // Exec executes the query.
 func (u *RoleUserUpsertBulk) Exec(ctx context.Context) error {
+	if u.create.err != nil {
+		return u.create.err
+	}
 	for i, b := range u.create.builders {
 		if len(b.conflict) != 0 {
 			return fmt.Errorf("ent: OnConflict was set for builder %d. Set it on the RoleUserCreateBulk instead", i)

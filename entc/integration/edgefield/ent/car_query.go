@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"math"
 
+	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/entc/integration/edgefield/ent/car"
@@ -24,11 +25,12 @@ import (
 // CarQuery is the builder for querying Car entities.
 type CarQuery struct {
 	config
-	ctx         *QueryContext
-	order       []OrderFunc
-	inters      []Interceptor
-	predicates  []predicate.Car
-	withRentals *RentalQuery
+	ctx              *QueryContext
+	order            []car.OrderOption
+	inters           []Interceptor
+	predicates       []predicate.Car
+	withRentals      *RentalQuery
+	withNamedRentals map[string]*RentalQuery
 	// intermediate query (i.e. traversal path).
 	sql  *sql.Selector
 	path func(context.Context) (*sql.Selector, error)
@@ -60,7 +62,7 @@ func (cq *CarQuery) Unique(unique bool) *CarQuery {
 }
 
 // Order specifies how the records should be ordered.
-func (cq *CarQuery) Order(o ...OrderFunc) *CarQuery {
+func (cq *CarQuery) Order(o ...car.OrderOption) *CarQuery {
 	cq.order = append(cq.order, o...)
 	return cq
 }
@@ -90,7 +92,7 @@ func (cq *CarQuery) QueryRentals() *RentalQuery {
 // First returns the first Car entity from the query.
 // Returns a *NotFoundError when no Car was found.
 func (cq *CarQuery) First(ctx context.Context) (*Car, error) {
-	nodes, err := cq.Limit(1).All(setContextOp(ctx, cq.ctx, "First"))
+	nodes, err := cq.Limit(1).All(setContextOp(ctx, cq.ctx, ent.OpQueryFirst))
 	if err != nil {
 		return nil, err
 	}
@@ -113,7 +115,7 @@ func (cq *CarQuery) FirstX(ctx context.Context) *Car {
 // Returns a *NotFoundError when no Car ID was found.
 func (cq *CarQuery) FirstID(ctx context.Context) (id uuid.UUID, err error) {
 	var ids []uuid.UUID
-	if ids, err = cq.Limit(1).IDs(setContextOp(ctx, cq.ctx, "FirstID")); err != nil {
+	if ids, err = cq.Limit(1).IDs(setContextOp(ctx, cq.ctx, ent.OpQueryFirstID)); err != nil {
 		return
 	}
 	if len(ids) == 0 {
@@ -136,7 +138,7 @@ func (cq *CarQuery) FirstIDX(ctx context.Context) uuid.UUID {
 // Returns a *NotSingularError when more than one Car entity is found.
 // Returns a *NotFoundError when no Car entities are found.
 func (cq *CarQuery) Only(ctx context.Context) (*Car, error) {
-	nodes, err := cq.Limit(2).All(setContextOp(ctx, cq.ctx, "Only"))
+	nodes, err := cq.Limit(2).All(setContextOp(ctx, cq.ctx, ent.OpQueryOnly))
 	if err != nil {
 		return nil, err
 	}
@@ -164,7 +166,7 @@ func (cq *CarQuery) OnlyX(ctx context.Context) *Car {
 // Returns a *NotFoundError when no entities are found.
 func (cq *CarQuery) OnlyID(ctx context.Context) (id uuid.UUID, err error) {
 	var ids []uuid.UUID
-	if ids, err = cq.Limit(2).IDs(setContextOp(ctx, cq.ctx, "OnlyID")); err != nil {
+	if ids, err = cq.Limit(2).IDs(setContextOp(ctx, cq.ctx, ent.OpQueryOnlyID)); err != nil {
 		return
 	}
 	switch len(ids) {
@@ -189,7 +191,7 @@ func (cq *CarQuery) OnlyIDX(ctx context.Context) uuid.UUID {
 
 // All executes the query and returns a list of Cars.
 func (cq *CarQuery) All(ctx context.Context) ([]*Car, error) {
-	ctx = setContextOp(ctx, cq.ctx, "All")
+	ctx = setContextOp(ctx, cq.ctx, ent.OpQueryAll)
 	if err := cq.prepareQuery(ctx); err != nil {
 		return nil, err
 	}
@@ -211,7 +213,7 @@ func (cq *CarQuery) IDs(ctx context.Context) (ids []uuid.UUID, err error) {
 	if cq.ctx.Unique == nil && cq.path != nil {
 		cq.Unique(true)
 	}
-	ctx = setContextOp(ctx, cq.ctx, "IDs")
+	ctx = setContextOp(ctx, cq.ctx, ent.OpQueryIDs)
 	if err = cq.Select(car.FieldID).Scan(ctx, &ids); err != nil {
 		return nil, err
 	}
@@ -229,7 +231,7 @@ func (cq *CarQuery) IDsX(ctx context.Context) []uuid.UUID {
 
 // Count returns the count of the given query.
 func (cq *CarQuery) Count(ctx context.Context) (int, error) {
-	ctx = setContextOp(ctx, cq.ctx, "Count")
+	ctx = setContextOp(ctx, cq.ctx, ent.OpQueryCount)
 	if err := cq.prepareQuery(ctx); err != nil {
 		return 0, err
 	}
@@ -247,7 +249,7 @@ func (cq *CarQuery) CountX(ctx context.Context) int {
 
 // Exist returns true if the query has elements in the graph.
 func (cq *CarQuery) Exist(ctx context.Context) (bool, error) {
-	ctx = setContextOp(ctx, cq.ctx, "Exist")
+	ctx = setContextOp(ctx, cq.ctx, ent.OpQueryExist)
 	switch _, err := cq.FirstID(ctx); {
 	case IsNotFound(err):
 		return false, nil
@@ -276,7 +278,7 @@ func (cq *CarQuery) Clone() *CarQuery {
 	return &CarQuery{
 		config:      cq.config,
 		ctx:         cq.ctx.Clone(),
-		order:       append([]OrderFunc{}, cq.order...),
+		order:       append([]car.OrderOption{}, cq.order...),
 		inters:      append([]Interceptor{}, cq.inters...),
 		predicates:  append([]predicate.Car{}, cq.predicates...),
 		withRentals: cq.withRentals.Clone(),
@@ -404,6 +406,13 @@ func (cq *CarQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Car, err
 			return nil, err
 		}
 	}
+	for name, query := range cq.withNamedRentals {
+		if err := cq.loadRentals(ctx, query, nodes,
+			func(n *Car) { n.appendNamedRentals(name) },
+			func(n *Car, e *Rental) { n.appendNamedRentals(name, e) }); err != nil {
+			return nil, err
+		}
+	}
 	return nodes, nil
 }
 
@@ -417,8 +426,11 @@ func (cq *CarQuery) loadRentals(ctx context.Context, query *RentalQuery, nodes [
 			init(nodes[i])
 		}
 	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(rental.FieldCarID)
+	}
 	query.Where(predicate.Rental(func(s *sql.Selector) {
-		s.Where(sql.InValues(car.RentalsColumn, fks...))
+		s.Where(sql.InValues(s.C(car.RentalsColumn), fks...))
 	}))
 	neighbors, err := query.All(ctx)
 	if err != nil {
@@ -428,7 +440,7 @@ func (cq *CarQuery) loadRentals(ctx context.Context, query *RentalQuery, nodes [
 		fk := n.CarID
 		node, ok := nodeids[fk]
 		if !ok {
-			return fmt.Errorf(`unexpected foreign-key "car_id" returned %v for node %v`, fk, n.ID)
+			return fmt.Errorf(`unexpected referenced foreign-key "car_id" returned %v for node %v`, fk, n.ID)
 		}
 		assign(node, n)
 	}
@@ -516,6 +528,20 @@ func (cq *CarQuery) sqlQuery(ctx context.Context) *sql.Selector {
 	return selector
 }
 
+// WithNamedRentals tells the query-builder to eager-load the nodes that are connected to the "rentals"
+// edge with the given name. The optional arguments are used to configure the query builder of the edge.
+func (cq *CarQuery) WithNamedRentals(name string, opts ...func(*RentalQuery)) *CarQuery {
+	query := (&RentalClient{config: cq.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	if cq.withNamedRentals == nil {
+		cq.withNamedRentals = make(map[string]*RentalQuery)
+	}
+	cq.withNamedRentals[name] = query
+	return cq
+}
+
 // CarGroupBy is the group-by builder for Car entities.
 type CarGroupBy struct {
 	selector
@@ -530,7 +556,7 @@ func (cgb *CarGroupBy) Aggregate(fns ...AggregateFunc) *CarGroupBy {
 
 // Scan applies the selector query and scans the result into the given value.
 func (cgb *CarGroupBy) Scan(ctx context.Context, v any) error {
-	ctx = setContextOp(ctx, cgb.build.ctx, "GroupBy")
+	ctx = setContextOp(ctx, cgb.build.ctx, ent.OpQueryGroupBy)
 	if err := cgb.build.prepareQuery(ctx); err != nil {
 		return err
 	}
@@ -578,7 +604,7 @@ func (cs *CarSelect) Aggregate(fns ...AggregateFunc) *CarSelect {
 
 // Scan applies the selector query and scans the result into the given value.
 func (cs *CarSelect) Scan(ctx context.Context, v any) error {
-	ctx = setContextOp(ctx, cs.ctx, "Select")
+	ctx = setContextOp(ctx, cs.ctx, ent.OpQuerySelect)
 	if err := cs.prepareQuery(ctx); err != nil {
 		return err
 	}

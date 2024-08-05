@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"strings"
 
+	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/entc/integration/edgeschema/ent/relationship"
 	"entgo.io/ent/entc/integration/edgeschema/ent/relationshipinfo"
@@ -29,7 +30,8 @@ type Relationship struct {
 	InfoID int `json:"info_id,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the RelationshipQuery when eager-loading is set.
-	Edges RelationshipEdges `json:"edges"`
+	Edges        RelationshipEdges `json:"edges"`
+	selectValues sql.SelectValues
 }
 
 // RelationshipEdges holds the relations/edges for other nodes in the graph.
@@ -48,12 +50,10 @@ type RelationshipEdges struct {
 // UserOrErr returns the User value or an error if the edge
 // was not loaded in eager-loading, or loaded but was not found.
 func (e RelationshipEdges) UserOrErr() (*User, error) {
-	if e.loadedTypes[0] {
-		if e.User == nil {
-			// Edge was loaded but was not found.
-			return nil, &NotFoundError{label: user.Label}
-		}
+	if e.User != nil {
 		return e.User, nil
+	} else if e.loadedTypes[0] {
+		return nil, &NotFoundError{label: user.Label}
 	}
 	return nil, &NotLoadedError{edge: "user"}
 }
@@ -61,12 +61,10 @@ func (e RelationshipEdges) UserOrErr() (*User, error) {
 // RelativeOrErr returns the Relative value or an error if the edge
 // was not loaded in eager-loading, or loaded but was not found.
 func (e RelationshipEdges) RelativeOrErr() (*User, error) {
-	if e.loadedTypes[1] {
-		if e.Relative == nil {
-			// Edge was loaded but was not found.
-			return nil, &NotFoundError{label: user.Label}
-		}
+	if e.Relative != nil {
 		return e.Relative, nil
+	} else if e.loadedTypes[1] {
+		return nil, &NotFoundError{label: user.Label}
 	}
 	return nil, &NotLoadedError{edge: "relative"}
 }
@@ -74,12 +72,10 @@ func (e RelationshipEdges) RelativeOrErr() (*User, error) {
 // InfoOrErr returns the Info value or an error if the edge
 // was not loaded in eager-loading, or loaded but was not found.
 func (e RelationshipEdges) InfoOrErr() (*RelationshipInfo, error) {
-	if e.loadedTypes[2] {
-		if e.Info == nil {
-			// Edge was loaded but was not found.
-			return nil, &NotFoundError{label: relationshipinfo.Label}
-		}
+	if e.Info != nil {
 		return e.Info, nil
+	} else if e.loadedTypes[2] {
+		return nil, &NotFoundError{label: relationshipinfo.Label}
 	}
 	return nil, &NotLoadedError{edge: "info"}
 }
@@ -92,7 +88,7 @@ func (*Relationship) scanValues(columns []string) ([]any, error) {
 		case relationship.FieldWeight, relationship.FieldUserID, relationship.FieldRelativeID, relationship.FieldInfoID:
 			values[i] = new(sql.NullInt64)
 		default:
-			return nil, fmt.Errorf("unexpected column %q for type Relationship", columns[i])
+			values[i] = new(sql.UnknownType)
 		}
 	}
 	return values, nil
@@ -130,9 +126,17 @@ func (r *Relationship) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				r.InfoID = int(value.Int64)
 			}
+		default:
+			r.selectValues.Set(columns[i], values[i])
 		}
 	}
 	return nil
+}
+
+// Value returns the ent.Value that was dynamically selected and assigned to the Relationship.
+// This includes values selected through modifiers, order, etc.
+func (r *Relationship) Value(name string) (ent.Value, error) {
+	return r.selectValues.Get(name)
 }
 
 // QueryUser queries the "user" edge of the Relationship entity.

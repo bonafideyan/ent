@@ -44,6 +44,7 @@ var (
 		"quote":         quote,
 		"base":          filepath.Base,
 		"keys":          keys,
+		"indexOf":       indexOf,
 		"join":          join,
 		"joinWords":     joinWords,
 		"isNil":         isNil,
@@ -96,6 +97,16 @@ func joinWords(words []string, maxSize int) string {
 	return b.String()
 }
 
+// indexOf returns the index of the given string in the slice.
+func indexOf(s []string, v string) int {
+	for i, x := range s {
+		if x == v {
+			return i
+		}
+	}
+	return -1
+}
+
 // quote only strings.
 func quote(v any) any {
 	if s, ok := v.(string); ok {
@@ -113,7 +124,7 @@ func fieldOps(f *Field) (ops []Op) {
 		ops = boolOps
 	case t == field.TypeString && strings.ToLower(f.Name) != "id":
 		ops = stringOps
-		if f.HasGoType() && !f.ConvertedToBasic() && f.Type.Valuer() {
+		if f.HasGoType() && !f.ConvertedToBasic() && (f.Type.Valuer() || f.HasValueScanner()) {
 			ops = numericOps
 		}
 	case t == field.TypeEnum || f.IsEdgeField():

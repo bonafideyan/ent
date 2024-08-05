@@ -14,7 +14,9 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"runtime"
 	"runtime/debug"
+	"strconv"
 	"strings"
 	"text/template/parse"
 
@@ -22,6 +24,7 @@ import (
 	"entgo.io/ent/entc/load"
 	"entgo.io/ent/schema/field"
 
+	"golang.org/x/sync/errgroup"
 	"golang.org/x/tools/imports"
 )
 
@@ -175,7 +178,21 @@ func NewGraph(c *Config, schemas ...*load.Schema) (g *Graph, err error) {
 	check(g.edgeSchemas(), "resolving edges")
 	aliases(g)
 	g.defaults()
+	if c.Storage != nil && c.Storage.Init != nil {
+		check(c.Storage.Init(g), "storage driver init")
+	}
 	return
+}
+
+// MutableNodes returns the list of nodes that are mutable. i.e., not views.
+func (g *Graph) MutableNodes() []*Type {
+	nodes := make([]*Type, 0, len(g.Nodes))
+	for _, n := range g.Nodes {
+		if !n.IsView() {
+			nodes = append(nodes, n)
+		}
+	}
+	return nodes
 }
 
 // defaultIDType holds the default value for IDType.
@@ -226,6 +243,9 @@ func generate(g *Graph) error {
 	for _, n := range g.Nodes {
 		assets.addDir(filepath.Join(g.Config.Target, n.PackageDir()))
 		for _, tmpl := range Templates {
+			if tmpl.Cond != nil && !tmpl.Cond(n) {
+				continue
+			}
 			b := bytes.NewBuffer(nil)
 			if err := templates.ExecuteTemplate(b, tmpl.Name, n); err != nil {
 				return fmt.Errorf("execute template %q: %w", tmpl.Name, err)
@@ -246,7 +266,7 @@ func generate(g *Graph) error {
 		}
 		assets.add(filepath.Join(g.Config.Target, tmpl.Format), b.Bytes())
 	}
-	for _, f := range AllFeatures {
+	for _, f := range allFeatures {
 		if f.cleanup == nil || g.featureEnabled(f) {
 			continue
 		}
@@ -611,20 +631,36 @@ func (g *Graph) edgeSchemas() error {
 // Tables returns the schema definitions of SQL tables for the graph.
 func (g *Graph) Tables() (all []*schema.Table, err error) {
 	tables := make(map[string]*schema.Table)
-	for _, n := range g.Nodes {
+	for _, n := range g.MutableNodes() {
 		table := schema.NewTable(n.Table()).
 			SetComment(n.sqlComment())
 		if n.HasOneFieldID() {
 			table.AddPrimary(n.ID.PK())
 		}
-		table.SetAnnotation(n.EntSQL())
+		switch ant := n.EntSQL(); {
+		case ant == nil:
+		case ant.Skip:
+			continue
+		default:
+			table.SetAnnotation(ant).SetSchema(ant.Schema)
+		}
 		for _, f := range n.Fields {
+			if a := f.EntSQL(); a != nil && a.Skip {
+				continue
+			}
 			if !f.IsEdgeField() {
 				table.AddColumn(f.Column())
 			}
 		}
-		tables[table.Name] = table
-		all = append(all, table)
+		switch {
+		case tables[table.Name] == nil:
+			tables[table.Name] = table
+			all = append(all, table)
+		case tables[table.Name].Schema != table.Schema:
+			return nil, fmt.Errorf("cannot use the same table name %q in different schemas: %q, %q", table.Name, tables[table.Name].Schema, table.Schema)
+		default:
+			return nil, fmt.Errorf("duplicate table name %q in schema %q", table.Name, table.Schema)
+		}
 	}
 	for _, n := range g.Nodes {
 		// Foreign key and its reference, or a join table.
@@ -683,9 +719,22 @@ func (g *Graph) Tables() (all []*schema.Table, err error) {
 					c2.Type = ref.Type.Type
 					c2.Size = ref.size()
 				}
+				ant := e.EntSQL()
 				s1, s2 := fkSymbols(e, c1, c2)
 				all = append(all, &schema.Table{
-					Name:       e.Rel.Table,
+					Name: e.Rel.Table,
+					// Search for edge annotation, or
+					// default to edge owner annotation.
+					Schema: func() string {
+						if ant != nil && ant.Schema != "" {
+							return ant.Schema
+						}
+						if ant := n.EntSQL(); ant != nil && ant.Schema != "" {
+							return ant.Schema
+						}
+						return ""
+					}(),
+					Annotation: ant,
 					Columns:    []*schema.Column{c1, c2},
 					PrimaryKey: []*schema.Column{c1, c2},
 					ForeignKeys: []*schema.ForeignKey{
@@ -725,6 +774,32 @@ func (g *Graph) Tables() (all []*schema.Table, err error) {
 	}
 	if err := ensureUniqueFKs(tables); err != nil {
 		return nil, err
+	}
+	return
+}
+
+// Views returns all schema views
+func (g *Graph) Views() (views []*schema.Table, err error) {
+	for _, n := range g.Nodes {
+		if !n.IsView() {
+			continue
+		}
+		view := schema.NewView(n.Table()).
+			SetComment(n.sqlComment())
+		switch ant := n.EntSQL(); {
+		case ant == nil:
+		case ant.Skip:
+			continue
+		default:
+			view.SetAnnotation(ant).SetSchema(ant.Schema)
+		}
+		for _, f := range n.Fields {
+			if a := f.EntSQL(); a != nil && a.Skip {
+				continue
+			}
+			view.AddColumn(f.Column())
+		}
+		views = append(views, view)
 	}
 	return
 }
@@ -793,7 +868,7 @@ func fkSymbols(e *Edge, c1, c2 *schema.Column) (string, string) {
 	return s1, s2
 }
 
-// ensureUniqueNames ensures constraint names are unique.
+// ensureUniqueFKs ensures constraint names are unique.
 func ensureUniqueFKs(tables map[string]*schema.Table) error {
 	fks := make(map[string]*schema.Table)
 	for _, t := range tables {
@@ -859,7 +934,7 @@ func (g *Graph) SchemaSnapshot() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return string(out), nil
+	return strconv.Quote(string(out)), nil
 }
 
 func (g *Graph) typ(name string) (*Type, bool) {
@@ -953,7 +1028,7 @@ func (Config) ModuleInfo() (m debug.Module) {
 //		...
 //	{{ end }}
 func (c Config) FeatureEnabled(name string) (bool, error) {
-	for _, f := range AllFeatures {
+	for _, f := range allFeatures {
 		if name == f.Name {
 			return c.featureEnabled(f), nil
 		}
@@ -1075,16 +1150,22 @@ func (a assets) write() error {
 
 // format runs "goimports" on all assets.
 func (a assets) format() error {
+	var wg errgroup.Group
+	wg.SetLimit(runtime.GOMAXPROCS(0))
 	for path, content := range a.files {
-		src, err := imports.Process(path, content, nil)
-		if err != nil {
-			return fmt.Errorf("format file %s: %w", path, err)
-		}
-		if err := os.WriteFile(path, src, 0644); err != nil {
-			return fmt.Errorf("write file %s: %w", path, err)
-		}
+		path, content := path, content
+		wg.Go(func() error {
+			src, err := imports.Process(path, content, nil)
+			if err != nil {
+				return fmt.Errorf("format file %s: %w", path, err)
+			}
+			if err := os.WriteFile(path, src, 0644); err != nil {
+				return fmt.Errorf("write file %s: %w", path, err)
+			}
+			return nil
+		})
 	}
-	return nil
+	return wg.Wait()
 }
 
 // expect panics if the condition is false.

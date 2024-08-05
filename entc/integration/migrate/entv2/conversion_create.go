@@ -155,7 +155,7 @@ func (cc *ConversionCreate) Mutation() *ConversionMutation {
 
 // Save creates the Conversion in the database.
 func (cc *ConversionCreate) Save(ctx context.Context) (*Conversion, error) {
-	return withHooks[*Conversion, ConversionMutation](ctx, cc.sqlSave, cc.mutation, cc.hooks)
+	return withHooks(ctx, cc.sqlSave, cc.mutation, cc.hooks)
 }
 
 // SaveX calls Save and panics if Save returns an error.
@@ -250,11 +250,15 @@ func (cc *ConversionCreate) createSpec() (*Conversion, *sqlgraph.CreateSpec) {
 // ConversionCreateBulk is the builder for creating many Conversion entities in bulk.
 type ConversionCreateBulk struct {
 	config
+	err      error
 	builders []*ConversionCreate
 }
 
 // Save creates the Conversion entities in the database.
 func (ccb *ConversionCreateBulk) Save(ctx context.Context) ([]*Conversion, error) {
+	if ccb.err != nil {
+		return nil, ccb.err
+	}
 	specs := make([]*sqlgraph.CreateSpec, len(ccb.builders))
 	nodes := make([]*Conversion, len(ccb.builders))
 	mutators := make([]Mutator, len(ccb.builders))
@@ -270,8 +274,8 @@ func (ccb *ConversionCreateBulk) Save(ctx context.Context) ([]*Conversion, error
 					return nil, err
 				}
 				builder.mutation = mutation
-				nodes[i], specs[i] = builder.createSpec()
 				var err error
+				nodes[i], specs[i] = builder.createSpec()
 				if i < len(mutators)-1 {
 					_, err = mutators[i+1].Mutate(root, ccb.builders[i+1].mutation)
 				} else {

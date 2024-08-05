@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"strings"
 
+	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/entc/integration/customid/ent/blob"
 	"github.com/google/uuid"
@@ -26,8 +27,9 @@ type Blob struct {
 	Count int `json:"count,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the BlobQuery when eager-loading is set.
-	Edges       BlobEdges `json:"edges"`
-	blob_parent *uuid.UUID
+	Edges        BlobEdges `json:"edges"`
+	blob_parent  *uuid.UUID
+	selectValues sql.SelectValues
 }
 
 // BlobEdges holds the relations/edges for other nodes in the graph.
@@ -46,12 +48,10 @@ type BlobEdges struct {
 // ParentOrErr returns the Parent value or an error if the edge
 // was not loaded in eager-loading, or loaded but was not found.
 func (e BlobEdges) ParentOrErr() (*Blob, error) {
-	if e.loadedTypes[0] {
-		if e.Parent == nil {
-			// Edge was loaded but was not found.
-			return nil, &NotFoundError{label: blob.Label}
-		}
+	if e.Parent != nil {
 		return e.Parent, nil
+	} else if e.loadedTypes[0] {
+		return nil, &NotFoundError{label: blob.Label}
 	}
 	return nil, &NotLoadedError{edge: "parent"}
 }
@@ -86,7 +86,7 @@ func (*Blob) scanValues(columns []string) ([]any, error) {
 		case blob.ForeignKeys[0]: // blob_parent
 			values[i] = &sql.NullScanner{S: new(uuid.UUID)}
 		default:
-			return nil, fmt.Errorf("unexpected column %q for type Blob", columns[i])
+			values[i] = new(sql.UnknownType)
 		}
 	}
 	return values, nil
@@ -125,9 +125,17 @@ func (b *Blob) assignValues(columns []string, values []any) error {
 				b.blob_parent = new(uuid.UUID)
 				*b.blob_parent = *value.S.(*uuid.UUID)
 			}
+		default:
+			b.selectValues.Set(columns[i], values[i])
 		}
 	}
 	return nil
+}
+
+// Value returns the ent.Value that was dynamically selected and assigned to the Blob.
+// This includes values selected through modifiers, order, etc.
+func (b *Blob) Value(name string) (ent.Value, error) {
+	return b.selectValues.Get(name)
 }
 
 // QueryParent queries the "parent" edge of the Blob entity.

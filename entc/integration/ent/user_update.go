@@ -70,6 +70,14 @@ func (uu *UserUpdate) SetAge(i int) *UserUpdate {
 	return uu
 }
 
+// SetNillableAge sets the "age" field if the given value is not nil.
+func (uu *UserUpdate) SetNillableAge(i *int) *UserUpdate {
+	if i != nil {
+		uu.SetAge(*i)
+	}
+	return uu
+}
+
 // AddAge adds i to the "age" field.
 func (uu *UserUpdate) AddAge(i int) *UserUpdate {
 	uu.mutation.AddAge(i)
@@ -79,6 +87,14 @@ func (uu *UserUpdate) AddAge(i int) *UserUpdate {
 // SetName sets the "name" field.
 func (uu *UserUpdate) SetName(s string) *UserUpdate {
 	uu.mutation.SetName(s)
+	return uu
+}
+
+// SetNillableName sets the "name" field if the given value is not nil.
+func (uu *UserUpdate) SetNillableName(s *string) *UserUpdate {
+	if s != nil {
+		uu.SetName(*s)
+	}
 	return uu
 }
 
@@ -221,6 +237,33 @@ func (uu *UserUpdate) SetNillableSSOCert(s *string) *UserUpdate {
 // ClearSSOCert clears the value of the "SSOCert" field.
 func (uu *UserUpdate) ClearSSOCert() *UserUpdate {
 	uu.mutation.ClearSSOCert()
+	return uu
+}
+
+// SetFilesCount sets the "files_count" field.
+func (uu *UserUpdate) SetFilesCount(i int) *UserUpdate {
+	uu.mutation.ResetFilesCount()
+	uu.mutation.SetFilesCount(i)
+	return uu
+}
+
+// SetNillableFilesCount sets the "files_count" field if the given value is not nil.
+func (uu *UserUpdate) SetNillableFilesCount(i *int) *UserUpdate {
+	if i != nil {
+		uu.SetFilesCount(*i)
+	}
+	return uu
+}
+
+// AddFilesCount adds i to the "files_count" field.
+func (uu *UserUpdate) AddFilesCount(i int) *UserUpdate {
+	uu.mutation.AddFilesCount(i)
+	return uu
+}
+
+// ClearFilesCount clears the value of the "files_count" field.
+func (uu *UserUpdate) ClearFilesCount() *UserUpdate {
+	uu.mutation.ClearFilesCount()
 	return uu
 }
 
@@ -583,7 +626,7 @@ func (uu *UserUpdate) ClearParent() *UserUpdate {
 
 // Save executes the query and returns the number of nodes affected by the update operation.
 func (uu *UserUpdate) Save(ctx context.Context) (int, error) {
-	return withHooks[int, UserMutation](ctx, uu.sqlSave, uu.mutation, uu.hooks)
+	return withHooks(ctx, uu.sqlSave, uu.mutation, uu.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
@@ -702,6 +745,15 @@ func (uu *UserUpdate) sqlSave(ctx context.Context) (n int, err error) {
 	}
 	if uu.mutation.SSOCertCleared() {
 		_spec.ClearField(user.FieldSSOCert, field.TypeString)
+	}
+	if value, ok := uu.mutation.FilesCount(); ok {
+		_spec.SetField(user.FieldFilesCount, field.TypeInt, value)
+	}
+	if value, ok := uu.mutation.AddedFilesCount(); ok {
+		_spec.AddField(user.FieldFilesCount, field.TypeInt, value)
+	}
+	if uu.mutation.FilesCountCleared() {
+		_spec.ClearField(user.FieldFilesCount, field.TypeInt)
 	}
 	if uu.mutation.CardCleared() {
 		edge := &sqlgraph.EdgeSpec{
@@ -1190,6 +1242,14 @@ func (uuo *UserUpdateOne) SetAge(i int) *UserUpdateOne {
 	return uuo
 }
 
+// SetNillableAge sets the "age" field if the given value is not nil.
+func (uuo *UserUpdateOne) SetNillableAge(i *int) *UserUpdateOne {
+	if i != nil {
+		uuo.SetAge(*i)
+	}
+	return uuo
+}
+
 // AddAge adds i to the "age" field.
 func (uuo *UserUpdateOne) AddAge(i int) *UserUpdateOne {
 	uuo.mutation.AddAge(i)
@@ -1199,6 +1259,14 @@ func (uuo *UserUpdateOne) AddAge(i int) *UserUpdateOne {
 // SetName sets the "name" field.
 func (uuo *UserUpdateOne) SetName(s string) *UserUpdateOne {
 	uuo.mutation.SetName(s)
+	return uuo
+}
+
+// SetNillableName sets the "name" field if the given value is not nil.
+func (uuo *UserUpdateOne) SetNillableName(s *string) *UserUpdateOne {
+	if s != nil {
+		uuo.SetName(*s)
+	}
 	return uuo
 }
 
@@ -1341,6 +1409,33 @@ func (uuo *UserUpdateOne) SetNillableSSOCert(s *string) *UserUpdateOne {
 // ClearSSOCert clears the value of the "SSOCert" field.
 func (uuo *UserUpdateOne) ClearSSOCert() *UserUpdateOne {
 	uuo.mutation.ClearSSOCert()
+	return uuo
+}
+
+// SetFilesCount sets the "files_count" field.
+func (uuo *UserUpdateOne) SetFilesCount(i int) *UserUpdateOne {
+	uuo.mutation.ResetFilesCount()
+	uuo.mutation.SetFilesCount(i)
+	return uuo
+}
+
+// SetNillableFilesCount sets the "files_count" field if the given value is not nil.
+func (uuo *UserUpdateOne) SetNillableFilesCount(i *int) *UserUpdateOne {
+	if i != nil {
+		uuo.SetFilesCount(*i)
+	}
+	return uuo
+}
+
+// AddFilesCount adds i to the "files_count" field.
+func (uuo *UserUpdateOne) AddFilesCount(i int) *UserUpdateOne {
+	uuo.mutation.AddFilesCount(i)
+	return uuo
+}
+
+// ClearFilesCount clears the value of the "files_count" field.
+func (uuo *UserUpdateOne) ClearFilesCount() *UserUpdateOne {
+	uuo.mutation.ClearFilesCount()
 	return uuo
 }
 
@@ -1716,7 +1811,7 @@ func (uuo *UserUpdateOne) Select(field string, fields ...string) *UserUpdateOne 
 
 // Save executes the query and returns the updated User entity.
 func (uuo *UserUpdateOne) Save(ctx context.Context) (*User, error) {
-	return withHooks[*User, UserMutation](ctx, uuo.sqlSave, uuo.mutation, uuo.hooks)
+	return withHooks(ctx, uuo.sqlSave, uuo.mutation, uuo.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
@@ -1852,6 +1947,15 @@ func (uuo *UserUpdateOne) sqlSave(ctx context.Context) (_node *User, err error) 
 	}
 	if uuo.mutation.SSOCertCleared() {
 		_spec.ClearField(user.FieldSSOCert, field.TypeString)
+	}
+	if value, ok := uuo.mutation.FilesCount(); ok {
+		_spec.SetField(user.FieldFilesCount, field.TypeInt, value)
+	}
+	if value, ok := uuo.mutation.AddedFilesCount(); ok {
+		_spec.AddField(user.FieldFilesCount, field.TypeInt, value)
+	}
+	if uuo.mutation.FilesCountCleared() {
+		_spec.ClearField(user.FieldFilesCount, field.TypeInt)
 	}
 	if uuo.mutation.CardCleared() {
 		edge := &sqlgraph.EdgeSpec{

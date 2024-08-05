@@ -39,6 +39,14 @@ func (ru *RoleUpdate) SetName(s string) *RoleUpdate {
 	return ru
 }
 
+// SetNillableName sets the "name" field if the given value is not nil.
+func (ru *RoleUpdate) SetNillableName(s *string) *RoleUpdate {
+	if s != nil {
+		ru.SetName(*s)
+	}
+	return ru
+}
+
 // SetCreatedAt sets the "created_at" field.
 func (ru *RoleUpdate) SetCreatedAt(t time.Time) *RoleUpdate {
 	ru.mutation.SetCreatedAt(t)
@@ -96,7 +104,7 @@ func (ru *RoleUpdate) RemoveUser(u ...*User) *RoleUpdate {
 
 // Save executes the query and returns the number of nodes affected by the update operation.
 func (ru *RoleUpdate) Save(ctx context.Context) (int, error) {
-	return withHooks[int, RoleMutation](ctx, ru.sqlSave, ru.mutation, ru.hooks)
+	return withHooks(ctx, ru.sqlSave, ru.mutation, ru.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
@@ -219,6 +227,14 @@ func (ruo *RoleUpdateOne) SetName(s string) *RoleUpdateOne {
 	return ruo
 }
 
+// SetNillableName sets the "name" field if the given value is not nil.
+func (ruo *RoleUpdateOne) SetNillableName(s *string) *RoleUpdateOne {
+	if s != nil {
+		ruo.SetName(*s)
+	}
+	return ruo
+}
+
 // SetCreatedAt sets the "created_at" field.
 func (ruo *RoleUpdateOne) SetCreatedAt(t time.Time) *RoleUpdateOne {
 	ruo.mutation.SetCreatedAt(t)
@@ -289,7 +305,7 @@ func (ruo *RoleUpdateOne) Select(field string, fields ...string) *RoleUpdateOne 
 
 // Save executes the query and returns the updated Role entity.
 func (ruo *RoleUpdateOne) Save(ctx context.Context) (*Role, error) {
-	return withHooks[*Role, RoleMutation](ctx, ruo.sqlSave, ruo.mutation, ruo.hooks)
+	return withHooks(ctx, ruo.sqlSave, ruo.mutation, ruo.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.

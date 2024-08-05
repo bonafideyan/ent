@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/entc/integration/edgeschema/ent/group"
 	"entgo.io/ent/entc/integration/edgeschema/ent/user"
@@ -30,7 +31,8 @@ type UserGroup struct {
 	GroupID int `json:"group_id,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the UserGroupQuery when eager-loading is set.
-	Edges UserGroupEdges `json:"edges"`
+	Edges        UserGroupEdges `json:"edges"`
+	selectValues sql.SelectValues
 }
 
 // UserGroupEdges holds the relations/edges for other nodes in the graph.
@@ -47,12 +49,10 @@ type UserGroupEdges struct {
 // UserOrErr returns the User value or an error if the edge
 // was not loaded in eager-loading, or loaded but was not found.
 func (e UserGroupEdges) UserOrErr() (*User, error) {
-	if e.loadedTypes[0] {
-		if e.User == nil {
-			// Edge was loaded but was not found.
-			return nil, &NotFoundError{label: user.Label}
-		}
+	if e.User != nil {
 		return e.User, nil
+	} else if e.loadedTypes[0] {
+		return nil, &NotFoundError{label: user.Label}
 	}
 	return nil, &NotLoadedError{edge: "user"}
 }
@@ -60,12 +60,10 @@ func (e UserGroupEdges) UserOrErr() (*User, error) {
 // GroupOrErr returns the Group value or an error if the edge
 // was not loaded in eager-loading, or loaded but was not found.
 func (e UserGroupEdges) GroupOrErr() (*Group, error) {
-	if e.loadedTypes[1] {
-		if e.Group == nil {
-			// Edge was loaded but was not found.
-			return nil, &NotFoundError{label: group.Label}
-		}
+	if e.Group != nil {
 		return e.Group, nil
+	} else if e.loadedTypes[1] {
+		return nil, &NotFoundError{label: group.Label}
 	}
 	return nil, &NotLoadedError{edge: "group"}
 }
@@ -80,7 +78,7 @@ func (*UserGroup) scanValues(columns []string) ([]any, error) {
 		case usergroup.FieldJoinedAt:
 			values[i] = new(sql.NullTime)
 		default:
-			return nil, fmt.Errorf("unexpected column %q for type UserGroup", columns[i])
+			values[i] = new(sql.UnknownType)
 		}
 	}
 	return values, nil
@@ -118,9 +116,17 @@ func (ug *UserGroup) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				ug.GroupID = int(value.Int64)
 			}
+		default:
+			ug.selectValues.Set(columns[i], values[i])
 		}
 	}
 	return nil
+}
+
+// Value returns the ent.Value that was dynamically selected and assigned to the UserGroup.
+// This includes values selected through modifiers, order, etc.
+func (ug *UserGroup) Value(name string) (ent.Value, error) {
+	return ug.selectValues.Get(name)
 }
 
 // QueryUser queries the "user" edge of the UserGroup entity.

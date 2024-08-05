@@ -54,9 +54,25 @@ func (tlu *TweetLikeUpdate) SetUserID(i int) *TweetLikeUpdate {
 	return tlu
 }
 
+// SetNillableUserID sets the "user_id" field if the given value is not nil.
+func (tlu *TweetLikeUpdate) SetNillableUserID(i *int) *TweetLikeUpdate {
+	if i != nil {
+		tlu.SetUserID(*i)
+	}
+	return tlu
+}
+
 // SetTweetID sets the "tweet_id" field.
 func (tlu *TweetLikeUpdate) SetTweetID(i int) *TweetLikeUpdate {
 	tlu.mutation.SetTweetID(i)
+	return tlu
+}
+
+// SetNillableTweetID sets the "tweet_id" field if the given value is not nil.
+func (tlu *TweetLikeUpdate) SetNillableTweetID(i *int) *TweetLikeUpdate {
+	if i != nil {
+		tlu.SetTweetID(*i)
+	}
 	return tlu
 }
 
@@ -89,7 +105,7 @@ func (tlu *TweetLikeUpdate) ClearUser() *TweetLikeUpdate {
 
 // Save executes the query and returns the number of nodes affected by the update operation.
 func (tlu *TweetLikeUpdate) Save(ctx context.Context) (int, error) {
-	return withHooks[int, TweetLikeMutation](ctx, tlu.sqlSave, tlu.mutation, tlu.hooks)
+	return withHooks(ctx, tlu.sqlSave, tlu.mutation, tlu.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
@@ -116,10 +132,10 @@ func (tlu *TweetLikeUpdate) ExecX(ctx context.Context) {
 
 // check runs all checks and user-defined validators on the builder.
 func (tlu *TweetLikeUpdate) check() error {
-	if _, ok := tlu.mutation.TweetID(); tlu.mutation.TweetCleared() && !ok {
+	if tlu.mutation.TweetCleared() && len(tlu.mutation.TweetIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "TweetLike.tweet"`)
 	}
-	if _, ok := tlu.mutation.UserID(); tlu.mutation.UserCleared() && !ok {
+	if tlu.mutation.UserCleared() && len(tlu.mutation.UserIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "TweetLike.user"`)
 	}
 	return nil
@@ -238,9 +254,25 @@ func (tluo *TweetLikeUpdateOne) SetUserID(i int) *TweetLikeUpdateOne {
 	return tluo
 }
 
+// SetNillableUserID sets the "user_id" field if the given value is not nil.
+func (tluo *TweetLikeUpdateOne) SetNillableUserID(i *int) *TweetLikeUpdateOne {
+	if i != nil {
+		tluo.SetUserID(*i)
+	}
+	return tluo
+}
+
 // SetTweetID sets the "tweet_id" field.
 func (tluo *TweetLikeUpdateOne) SetTweetID(i int) *TweetLikeUpdateOne {
 	tluo.mutation.SetTweetID(i)
+	return tluo
+}
+
+// SetNillableTweetID sets the "tweet_id" field if the given value is not nil.
+func (tluo *TweetLikeUpdateOne) SetNillableTweetID(i *int) *TweetLikeUpdateOne {
+	if i != nil {
+		tluo.SetTweetID(*i)
+	}
 	return tluo
 }
 
@@ -286,7 +318,7 @@ func (tluo *TweetLikeUpdateOne) Select(field string, fields ...string) *TweetLik
 
 // Save executes the query and returns the updated TweetLike entity.
 func (tluo *TweetLikeUpdateOne) Save(ctx context.Context) (*TweetLike, error) {
-	return withHooks[*TweetLike, TweetLikeMutation](ctx, tluo.sqlSave, tluo.mutation, tluo.hooks)
+	return withHooks(ctx, tluo.sqlSave, tluo.mutation, tluo.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
@@ -313,10 +345,10 @@ func (tluo *TweetLikeUpdateOne) ExecX(ctx context.Context) {
 
 // check runs all checks and user-defined validators on the builder.
 func (tluo *TweetLikeUpdateOne) check() error {
-	if _, ok := tluo.mutation.TweetID(); tluo.mutation.TweetCleared() && !ok {
+	if tluo.mutation.TweetCleared() && len(tluo.mutation.TweetIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "TweetLike.tweet"`)
 	}
-	if _, ok := tluo.mutation.UserID(); tluo.mutation.UserCleared() && !ok {
+	if tluo.mutation.UserCleared() && len(tluo.mutation.UserIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "TweetLike.user"`)
 	}
 	return nil

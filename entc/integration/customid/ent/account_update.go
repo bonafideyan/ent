@@ -39,6 +39,14 @@ func (au *AccountUpdate) SetEmail(s string) *AccountUpdate {
 	return au
 }
 
+// SetNillableEmail sets the "email" field if the given value is not nil.
+func (au *AccountUpdate) SetNillableEmail(s *string) *AccountUpdate {
+	if s != nil {
+		au.SetEmail(*s)
+	}
+	return au
+}
+
 // AddTokenIDs adds the "token" edge to the Token entity by IDs.
 func (au *AccountUpdate) AddTokenIDs(ids ...sid.ID) *AccountUpdate {
 	au.mutation.AddTokenIDs(ids...)
@@ -82,7 +90,7 @@ func (au *AccountUpdate) RemoveToken(t ...*Token) *AccountUpdate {
 
 // Save executes the query and returns the number of nodes affected by the update operation.
 func (au *AccountUpdate) Save(ctx context.Context) (int, error) {
-	return withHooks[int, AccountMutation](ctx, au.sqlSave, au.mutation, au.hooks)
+	return withHooks(ctx, au.sqlSave, au.mutation, au.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
@@ -203,6 +211,14 @@ func (auo *AccountUpdateOne) SetEmail(s string) *AccountUpdateOne {
 	return auo
 }
 
+// SetNillableEmail sets the "email" field if the given value is not nil.
+func (auo *AccountUpdateOne) SetNillableEmail(s *string) *AccountUpdateOne {
+	if s != nil {
+		auo.SetEmail(*s)
+	}
+	return auo
+}
+
 // AddTokenIDs adds the "token" edge to the Token entity by IDs.
 func (auo *AccountUpdateOne) AddTokenIDs(ids ...sid.ID) *AccountUpdateOne {
 	auo.mutation.AddTokenIDs(ids...)
@@ -259,7 +275,7 @@ func (auo *AccountUpdateOne) Select(field string, fields ...string) *AccountUpda
 
 // Save executes the query and returns the updated Account entity.
 func (auo *AccountUpdateOne) Save(ctx context.Context) (*Account, error) {
-	return withHooks[*Account, AccountMutation](ctx, auo.sqlSave, auo.mutation, auo.hooks)
+	return withHooks(ctx, auo.sqlSave, auo.mutation, auo.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.

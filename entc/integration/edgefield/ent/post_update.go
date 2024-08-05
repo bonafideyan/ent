@@ -38,6 +38,14 @@ func (pu *PostUpdate) SetText(s string) *PostUpdate {
 	return pu
 }
 
+// SetNillableText sets the "text" field if the given value is not nil.
+func (pu *PostUpdate) SetNillableText(s *string) *PostUpdate {
+	if s != nil {
+		pu.SetText(*s)
+	}
+	return pu
+}
+
 // SetAuthorID sets the "author_id" field.
 func (pu *PostUpdate) SetAuthorID(i int) *PostUpdate {
 	pu.mutation.SetAuthorID(i)
@@ -76,7 +84,7 @@ func (pu *PostUpdate) ClearAuthor() *PostUpdate {
 
 // Save executes the query and returns the number of nodes affected by the update operation.
 func (pu *PostUpdate) Save(ctx context.Context) (int, error) {
-	return withHooks[int, PostMutation](ctx, pu.sqlSave, pu.mutation, pu.hooks)
+	return withHooks(ctx, pu.sqlSave, pu.mutation, pu.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
@@ -168,6 +176,14 @@ func (puo *PostUpdateOne) SetText(s string) *PostUpdateOne {
 	return puo
 }
 
+// SetNillableText sets the "text" field if the given value is not nil.
+func (puo *PostUpdateOne) SetNillableText(s *string) *PostUpdateOne {
+	if s != nil {
+		puo.SetText(*s)
+	}
+	return puo
+}
+
 // SetAuthorID sets the "author_id" field.
 func (puo *PostUpdateOne) SetAuthorID(i int) *PostUpdateOne {
 	puo.mutation.SetAuthorID(i)
@@ -219,7 +235,7 @@ func (puo *PostUpdateOne) Select(field string, fields ...string) *PostUpdateOne 
 
 // Save executes the query and returns the updated Post entity.
 func (puo *PostUpdateOne) Save(ctx context.Context) (*Post, error) {
-	return withHooks[*Post, PostMutation](ctx, puo.sqlSave, puo.mutation, puo.hooks)
+	return withHooks(ctx, puo.sqlSave, puo.mutation, puo.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.

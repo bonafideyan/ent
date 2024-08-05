@@ -118,7 +118,7 @@ func (tc *TweetCreate) Mutation() *TweetMutation {
 
 // Save creates the Tweet in the database.
 func (tc *TweetCreate) Save(ctx context.Context) (*Tweet, error) {
-	return withHooks[*Tweet, TweetMutation](ctx, tc.sqlSave, tc.mutation, tc.hooks)
+	return withHooks(ctx, tc.sqlSave, tc.mutation, tc.hooks)
 }
 
 // SaveX calls Save and panics if Save returns an error.
@@ -428,12 +428,16 @@ func (u *TweetUpsertOne) IDX(ctx context.Context) int {
 // TweetCreateBulk is the builder for creating many Tweet entities in bulk.
 type TweetCreateBulk struct {
 	config
+	err      error
 	builders []*TweetCreate
 	conflict []sql.ConflictOption
 }
 
 // Save creates the Tweet entities in the database.
 func (tcb *TweetCreateBulk) Save(ctx context.Context) ([]*Tweet, error) {
+	if tcb.err != nil {
+		return nil, tcb.err
+	}
 	specs := make([]*sqlgraph.CreateSpec, len(tcb.builders))
 	nodes := make([]*Tweet, len(tcb.builders))
 	mutators := make([]Mutator, len(tcb.builders))
@@ -449,8 +453,8 @@ func (tcb *TweetCreateBulk) Save(ctx context.Context) ([]*Tweet, error) {
 					return nil, err
 				}
 				builder.mutation = mutation
-				nodes[i], specs[i] = builder.createSpec()
 				var err error
+				nodes[i], specs[i] = builder.createSpec()
 				if i < len(mutators)-1 {
 					_, err = mutators[i+1].Mutate(root, tcb.builders[i+1].mutation)
 				} else {
@@ -607,6 +611,9 @@ func (u *TweetUpsertBulk) UpdateText() *TweetUpsertBulk {
 
 // Exec executes the query.
 func (u *TweetUpsertBulk) Exec(ctx context.Context) error {
+	if u.create.err != nil {
+		return u.create.err
+	}
 	for i, b := range u.create.builders {
 		if len(b.conflict) != 0 {
 			return fmt.Errorf("ent: OnConflict was set for builder %d. Set it on the TweetCreateBulk instead", i)

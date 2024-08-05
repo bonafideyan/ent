@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/entc/integration/customid/ent/blob"
 	"entgo.io/ent/entc/integration/customid/ent/bloblink"
@@ -28,7 +29,8 @@ type BlobLink struct {
 	LinkID uuid.UUID `json:"link_id,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the BlobLinkQuery when eager-loading is set.
-	Edges BlobLinkEdges `json:"edges"`
+	Edges        BlobLinkEdges `json:"edges"`
+	selectValues sql.SelectValues
 }
 
 // BlobLinkEdges holds the relations/edges for other nodes in the graph.
@@ -45,12 +47,10 @@ type BlobLinkEdges struct {
 // BlobOrErr returns the Blob value or an error if the edge
 // was not loaded in eager-loading, or loaded but was not found.
 func (e BlobLinkEdges) BlobOrErr() (*Blob, error) {
-	if e.loadedTypes[0] {
-		if e.Blob == nil {
-			// Edge was loaded but was not found.
-			return nil, &NotFoundError{label: blob.Label}
-		}
+	if e.Blob != nil {
 		return e.Blob, nil
+	} else if e.loadedTypes[0] {
+		return nil, &NotFoundError{label: blob.Label}
 	}
 	return nil, &NotLoadedError{edge: "blob"}
 }
@@ -58,12 +58,10 @@ func (e BlobLinkEdges) BlobOrErr() (*Blob, error) {
 // LinkOrErr returns the Link value or an error if the edge
 // was not loaded in eager-loading, or loaded but was not found.
 func (e BlobLinkEdges) LinkOrErr() (*Blob, error) {
-	if e.loadedTypes[1] {
-		if e.Link == nil {
-			// Edge was loaded but was not found.
-			return nil, &NotFoundError{label: blob.Label}
-		}
+	if e.Link != nil {
 		return e.Link, nil
+	} else if e.loadedTypes[1] {
+		return nil, &NotFoundError{label: blob.Label}
 	}
 	return nil, &NotLoadedError{edge: "link"}
 }
@@ -78,7 +76,7 @@ func (*BlobLink) scanValues(columns []string) ([]any, error) {
 		case bloblink.FieldBlobID, bloblink.FieldLinkID:
 			values[i] = new(uuid.UUID)
 		default:
-			return nil, fmt.Errorf("unexpected column %q for type BlobLink", columns[i])
+			values[i] = new(sql.UnknownType)
 		}
 	}
 	return values, nil
@@ -110,9 +108,17 @@ func (bl *BlobLink) assignValues(columns []string, values []any) error {
 			} else if value != nil {
 				bl.LinkID = *value
 			}
+		default:
+			bl.selectValues.Set(columns[i], values[i])
 		}
 	}
 	return nil
+}
+
+// Value returns the ent.Value that was dynamically selected and assigned to the BlobLink.
+// This includes values selected through modifiers, order, etc.
+func (bl *BlobLink) Value(name string) (ent.Value, error) {
+	return bl.selectValues.Get(name)
 }
 
 // QueryBlob queries the "blob" edge of the BlobLink entity.

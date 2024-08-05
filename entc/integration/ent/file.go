@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"strings"
 
+	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/entc/integration/ent/file"
 	"entgo.io/ent/entc/integration/ent/filetype"
@@ -21,6 +22,8 @@ type File struct {
 	config `json:"-"`
 	// ID of the ent.
 	ID int `json:"id,omitempty"`
+	// SetID holds the value of the "set_id" field.
+	SetID int `json:"set_id,omitempty"`
 	// Size holds the value of the "size" field.
 	Size int `json:"size,omitempty"`
 	// Name holds the value of the "name" field.
@@ -39,6 +42,7 @@ type File struct {
 	file_type_files *int
 	group_files     *int
 	user_files      *int
+	selectValues    sql.SelectValues
 }
 
 // FileEdges holds the relations/edges for other nodes in the graph.
@@ -58,12 +62,10 @@ type FileEdges struct {
 // OwnerOrErr returns the Owner value or an error if the edge
 // was not loaded in eager-loading, or loaded but was not found.
 func (e FileEdges) OwnerOrErr() (*User, error) {
-	if e.loadedTypes[0] {
-		if e.Owner == nil {
-			// Edge was loaded but was not found.
-			return nil, &NotFoundError{label: user.Label}
-		}
+	if e.Owner != nil {
 		return e.Owner, nil
+	} else if e.loadedTypes[0] {
+		return nil, &NotFoundError{label: user.Label}
 	}
 	return nil, &NotLoadedError{edge: "owner"}
 }
@@ -71,12 +73,10 @@ func (e FileEdges) OwnerOrErr() (*User, error) {
 // TypeOrErr returns the Type value or an error if the edge
 // was not loaded in eager-loading, or loaded but was not found.
 func (e FileEdges) TypeOrErr() (*FileType, error) {
-	if e.loadedTypes[1] {
-		if e.Type == nil {
-			// Edge was loaded but was not found.
-			return nil, &NotFoundError{label: filetype.Label}
-		}
+	if e.Type != nil {
 		return e.Type, nil
+	} else if e.loadedTypes[1] {
+		return nil, &NotFoundError{label: filetype.Label}
 	}
 	return nil, &NotLoadedError{edge: "type"}
 }
@@ -97,7 +97,7 @@ func (*File) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case file.FieldOp:
 			values[i] = new(sql.NullBool)
-		case file.FieldID, file.FieldSize, file.FieldFieldID:
+		case file.FieldID, file.FieldSetID, file.FieldSize, file.FieldFieldID:
 			values[i] = new(sql.NullInt64)
 		case file.FieldName, file.FieldUser, file.FieldGroup:
 			values[i] = new(sql.NullString)
@@ -108,7 +108,7 @@ func (*File) scanValues(columns []string) ([]any, error) {
 		case file.ForeignKeys[2]: // user_files
 			values[i] = new(sql.NullInt64)
 		default:
-			return nil, fmt.Errorf("unexpected column %q for type File", columns[i])
+			values[i] = new(sql.UnknownType)
 		}
 	}
 	return values, nil
@@ -128,6 +128,12 @@ func (f *File) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field id", value)
 			}
 			f.ID = int(value.Int64)
+		case file.FieldSetID:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field set_id", values[i])
+			} else if value.Valid {
+				f.SetID = int(value.Int64)
+			}
 		case file.FieldSize:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
 				return fmt.Errorf("unexpected type %T for field size", values[i])
@@ -186,9 +192,17 @@ func (f *File) assignValues(columns []string, values []any) error {
 				f.user_files = new(int)
 				*f.user_files = int(value.Int64)
 			}
+		default:
+			f.selectValues.Set(columns[i], values[i])
 		}
 	}
 	return nil
+}
+
+// Value returns the ent.Value that was dynamically selected and assigned to the File.
+// This includes values selected through modifiers, order, etc.
+func (f *File) Value(name string) (ent.Value, error) {
+	return f.selectValues.Get(name)
 }
 
 // QueryOwner queries the "owner" edge of the File entity.
@@ -229,6 +243,9 @@ func (f *File) String() string {
 	var builder strings.Builder
 	builder.WriteString("File(")
 	builder.WriteString(fmt.Sprintf("id=%v, ", f.ID))
+	builder.WriteString("set_id=")
+	builder.WriteString(fmt.Sprintf("%v", f.SetID))
+	builder.WriteString(", ")
 	builder.WriteString("size=")
 	builder.WriteString(fmt.Sprintf("%v", f.Size))
 	builder.WriteString(", ")

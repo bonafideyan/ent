@@ -38,7 +38,7 @@ func (ric *RelationshipInfoCreate) Mutation() *RelationshipInfoMutation {
 
 // Save creates the RelationshipInfo in the database.
 func (ric *RelationshipInfoCreate) Save(ctx context.Context) (*RelationshipInfo, error) {
-	return withHooks[*RelationshipInfo, RelationshipInfoMutation](ctx, ric.sqlSave, ric.mutation, ric.hooks)
+	return withHooks(ctx, ric.sqlSave, ric.mutation, ric.hooks)
 }
 
 // SaveX calls Save and panics if Save returns an error.
@@ -253,12 +253,16 @@ func (u *RelationshipInfoUpsertOne) IDX(ctx context.Context) int {
 // RelationshipInfoCreateBulk is the builder for creating many RelationshipInfo entities in bulk.
 type RelationshipInfoCreateBulk struct {
 	config
+	err      error
 	builders []*RelationshipInfoCreate
 	conflict []sql.ConflictOption
 }
 
 // Save creates the RelationshipInfo entities in the database.
 func (ricb *RelationshipInfoCreateBulk) Save(ctx context.Context) ([]*RelationshipInfo, error) {
+	if ricb.err != nil {
+		return nil, ricb.err
+	}
 	specs := make([]*sqlgraph.CreateSpec, len(ricb.builders))
 	nodes := make([]*RelationshipInfo, len(ricb.builders))
 	mutators := make([]Mutator, len(ricb.builders))
@@ -274,8 +278,8 @@ func (ricb *RelationshipInfoCreateBulk) Save(ctx context.Context) ([]*Relationsh
 					return nil, err
 				}
 				builder.mutation = mutation
-				nodes[i], specs[i] = builder.createSpec()
 				var err error
+				nodes[i], specs[i] = builder.createSpec()
 				if i < len(mutators)-1 {
 					_, err = mutators[i+1].Mutate(root, ricb.builders[i+1].mutation)
 				} else {
@@ -432,6 +436,9 @@ func (u *RelationshipInfoUpsertBulk) UpdateText() *RelationshipInfoUpsertBulk {
 
 // Exec executes the query.
 func (u *RelationshipInfoUpsertBulk) Exec(ctx context.Context) error {
+	if u.create.err != nil {
+		return u.create.err
+	}
 	for i, b := range u.create.builders {
 		if len(b.conflict) != 0 {
 			return fmt.Errorf("ent: OnConflict was set for builder %d. Set it on the RelationshipInfoCreateBulk instead", i)

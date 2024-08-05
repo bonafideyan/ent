@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/entc/integration/edgeschema/ent/tweet"
 	"entgo.io/ent/entc/integration/edgeschema/ent/user"
@@ -30,7 +31,8 @@ type UserTweet struct {
 	TweetID int `json:"tweet_id,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the UserTweetQuery when eager-loading is set.
-	Edges UserTweetEdges `json:"edges"`
+	Edges        UserTweetEdges `json:"edges"`
+	selectValues sql.SelectValues
 }
 
 // UserTweetEdges holds the relations/edges for other nodes in the graph.
@@ -47,12 +49,10 @@ type UserTweetEdges struct {
 // UserOrErr returns the User value or an error if the edge
 // was not loaded in eager-loading, or loaded but was not found.
 func (e UserTweetEdges) UserOrErr() (*User, error) {
-	if e.loadedTypes[0] {
-		if e.User == nil {
-			// Edge was loaded but was not found.
-			return nil, &NotFoundError{label: user.Label}
-		}
+	if e.User != nil {
 		return e.User, nil
+	} else if e.loadedTypes[0] {
+		return nil, &NotFoundError{label: user.Label}
 	}
 	return nil, &NotLoadedError{edge: "user"}
 }
@@ -60,12 +60,10 @@ func (e UserTweetEdges) UserOrErr() (*User, error) {
 // TweetOrErr returns the Tweet value or an error if the edge
 // was not loaded in eager-loading, or loaded but was not found.
 func (e UserTweetEdges) TweetOrErr() (*Tweet, error) {
-	if e.loadedTypes[1] {
-		if e.Tweet == nil {
-			// Edge was loaded but was not found.
-			return nil, &NotFoundError{label: tweet.Label}
-		}
+	if e.Tweet != nil {
 		return e.Tweet, nil
+	} else if e.loadedTypes[1] {
+		return nil, &NotFoundError{label: tweet.Label}
 	}
 	return nil, &NotLoadedError{edge: "tweet"}
 }
@@ -80,7 +78,7 @@ func (*UserTweet) scanValues(columns []string) ([]any, error) {
 		case usertweet.FieldCreatedAt:
 			values[i] = new(sql.NullTime)
 		default:
-			return nil, fmt.Errorf("unexpected column %q for type UserTweet", columns[i])
+			values[i] = new(sql.UnknownType)
 		}
 	}
 	return values, nil
@@ -118,9 +116,17 @@ func (ut *UserTweet) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				ut.TweetID = int(value.Int64)
 			}
+		default:
+			ut.selectValues.Set(columns[i], values[i])
 		}
 	}
 	return nil
+}
+
+// Value returns the ent.Value that was dynamically selected and assigned to the UserTweet.
+// This includes values selected through modifiers, order, etc.
+func (ut *UserTweet) Value(name string) (ent.Value, error) {
+	return ut.selectValues.Get(name)
 }
 
 // QueryUser queries the "user" edge of the UserTweet entity.

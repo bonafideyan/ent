@@ -8,12 +8,15 @@ package ent
 
 import (
 	"context"
+	"database/sql/driver"
 	"fmt"
 	"math"
 
+	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/examples/migration/ent/card"
+	"entgo.io/ent/examples/migration/ent/payment"
 	"entgo.io/ent/examples/migration/ent/predicate"
 	"entgo.io/ent/examples/migration/ent/user"
 	"entgo.io/ent/schema/field"
@@ -22,11 +25,12 @@ import (
 // CardQuery is the builder for querying Card entities.
 type CardQuery struct {
 	config
-	ctx        *QueryContext
-	order      []OrderFunc
-	inters     []Interceptor
-	predicates []predicate.Card
-	withOwner  *UserQuery
+	ctx          *QueryContext
+	order        []card.OrderOption
+	inters       []Interceptor
+	predicates   []predicate.Card
+	withOwner    *UserQuery
+	withPayments *PaymentQuery
 	// intermediate query (i.e. traversal path).
 	sql  *sql.Selector
 	path func(context.Context) (*sql.Selector, error)
@@ -58,7 +62,7 @@ func (cq *CardQuery) Unique(unique bool) *CardQuery {
 }
 
 // Order specifies how the records should be ordered.
-func (cq *CardQuery) Order(o ...OrderFunc) *CardQuery {
+func (cq *CardQuery) Order(o ...card.OrderOption) *CardQuery {
 	cq.order = append(cq.order, o...)
 	return cq
 }
@@ -85,10 +89,32 @@ func (cq *CardQuery) QueryOwner() *UserQuery {
 	return query
 }
 
+// QueryPayments chains the current query on the "payments" edge.
+func (cq *CardQuery) QueryPayments() *PaymentQuery {
+	query := (&PaymentClient{config: cq.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := cq.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := cq.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(card.Table, card.FieldID, selector),
+			sqlgraph.To(payment.Table, payment.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, card.PaymentsTable, card.PaymentsColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(cq.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
 // First returns the first Card entity from the query.
 // Returns a *NotFoundError when no Card was found.
 func (cq *CardQuery) First(ctx context.Context) (*Card, error) {
-	nodes, err := cq.Limit(1).All(setContextOp(ctx, cq.ctx, "First"))
+	nodes, err := cq.Limit(1).All(setContextOp(ctx, cq.ctx, ent.OpQueryFirst))
 	if err != nil {
 		return nil, err
 	}
@@ -111,7 +137,7 @@ func (cq *CardQuery) FirstX(ctx context.Context) *Card {
 // Returns a *NotFoundError when no Card ID was found.
 func (cq *CardQuery) FirstID(ctx context.Context) (id int, err error) {
 	var ids []int
-	if ids, err = cq.Limit(1).IDs(setContextOp(ctx, cq.ctx, "FirstID")); err != nil {
+	if ids, err = cq.Limit(1).IDs(setContextOp(ctx, cq.ctx, ent.OpQueryFirstID)); err != nil {
 		return
 	}
 	if len(ids) == 0 {
@@ -134,7 +160,7 @@ func (cq *CardQuery) FirstIDX(ctx context.Context) int {
 // Returns a *NotSingularError when more than one Card entity is found.
 // Returns a *NotFoundError when no Card entities are found.
 func (cq *CardQuery) Only(ctx context.Context) (*Card, error) {
-	nodes, err := cq.Limit(2).All(setContextOp(ctx, cq.ctx, "Only"))
+	nodes, err := cq.Limit(2).All(setContextOp(ctx, cq.ctx, ent.OpQueryOnly))
 	if err != nil {
 		return nil, err
 	}
@@ -162,7 +188,7 @@ func (cq *CardQuery) OnlyX(ctx context.Context) *Card {
 // Returns a *NotFoundError when no entities are found.
 func (cq *CardQuery) OnlyID(ctx context.Context) (id int, err error) {
 	var ids []int
-	if ids, err = cq.Limit(2).IDs(setContextOp(ctx, cq.ctx, "OnlyID")); err != nil {
+	if ids, err = cq.Limit(2).IDs(setContextOp(ctx, cq.ctx, ent.OpQueryOnlyID)); err != nil {
 		return
 	}
 	switch len(ids) {
@@ -187,7 +213,7 @@ func (cq *CardQuery) OnlyIDX(ctx context.Context) int {
 
 // All executes the query and returns a list of Cards.
 func (cq *CardQuery) All(ctx context.Context) ([]*Card, error) {
-	ctx = setContextOp(ctx, cq.ctx, "All")
+	ctx = setContextOp(ctx, cq.ctx, ent.OpQueryAll)
 	if err := cq.prepareQuery(ctx); err != nil {
 		return nil, err
 	}
@@ -209,7 +235,7 @@ func (cq *CardQuery) IDs(ctx context.Context) (ids []int, err error) {
 	if cq.ctx.Unique == nil && cq.path != nil {
 		cq.Unique(true)
 	}
-	ctx = setContextOp(ctx, cq.ctx, "IDs")
+	ctx = setContextOp(ctx, cq.ctx, ent.OpQueryIDs)
 	if err = cq.Select(card.FieldID).Scan(ctx, &ids); err != nil {
 		return nil, err
 	}
@@ -227,7 +253,7 @@ func (cq *CardQuery) IDsX(ctx context.Context) []int {
 
 // Count returns the count of the given query.
 func (cq *CardQuery) Count(ctx context.Context) (int, error) {
-	ctx = setContextOp(ctx, cq.ctx, "Count")
+	ctx = setContextOp(ctx, cq.ctx, ent.OpQueryCount)
 	if err := cq.prepareQuery(ctx); err != nil {
 		return 0, err
 	}
@@ -245,7 +271,7 @@ func (cq *CardQuery) CountX(ctx context.Context) int {
 
 // Exist returns true if the query has elements in the graph.
 func (cq *CardQuery) Exist(ctx context.Context) (bool, error) {
-	ctx = setContextOp(ctx, cq.ctx, "Exist")
+	ctx = setContextOp(ctx, cq.ctx, ent.OpQueryExist)
 	switch _, err := cq.FirstID(ctx); {
 	case IsNotFound(err):
 		return false, nil
@@ -272,12 +298,13 @@ func (cq *CardQuery) Clone() *CardQuery {
 		return nil
 	}
 	return &CardQuery{
-		config:     cq.config,
-		ctx:        cq.ctx.Clone(),
-		order:      append([]OrderFunc{}, cq.order...),
-		inters:     append([]Interceptor{}, cq.inters...),
-		predicates: append([]predicate.Card{}, cq.predicates...),
-		withOwner:  cq.withOwner.Clone(),
+		config:       cq.config,
+		ctx:          cq.ctx.Clone(),
+		order:        append([]card.OrderOption{}, cq.order...),
+		inters:       append([]Interceptor{}, cq.inters...),
+		predicates:   append([]predicate.Card{}, cq.predicates...),
+		withOwner:    cq.withOwner.Clone(),
+		withPayments: cq.withPayments.Clone(),
 		// clone intermediate query.
 		sql:  cq.sql.Clone(),
 		path: cq.path,
@@ -295,18 +322,29 @@ func (cq *CardQuery) WithOwner(opts ...func(*UserQuery)) *CardQuery {
 	return cq
 }
 
+// WithPayments tells the query-builder to eager-load the nodes that are connected to
+// the "payments" edge. The optional arguments are used to configure the query builder of the edge.
+func (cq *CardQuery) WithPayments(opts ...func(*PaymentQuery)) *CardQuery {
+	query := (&PaymentClient{config: cq.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	cq.withPayments = query
+	return cq
+}
+
 // GroupBy is used to group vertices by one or more fields/columns.
 // It is often used with aggregate functions, like: count, max, mean, min, sum.
 //
 // Example:
 //
 //	var v []struct {
-//		OwnerID int `json:"owner_id,omitempty"`
+//		Type string `json:"type,omitempty"`
 //		Count int `json:"count,omitempty"`
 //	}
 //
 //	client.Card.Query().
-//		GroupBy(card.FieldOwnerID).
+//		GroupBy(card.FieldType).
 //		Aggregate(ent.Count()).
 //		Scan(ctx, &v)
 func (cq *CardQuery) GroupBy(field string, fields ...string) *CardGroupBy {
@@ -324,11 +362,11 @@ func (cq *CardQuery) GroupBy(field string, fields ...string) *CardGroupBy {
 // Example:
 //
 //	var v []struct {
-//		OwnerID int `json:"owner_id,omitempty"`
+//		Type string `json:"type,omitempty"`
 //	}
 //
 //	client.Card.Query().
-//		Select(card.FieldOwnerID).
+//		Select(card.FieldType).
 //		Scan(ctx, &v)
 func (cq *CardQuery) Select(fields ...string) *CardSelect {
 	cq.ctx.Fields = append(cq.ctx.Fields, fields...)
@@ -373,8 +411,9 @@ func (cq *CardQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Card, e
 	var (
 		nodes       = []*Card{}
 		_spec       = cq.querySpec()
-		loadedTypes = [1]bool{
+		loadedTypes = [2]bool{
 			cq.withOwner != nil,
+			cq.withPayments != nil,
 		}
 	)
 	_spec.ScanValues = func(columns []string) ([]any, error) {
@@ -398,6 +437,13 @@ func (cq *CardQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Card, e
 	if query := cq.withOwner; query != nil {
 		if err := cq.loadOwner(ctx, query, nodes, nil,
 			func(n *Card, e *User) { n.Edges.Owner = e }); err != nil {
+			return nil, err
+		}
+	}
+	if query := cq.withPayments; query != nil {
+		if err := cq.loadPayments(ctx, query, nodes,
+			func(n *Card) { n.Edges.Payments = []*Payment{} },
+			func(n *Card, e *Payment) { n.Edges.Payments = append(n.Edges.Payments, e) }); err != nil {
 			return nil, err
 		}
 	}
@@ -433,6 +479,36 @@ func (cq *CardQuery) loadOwner(ctx context.Context, query *UserQuery, nodes []*C
 	}
 	return nil
 }
+func (cq *CardQuery) loadPayments(ctx context.Context, query *PaymentQuery, nodes []*Card, init func(*Card), assign func(*Card, *Payment)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[int]*Card)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(payment.FieldCardID)
+	}
+	query.Where(predicate.Payment(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(card.PaymentsColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.CardID
+		node, ok := nodeids[fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "card_id" returned %v for node %v`, fk, n.ID)
+		}
+		assign(node, n)
+	}
+	return nil
+}
 
 func (cq *CardQuery) sqlCount(ctx context.Context) (int, error) {
 	_spec := cq.querySpec()
@@ -458,6 +534,9 @@ func (cq *CardQuery) querySpec() *sqlgraph.QuerySpec {
 			if fields[i] != card.FieldID {
 				_spec.Node.Columns = append(_spec.Node.Columns, fields[i])
 			}
+		}
+		if cq.withOwner != nil {
+			_spec.Node.AddColumnOnce(card.FieldOwnerID)
 		}
 	}
 	if ps := cq.predicates; len(ps) > 0 {
@@ -529,7 +608,7 @@ func (cgb *CardGroupBy) Aggregate(fns ...AggregateFunc) *CardGroupBy {
 
 // Scan applies the selector query and scans the result into the given value.
 func (cgb *CardGroupBy) Scan(ctx context.Context, v any) error {
-	ctx = setContextOp(ctx, cgb.build.ctx, "GroupBy")
+	ctx = setContextOp(ctx, cgb.build.ctx, ent.OpQueryGroupBy)
 	if err := cgb.build.prepareQuery(ctx); err != nil {
 		return err
 	}
@@ -577,7 +656,7 @@ func (cs *CardSelect) Aggregate(fns ...AggregateFunc) *CardSelect {
 
 // Scan applies the selector query and scans the result into the given value.
 func (cs *CardSelect) Scan(ctx context.Context, v any) error {
-	ctx = setContextOp(ctx, cs.ctx, "Select")
+	ctx = setContextOp(ctx, cs.ctx, ent.OpQuerySelect)
 	if err := cs.prepareQuery(ctx); err != nil {
 		return err
 	}

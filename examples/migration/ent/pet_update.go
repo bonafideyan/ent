@@ -33,9 +33,73 @@ func (pu *PetUpdate) Where(ps ...predicate.Pet) *PetUpdate {
 	return pu
 }
 
+// SetName sets the "name" field.
+func (pu *PetUpdate) SetName(s string) *PetUpdate {
+	pu.mutation.SetName(s)
+	return pu
+}
+
+// SetNillableName sets the "name" field if the given value is not nil.
+func (pu *PetUpdate) SetNillableName(s *string) *PetUpdate {
+	if s != nil {
+		pu.SetName(*s)
+	}
+	return pu
+}
+
+// SetAge sets the "age" field.
+func (pu *PetUpdate) SetAge(f float64) *PetUpdate {
+	pu.mutation.ResetAge()
+	pu.mutation.SetAge(f)
+	return pu
+}
+
+// SetNillableAge sets the "age" field if the given value is not nil.
+func (pu *PetUpdate) SetNillableAge(f *float64) *PetUpdate {
+	if f != nil {
+		pu.SetAge(*f)
+	}
+	return pu
+}
+
+// AddAge adds f to the "age" field.
+func (pu *PetUpdate) AddAge(f float64) *PetUpdate {
+	pu.mutation.AddAge(f)
+	return pu
+}
+
+// SetWeight sets the "weight" field.
+func (pu *PetUpdate) SetWeight(f float64) *PetUpdate {
+	pu.mutation.ResetWeight()
+	pu.mutation.SetWeight(f)
+	return pu
+}
+
+// SetNillableWeight sets the "weight" field if the given value is not nil.
+func (pu *PetUpdate) SetNillableWeight(f *float64) *PetUpdate {
+	if f != nil {
+		pu.SetWeight(*f)
+	}
+	return pu
+}
+
+// AddWeight adds f to the "weight" field.
+func (pu *PetUpdate) AddWeight(f float64) *PetUpdate {
+	pu.mutation.AddWeight(f)
+	return pu
+}
+
 // SetBestFriendID sets the "best_friend_id" field.
 func (pu *PetUpdate) SetBestFriendID(u uuid.UUID) *PetUpdate {
 	pu.mutation.SetBestFriendID(u)
+	return pu
+}
+
+// SetNillableBestFriendID sets the "best_friend_id" field if the given value is not nil.
+func (pu *PetUpdate) SetNillableBestFriendID(u *uuid.UUID) *PetUpdate {
+	if u != nil {
+		pu.SetBestFriendID(*u)
+	}
 	return pu
 }
 
@@ -82,7 +146,7 @@ func (pu *PetUpdate) ClearOwner() *PetUpdate {
 
 // Save executes the query and returns the number of nodes affected by the update operation.
 func (pu *PetUpdate) Save(ctx context.Context) (int, error) {
-	return withHooks[int, PetMutation](ctx, pu.sqlSave, pu.mutation, pu.hooks)
+	return withHooks(ctx, pu.sqlSave, pu.mutation, pu.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
@@ -109,10 +173,10 @@ func (pu *PetUpdate) ExecX(ctx context.Context) {
 
 // check runs all checks and user-defined validators on the builder.
 func (pu *PetUpdate) check() error {
-	if _, ok := pu.mutation.BestFriendID(); pu.mutation.BestFriendCleared() && !ok {
+	if pu.mutation.BestFriendCleared() && len(pu.mutation.BestFriendIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "Pet.best_friend"`)
 	}
-	if _, ok := pu.mutation.OwnerID(); pu.mutation.OwnerCleared() && !ok {
+	if pu.mutation.OwnerCleared() && len(pu.mutation.OwnerIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "Pet.owner"`)
 	}
 	return nil
@@ -129,6 +193,21 @@ func (pu *PetUpdate) sqlSave(ctx context.Context) (n int, err error) {
 				ps[i](selector)
 			}
 		}
+	}
+	if value, ok := pu.mutation.Name(); ok {
+		_spec.SetField(pet.FieldName, field.TypeString, value)
+	}
+	if value, ok := pu.mutation.Age(); ok {
+		_spec.SetField(pet.FieldAge, field.TypeFloat64, value)
+	}
+	if value, ok := pu.mutation.AddedAge(); ok {
+		_spec.AddField(pet.FieldAge, field.TypeFloat64, value)
+	}
+	if value, ok := pu.mutation.Weight(); ok {
+		_spec.SetField(pet.FieldWeight, field.TypeFloat64, value)
+	}
+	if value, ok := pu.mutation.AddedWeight(); ok {
+		_spec.AddField(pet.FieldWeight, field.TypeFloat64, value)
 	}
 	if pu.mutation.BestFriendCleared() {
 		edge := &sqlgraph.EdgeSpec{
@@ -208,9 +287,73 @@ type PetUpdateOne struct {
 	mutation *PetMutation
 }
 
+// SetName sets the "name" field.
+func (puo *PetUpdateOne) SetName(s string) *PetUpdateOne {
+	puo.mutation.SetName(s)
+	return puo
+}
+
+// SetNillableName sets the "name" field if the given value is not nil.
+func (puo *PetUpdateOne) SetNillableName(s *string) *PetUpdateOne {
+	if s != nil {
+		puo.SetName(*s)
+	}
+	return puo
+}
+
+// SetAge sets the "age" field.
+func (puo *PetUpdateOne) SetAge(f float64) *PetUpdateOne {
+	puo.mutation.ResetAge()
+	puo.mutation.SetAge(f)
+	return puo
+}
+
+// SetNillableAge sets the "age" field if the given value is not nil.
+func (puo *PetUpdateOne) SetNillableAge(f *float64) *PetUpdateOne {
+	if f != nil {
+		puo.SetAge(*f)
+	}
+	return puo
+}
+
+// AddAge adds f to the "age" field.
+func (puo *PetUpdateOne) AddAge(f float64) *PetUpdateOne {
+	puo.mutation.AddAge(f)
+	return puo
+}
+
+// SetWeight sets the "weight" field.
+func (puo *PetUpdateOne) SetWeight(f float64) *PetUpdateOne {
+	puo.mutation.ResetWeight()
+	puo.mutation.SetWeight(f)
+	return puo
+}
+
+// SetNillableWeight sets the "weight" field if the given value is not nil.
+func (puo *PetUpdateOne) SetNillableWeight(f *float64) *PetUpdateOne {
+	if f != nil {
+		puo.SetWeight(*f)
+	}
+	return puo
+}
+
+// AddWeight adds f to the "weight" field.
+func (puo *PetUpdateOne) AddWeight(f float64) *PetUpdateOne {
+	puo.mutation.AddWeight(f)
+	return puo
+}
+
 // SetBestFriendID sets the "best_friend_id" field.
 func (puo *PetUpdateOne) SetBestFriendID(u uuid.UUID) *PetUpdateOne {
 	puo.mutation.SetBestFriendID(u)
+	return puo
+}
+
+// SetNillableBestFriendID sets the "best_friend_id" field if the given value is not nil.
+func (puo *PetUpdateOne) SetNillableBestFriendID(u *uuid.UUID) *PetUpdateOne {
+	if u != nil {
+		puo.SetBestFriendID(*u)
+	}
 	return puo
 }
 
@@ -270,7 +413,7 @@ func (puo *PetUpdateOne) Select(field string, fields ...string) *PetUpdateOne {
 
 // Save executes the query and returns the updated Pet entity.
 func (puo *PetUpdateOne) Save(ctx context.Context) (*Pet, error) {
-	return withHooks[*Pet, PetMutation](ctx, puo.sqlSave, puo.mutation, puo.hooks)
+	return withHooks(ctx, puo.sqlSave, puo.mutation, puo.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
@@ -297,10 +440,10 @@ func (puo *PetUpdateOne) ExecX(ctx context.Context) {
 
 // check runs all checks and user-defined validators on the builder.
 func (puo *PetUpdateOne) check() error {
-	if _, ok := puo.mutation.BestFriendID(); puo.mutation.BestFriendCleared() && !ok {
+	if puo.mutation.BestFriendCleared() && len(puo.mutation.BestFriendIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "Pet.best_friend"`)
 	}
-	if _, ok := puo.mutation.OwnerID(); puo.mutation.OwnerCleared() && !ok {
+	if puo.mutation.OwnerCleared() && len(puo.mutation.OwnerIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "Pet.owner"`)
 	}
 	return nil
@@ -334,6 +477,21 @@ func (puo *PetUpdateOne) sqlSave(ctx context.Context) (_node *Pet, err error) {
 				ps[i](selector)
 			}
 		}
+	}
+	if value, ok := puo.mutation.Name(); ok {
+		_spec.SetField(pet.FieldName, field.TypeString, value)
+	}
+	if value, ok := puo.mutation.Age(); ok {
+		_spec.SetField(pet.FieldAge, field.TypeFloat64, value)
+	}
+	if value, ok := puo.mutation.AddedAge(); ok {
+		_spec.AddField(pet.FieldAge, field.TypeFloat64, value)
+	}
+	if value, ok := puo.mutation.Weight(); ok {
+		_spec.SetField(pet.FieldWeight, field.TypeFloat64, value)
+	}
+	if value, ok := puo.mutation.AddedWeight(); ok {
+		_spec.AddField(pet.FieldWeight, field.TypeFloat64, value)
 	}
 	if puo.mutation.BestFriendCleared() {
 		edge := &sqlgraph.EdgeSpec{

@@ -38,6 +38,14 @@ func (nu *NodeUpdate) SetValue(i int) *NodeUpdate {
 	return nu
 }
 
+// SetNillableValue sets the "value" field if the given value is not nil.
+func (nu *NodeUpdate) SetNillableValue(i *int) *NodeUpdate {
+	if i != nil {
+		nu.SetValue(*i)
+	}
+	return nu
+}
+
 // AddValue adds i to the "value" field.
 func (nu *NodeUpdate) AddValue(i int) *NodeUpdate {
 	nu.mutation.AddValue(i)
@@ -107,7 +115,7 @@ func (nu *NodeUpdate) ClearNext() *NodeUpdate {
 
 // Save executes the query and returns the number of nodes affected by the update operation.
 func (nu *NodeUpdate) Save(ctx context.Context) (int, error) {
-	return withHooks[int, NodeMutation](ctx, nu.sqlSave, nu.mutation, nu.hooks)
+	return withHooks(ctx, nu.sqlSave, nu.mutation, nu.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
@@ -232,6 +240,14 @@ func (nuo *NodeUpdateOne) SetValue(i int) *NodeUpdateOne {
 	return nuo
 }
 
+// SetNillableValue sets the "value" field if the given value is not nil.
+func (nuo *NodeUpdateOne) SetNillableValue(i *int) *NodeUpdateOne {
+	if i != nil {
+		nuo.SetValue(*i)
+	}
+	return nuo
+}
+
 // AddValue adds i to the "value" field.
 func (nuo *NodeUpdateOne) AddValue(i int) *NodeUpdateOne {
 	nuo.mutation.AddValue(i)
@@ -314,7 +330,7 @@ func (nuo *NodeUpdateOne) Select(field string, fields ...string) *NodeUpdateOne 
 
 // Save executes the query and returns the updated Node entity.
 func (nuo *NodeUpdateOne) Save(ctx context.Context) (*Node, error) {
-	return withHooks[*Node, NodeMutation](ctx, nuo.sqlSave, nuo.mutation, nuo.hooks)
+	return withHooks(ctx, nuo.sqlSave, nuo.mutation, nuo.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.

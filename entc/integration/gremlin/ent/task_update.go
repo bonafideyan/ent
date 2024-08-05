@@ -9,6 +9,7 @@ package ent
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"entgo.io/ent/dialect/gremlin"
 	"entgo.io/ent/dialect/gremlin/graph/dsl"
@@ -105,6 +106,74 @@ func (tu *TaskUpdate) ClearOwner() *TaskUpdate {
 	return tu
 }
 
+// SetOrder sets the "order" field.
+func (tu *TaskUpdate) SetOrder(i int) *TaskUpdate {
+	tu.mutation.ResetOrder()
+	tu.mutation.SetOrder(i)
+	return tu
+}
+
+// SetNillableOrder sets the "order" field if the given value is not nil.
+func (tu *TaskUpdate) SetNillableOrder(i *int) *TaskUpdate {
+	if i != nil {
+		tu.SetOrder(*i)
+	}
+	return tu
+}
+
+// AddOrder adds i to the "order" field.
+func (tu *TaskUpdate) AddOrder(i int) *TaskUpdate {
+	tu.mutation.AddOrder(i)
+	return tu
+}
+
+// ClearOrder clears the value of the "order" field.
+func (tu *TaskUpdate) ClearOrder() *TaskUpdate {
+	tu.mutation.ClearOrder()
+	return tu
+}
+
+// SetOrderOption sets the "order_option" field.
+func (tu *TaskUpdate) SetOrderOption(i int) *TaskUpdate {
+	tu.mutation.ResetOrderOption()
+	tu.mutation.SetOrderOption(i)
+	return tu
+}
+
+// SetNillableOrderOption sets the "order_option" field if the given value is not nil.
+func (tu *TaskUpdate) SetNillableOrderOption(i *int) *TaskUpdate {
+	if i != nil {
+		tu.SetOrderOption(*i)
+	}
+	return tu
+}
+
+// AddOrderOption adds i to the "order_option" field.
+func (tu *TaskUpdate) AddOrderOption(i int) *TaskUpdate {
+	tu.mutation.AddOrderOption(i)
+	return tu
+}
+
+// ClearOrderOption clears the value of the "order_option" field.
+func (tu *TaskUpdate) ClearOrderOption() *TaskUpdate {
+	tu.mutation.ClearOrderOption()
+	return tu
+}
+
+// SetOp sets the "op" field.
+func (tu *TaskUpdate) SetOp(s string) *TaskUpdate {
+	tu.mutation.SetOpField(s)
+	return tu
+}
+
+// SetNillableOp sets the "op" field if the given value is not nil.
+func (tu *TaskUpdate) SetNillableOp(s *string) *TaskUpdate {
+	if s != nil {
+		tu.SetOp(*s)
+	}
+	return tu
+}
+
 // Mutation returns the TaskMutation object of the builder.
 func (tu *TaskUpdate) Mutation() *TaskMutation {
 	return tu.mutation
@@ -112,7 +181,7 @@ func (tu *TaskUpdate) Mutation() *TaskMutation {
 
 // Save executes the query and returns the number of nodes affected by the update operation.
 func (tu *TaskUpdate) Save(ctx context.Context) (int, error) {
-	return withHooks[int, TaskMutation](ctx, tu.gremlinSave, tu.mutation, tu.hooks)
+	return withHooks(ctx, tu.gremlinSave, tu.mutation, tu.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
@@ -137,7 +206,25 @@ func (tu *TaskUpdate) ExecX(ctx context.Context) {
 	}
 }
 
+// check runs all checks and user-defined validators on the builder.
+func (tu *TaskUpdate) check() error {
+	if v, ok := tu.mutation.Priority(); ok {
+		if err := v.Validate(); err != nil {
+			return &ValidationError{Name: "priority", err: fmt.Errorf(`ent: validator failed for field "Task.priority": %w`, err)}
+		}
+	}
+	if v, ok := tu.mutation.GetOp(); ok {
+		if err := enttask.OpValidator(v); err != nil {
+			return &ValidationError{Name: "op", err: fmt.Errorf(`ent: validator failed for field "Task.op": %w`, err)}
+		}
+	}
+	return nil
+}
+
 func (tu *TaskUpdate) gremlinSave(ctx context.Context) (int, error) {
+	if err := tu.check(); err != nil {
+		return 0, err
+	}
 	res := &gremlin.Response{}
 	query, bindings := tu.gremlin().Query()
 	if err := tu.driver.Exec(ctx, query, bindings, res); err != nil {
@@ -173,6 +260,21 @@ func (tu *TaskUpdate) gremlin() *dsl.Traversal {
 	if value, ok := tu.mutation.Owner(); ok {
 		v.Property(dsl.Single, enttask.FieldOwner, value)
 	}
+	if value, ok := tu.mutation.Order(); ok {
+		v.Property(dsl.Single, enttask.FieldOrder, value)
+	}
+	if value, ok := tu.mutation.AddedOrder(); ok {
+		v.Property(dsl.Single, enttask.FieldOrder, __.Union(__.Values(enttask.FieldOrder), __.Constant(value)).Sum())
+	}
+	if value, ok := tu.mutation.OrderOption(); ok {
+		v.Property(dsl.Single, enttask.FieldOrderOption, value)
+	}
+	if value, ok := tu.mutation.AddedOrderOption(); ok {
+		v.Property(dsl.Single, enttask.FieldOrderOption, __.Union(__.Values(enttask.FieldOrderOption), __.Constant(value)).Sum())
+	}
+	if value, ok := tu.mutation.GetOp(); ok {
+		v.Property(dsl.Single, enttask.FieldOp, value)
+	}
 	var properties []any
 	if tu.mutation.PrioritiesCleared() {
 		properties = append(properties, enttask.FieldPriorities)
@@ -182,6 +284,12 @@ func (tu *TaskUpdate) gremlin() *dsl.Traversal {
 	}
 	if tu.mutation.OwnerCleared() {
 		properties = append(properties, enttask.FieldOwner)
+	}
+	if tu.mutation.OrderCleared() {
+		properties = append(properties, enttask.FieldOrder)
+	}
+	if tu.mutation.OrderOptionCleared() {
+		properties = append(properties, enttask.FieldOrderOption)
 	}
 	if len(properties) > 0 {
 		v.SideEffect(__.Properties(properties...).Drop())
@@ -272,6 +380,74 @@ func (tuo *TaskUpdateOne) ClearOwner() *TaskUpdateOne {
 	return tuo
 }
 
+// SetOrder sets the "order" field.
+func (tuo *TaskUpdateOne) SetOrder(i int) *TaskUpdateOne {
+	tuo.mutation.ResetOrder()
+	tuo.mutation.SetOrder(i)
+	return tuo
+}
+
+// SetNillableOrder sets the "order" field if the given value is not nil.
+func (tuo *TaskUpdateOne) SetNillableOrder(i *int) *TaskUpdateOne {
+	if i != nil {
+		tuo.SetOrder(*i)
+	}
+	return tuo
+}
+
+// AddOrder adds i to the "order" field.
+func (tuo *TaskUpdateOne) AddOrder(i int) *TaskUpdateOne {
+	tuo.mutation.AddOrder(i)
+	return tuo
+}
+
+// ClearOrder clears the value of the "order" field.
+func (tuo *TaskUpdateOne) ClearOrder() *TaskUpdateOne {
+	tuo.mutation.ClearOrder()
+	return tuo
+}
+
+// SetOrderOption sets the "order_option" field.
+func (tuo *TaskUpdateOne) SetOrderOption(i int) *TaskUpdateOne {
+	tuo.mutation.ResetOrderOption()
+	tuo.mutation.SetOrderOption(i)
+	return tuo
+}
+
+// SetNillableOrderOption sets the "order_option" field if the given value is not nil.
+func (tuo *TaskUpdateOne) SetNillableOrderOption(i *int) *TaskUpdateOne {
+	if i != nil {
+		tuo.SetOrderOption(*i)
+	}
+	return tuo
+}
+
+// AddOrderOption adds i to the "order_option" field.
+func (tuo *TaskUpdateOne) AddOrderOption(i int) *TaskUpdateOne {
+	tuo.mutation.AddOrderOption(i)
+	return tuo
+}
+
+// ClearOrderOption clears the value of the "order_option" field.
+func (tuo *TaskUpdateOne) ClearOrderOption() *TaskUpdateOne {
+	tuo.mutation.ClearOrderOption()
+	return tuo
+}
+
+// SetOp sets the "op" field.
+func (tuo *TaskUpdateOne) SetOp(s string) *TaskUpdateOne {
+	tuo.mutation.SetOpField(s)
+	return tuo
+}
+
+// SetNillableOp sets the "op" field if the given value is not nil.
+func (tuo *TaskUpdateOne) SetNillableOp(s *string) *TaskUpdateOne {
+	if s != nil {
+		tuo.SetOp(*s)
+	}
+	return tuo
+}
+
 // Mutation returns the TaskMutation object of the builder.
 func (tuo *TaskUpdateOne) Mutation() *TaskMutation {
 	return tuo.mutation
@@ -292,7 +468,7 @@ func (tuo *TaskUpdateOne) Select(field string, fields ...string) *TaskUpdateOne 
 
 // Save executes the query and returns the updated Task entity.
 func (tuo *TaskUpdateOne) Save(ctx context.Context) (*Task, error) {
-	return withHooks[*Task, TaskMutation](ctx, tuo.gremlinSave, tuo.mutation, tuo.hooks)
+	return withHooks(ctx, tuo.gremlinSave, tuo.mutation, tuo.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
@@ -317,7 +493,25 @@ func (tuo *TaskUpdateOne) ExecX(ctx context.Context) {
 	}
 }
 
+// check runs all checks and user-defined validators on the builder.
+func (tuo *TaskUpdateOne) check() error {
+	if v, ok := tuo.mutation.Priority(); ok {
+		if err := v.Validate(); err != nil {
+			return &ValidationError{Name: "priority", err: fmt.Errorf(`ent: validator failed for field "Task.priority": %w`, err)}
+		}
+	}
+	if v, ok := tuo.mutation.GetOp(); ok {
+		if err := enttask.OpValidator(v); err != nil {
+			return &ValidationError{Name: "op", err: fmt.Errorf(`ent: validator failed for field "Task.op": %w`, err)}
+		}
+	}
+	return nil
+}
+
 func (tuo *TaskUpdateOne) gremlinSave(ctx context.Context) (*Task, error) {
+	if err := tuo.check(); err != nil {
+		return nil, err
+	}
 	res := &gremlin.Response{}
 	id, ok := tuo.mutation.ID()
 	if !ok {
@@ -358,6 +552,21 @@ func (tuo *TaskUpdateOne) gremlin(id string) *dsl.Traversal {
 	if value, ok := tuo.mutation.Owner(); ok {
 		v.Property(dsl.Single, enttask.FieldOwner, value)
 	}
+	if value, ok := tuo.mutation.Order(); ok {
+		v.Property(dsl.Single, enttask.FieldOrder, value)
+	}
+	if value, ok := tuo.mutation.AddedOrder(); ok {
+		v.Property(dsl.Single, enttask.FieldOrder, __.Union(__.Values(enttask.FieldOrder), __.Constant(value)).Sum())
+	}
+	if value, ok := tuo.mutation.OrderOption(); ok {
+		v.Property(dsl.Single, enttask.FieldOrderOption, value)
+	}
+	if value, ok := tuo.mutation.AddedOrderOption(); ok {
+		v.Property(dsl.Single, enttask.FieldOrderOption, __.Union(__.Values(enttask.FieldOrderOption), __.Constant(value)).Sum())
+	}
+	if value, ok := tuo.mutation.GetOp(); ok {
+		v.Property(dsl.Single, enttask.FieldOp, value)
+	}
 	var properties []any
 	if tuo.mutation.PrioritiesCleared() {
 		properties = append(properties, enttask.FieldPriorities)
@@ -367,6 +576,12 @@ func (tuo *TaskUpdateOne) gremlin(id string) *dsl.Traversal {
 	}
 	if tuo.mutation.OwnerCleared() {
 		properties = append(properties, enttask.FieldOwner)
+	}
+	if tuo.mutation.OrderCleared() {
+		properties = append(properties, enttask.FieldOrder)
+	}
+	if tuo.mutation.OrderOptionCleared() {
+		properties = append(properties, enttask.FieldOrderOption)
 	}
 	if len(properties) > 0 {
 		v.SideEffect(__.Properties(properties...).Drop())

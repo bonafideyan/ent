@@ -40,15 +40,45 @@ func (uu *UserUpdate) SetAge(f float64) *UserUpdate {
 	return uu
 }
 
+// SetNillableAge sets the "age" field if the given value is not nil.
+func (uu *UserUpdate) SetNillableAge(f *float64) *UserUpdate {
+	if f != nil {
+		uu.SetAge(*f)
+	}
+	return uu
+}
+
 // AddAge adds f to the "age" field.
 func (uu *UserUpdate) AddAge(f float64) *UserUpdate {
 	uu.mutation.AddAge(f)
 	return uu
 }
 
-// SetName sets the "name" field.
-func (uu *UserUpdate) SetName(s string) *UserUpdate {
-	uu.mutation.SetName(s)
+// SetFirstName sets the "first_name" field.
+func (uu *UserUpdate) SetFirstName(s string) *UserUpdate {
+	uu.mutation.SetFirstName(s)
+	return uu
+}
+
+// SetNillableFirstName sets the "first_name" field if the given value is not nil.
+func (uu *UserUpdate) SetNillableFirstName(s *string) *UserUpdate {
+	if s != nil {
+		uu.SetFirstName(*s)
+	}
+	return uu
+}
+
+// SetLastName sets the "last_name" field.
+func (uu *UserUpdate) SetLastName(s string) *UserUpdate {
+	uu.mutation.SetLastName(s)
+	return uu
+}
+
+// SetNillableLastName sets the "last_name" field if the given value is not nil.
+func (uu *UserUpdate) SetNillableLastName(s *string) *UserUpdate {
+	if s != nil {
+		uu.SetLastName(*s)
+	}
 	return uu
 }
 
@@ -113,7 +143,7 @@ func (uu *UserUpdate) RemoveCards(c ...*Card) *UserUpdate {
 
 // Save executes the query and returns the number of nodes affected by the update operation.
 func (uu *UserUpdate) Save(ctx context.Context) (int, error) {
-	return withHooks[int, UserMutation](ctx, uu.sqlSave, uu.mutation, uu.hooks)
+	return withHooks(ctx, uu.sqlSave, uu.mutation, uu.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
@@ -153,8 +183,11 @@ func (uu *UserUpdate) sqlSave(ctx context.Context) (n int, err error) {
 	if value, ok := uu.mutation.AddedAge(); ok {
 		_spec.AddField(user.FieldAge, field.TypeFloat64, value)
 	}
-	if value, ok := uu.mutation.Name(); ok {
-		_spec.SetField(user.FieldName, field.TypeString, value)
+	if value, ok := uu.mutation.FirstName(); ok {
+		_spec.SetField(user.FieldFirstName, field.TypeString, value)
+	}
+	if value, ok := uu.mutation.LastName(); ok {
+		_spec.SetField(user.FieldLastName, field.TypeString, value)
 	}
 	if value, ok := uu.mutation.Tags(); ok {
 		_spec.SetField(user.FieldTags, field.TypeJSON, value)
@@ -239,15 +272,45 @@ func (uuo *UserUpdateOne) SetAge(f float64) *UserUpdateOne {
 	return uuo
 }
 
+// SetNillableAge sets the "age" field if the given value is not nil.
+func (uuo *UserUpdateOne) SetNillableAge(f *float64) *UserUpdateOne {
+	if f != nil {
+		uuo.SetAge(*f)
+	}
+	return uuo
+}
+
 // AddAge adds f to the "age" field.
 func (uuo *UserUpdateOne) AddAge(f float64) *UserUpdateOne {
 	uuo.mutation.AddAge(f)
 	return uuo
 }
 
-// SetName sets the "name" field.
-func (uuo *UserUpdateOne) SetName(s string) *UserUpdateOne {
-	uuo.mutation.SetName(s)
+// SetFirstName sets the "first_name" field.
+func (uuo *UserUpdateOne) SetFirstName(s string) *UserUpdateOne {
+	uuo.mutation.SetFirstName(s)
+	return uuo
+}
+
+// SetNillableFirstName sets the "first_name" field if the given value is not nil.
+func (uuo *UserUpdateOne) SetNillableFirstName(s *string) *UserUpdateOne {
+	if s != nil {
+		uuo.SetFirstName(*s)
+	}
+	return uuo
+}
+
+// SetLastName sets the "last_name" field.
+func (uuo *UserUpdateOne) SetLastName(s string) *UserUpdateOne {
+	uuo.mutation.SetLastName(s)
+	return uuo
+}
+
+// SetNillableLastName sets the "last_name" field if the given value is not nil.
+func (uuo *UserUpdateOne) SetNillableLastName(s *string) *UserUpdateOne {
+	if s != nil {
+		uuo.SetLastName(*s)
+	}
 	return uuo
 }
 
@@ -325,7 +388,7 @@ func (uuo *UserUpdateOne) Select(field string, fields ...string) *UserUpdateOne 
 
 // Save executes the query and returns the updated User entity.
 func (uuo *UserUpdateOne) Save(ctx context.Context) (*User, error) {
-	return withHooks[*User, UserMutation](ctx, uuo.sqlSave, uuo.mutation, uuo.hooks)
+	return withHooks(ctx, uuo.sqlSave, uuo.mutation, uuo.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
@@ -382,8 +445,11 @@ func (uuo *UserUpdateOne) sqlSave(ctx context.Context) (_node *User, err error) 
 	if value, ok := uuo.mutation.AddedAge(); ok {
 		_spec.AddField(user.FieldAge, field.TypeFloat64, value)
 	}
-	if value, ok := uuo.mutation.Name(); ok {
-		_spec.SetField(user.FieldName, field.TypeString, value)
+	if value, ok := uuo.mutation.FirstName(); ok {
+		_spec.SetField(user.FieldFirstName, field.TypeString, value)
+	}
+	if value, ok := uuo.mutation.LastName(); ok {
+		_spec.SetField(user.FieldLastName, field.TypeString, value)
 	}
 	if value, ok := uuo.mutation.Tags(); ok {
 		_spec.SetField(user.FieldTags, field.TypeJSON, value)

@@ -55,7 +55,7 @@ func (cc *CardCreate) Mutation() *CardMutation {
 
 // Save creates the Card in the database.
 func (cc *CardCreate) Save(ctx context.Context) (*Card, error) {
-	return withHooks[*Card, CardMutation](ctx, cc.sqlSave, cc.mutation, cc.hooks)
+	return withHooks(ctx, cc.sqlSave, cc.mutation, cc.hooks)
 }
 
 // SaveX calls Save and panics if Save returns an error.
@@ -88,7 +88,7 @@ func (cc *CardCreate) check() error {
 	if _, ok := cc.mutation.Number(); !ok {
 		return &ValidationError{Name: "number", err: errors.New(`ent: missing required field "Card.number"`)}
 	}
-	if _, ok := cc.mutation.OwnerID(); !ok {
+	if len(cc.mutation.OwnerIDs()) == 0 {
 		return &ValidationError{Name: "owner", err: errors.New(`ent: missing required edge "Card.owner"`)}
 	}
 	return nil
@@ -148,11 +148,15 @@ func (cc *CardCreate) createSpec() (*Card, *sqlgraph.CreateSpec) {
 // CardCreateBulk is the builder for creating many Card entities in bulk.
 type CardCreateBulk struct {
 	config
+	err      error
 	builders []*CardCreate
 }
 
 // Save creates the Card entities in the database.
 func (ccb *CardCreateBulk) Save(ctx context.Context) ([]*Card, error) {
+	if ccb.err != nil {
+		return nil, ccb.err
+	}
 	specs := make([]*sqlgraph.CreateSpec, len(ccb.builders))
 	nodes := make([]*Card, len(ccb.builders))
 	mutators := make([]Mutator, len(ccb.builders))
@@ -168,8 +172,8 @@ func (ccb *CardCreateBulk) Save(ctx context.Context) ([]*Card, error) {
 					return nil, err
 				}
 				builder.mutation = mutation
-				nodes[i], specs[i] = builder.createSpec()
 				var err error
+				nodes[i], specs[i] = builder.createSpec()
 				if i < len(mutators)-1 {
 					_, err = mutators[i+1].Mutate(root, ccb.builders[i+1].mutation)
 				} else {

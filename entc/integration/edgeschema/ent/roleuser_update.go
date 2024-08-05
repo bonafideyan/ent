@@ -54,9 +54,25 @@ func (ruu *RoleUserUpdate) SetRoleID(i int) *RoleUserUpdate {
 	return ruu
 }
 
+// SetNillableRoleID sets the "role_id" field if the given value is not nil.
+func (ruu *RoleUserUpdate) SetNillableRoleID(i *int) *RoleUserUpdate {
+	if i != nil {
+		ruu.SetRoleID(*i)
+	}
+	return ruu
+}
+
 // SetUserID sets the "user_id" field.
 func (ruu *RoleUserUpdate) SetUserID(i int) *RoleUserUpdate {
 	ruu.mutation.SetUserID(i)
+	return ruu
+}
+
+// SetNillableUserID sets the "user_id" field if the given value is not nil.
+func (ruu *RoleUserUpdate) SetNillableUserID(i *int) *RoleUserUpdate {
+	if i != nil {
+		ruu.SetUserID(*i)
+	}
 	return ruu
 }
 
@@ -89,7 +105,7 @@ func (ruu *RoleUserUpdate) ClearUser() *RoleUserUpdate {
 
 // Save executes the query and returns the number of nodes affected by the update operation.
 func (ruu *RoleUserUpdate) Save(ctx context.Context) (int, error) {
-	return withHooks[int, RoleUserMutation](ctx, ruu.sqlSave, ruu.mutation, ruu.hooks)
+	return withHooks(ctx, ruu.sqlSave, ruu.mutation, ruu.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
@@ -116,10 +132,10 @@ func (ruu *RoleUserUpdate) ExecX(ctx context.Context) {
 
 // check runs all checks and user-defined validators on the builder.
 func (ruu *RoleUserUpdate) check() error {
-	if _, ok := ruu.mutation.RoleID(); ruu.mutation.RoleCleared() && !ok {
+	if ruu.mutation.RoleCleared() && len(ruu.mutation.RoleIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "RoleUser.role"`)
 	}
-	if _, ok := ruu.mutation.UserID(); ruu.mutation.UserCleared() && !ok {
+	if ruu.mutation.UserCleared() && len(ruu.mutation.UserIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "RoleUser.user"`)
 	}
 	return nil
@@ -238,9 +254,25 @@ func (ruuo *RoleUserUpdateOne) SetRoleID(i int) *RoleUserUpdateOne {
 	return ruuo
 }
 
+// SetNillableRoleID sets the "role_id" field if the given value is not nil.
+func (ruuo *RoleUserUpdateOne) SetNillableRoleID(i *int) *RoleUserUpdateOne {
+	if i != nil {
+		ruuo.SetRoleID(*i)
+	}
+	return ruuo
+}
+
 // SetUserID sets the "user_id" field.
 func (ruuo *RoleUserUpdateOne) SetUserID(i int) *RoleUserUpdateOne {
 	ruuo.mutation.SetUserID(i)
+	return ruuo
+}
+
+// SetNillableUserID sets the "user_id" field if the given value is not nil.
+func (ruuo *RoleUserUpdateOne) SetNillableUserID(i *int) *RoleUserUpdateOne {
+	if i != nil {
+		ruuo.SetUserID(*i)
+	}
 	return ruuo
 }
 
@@ -286,7 +318,7 @@ func (ruuo *RoleUserUpdateOne) Select(field string, fields ...string) *RoleUserU
 
 // Save executes the query and returns the updated RoleUser entity.
 func (ruuo *RoleUserUpdateOne) Save(ctx context.Context) (*RoleUser, error) {
-	return withHooks[*RoleUser, RoleUserMutation](ctx, ruuo.sqlSave, ruuo.mutation, ruuo.hooks)
+	return withHooks(ctx, ruuo.sqlSave, ruuo.mutation, ruuo.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
@@ -313,10 +345,10 @@ func (ruuo *RoleUserUpdateOne) ExecX(ctx context.Context) {
 
 // check runs all checks and user-defined validators on the builder.
 func (ruuo *RoleUserUpdateOne) check() error {
-	if _, ok := ruuo.mutation.RoleID(); ruuo.mutation.RoleCleared() && !ok {
+	if ruuo.mutation.RoleCleared() && len(ruuo.mutation.RoleIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "RoleUser.role"`)
 	}
-	if _, ok := ruuo.mutation.UserID(); ruuo.mutation.UserCleared() && !ok {
+	if ruuo.mutation.UserCleared() && len(ruuo.mutation.UserIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "RoleUser.user"`)
 	}
 	return nil

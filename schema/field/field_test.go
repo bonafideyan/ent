@@ -7,6 +7,8 @@ package field_test
 import (
 	"database/sql"
 	"database/sql/driver"
+	"encoding/base64"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -25,6 +27,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestInt(t *testing.T) {
@@ -89,7 +92,7 @@ func TestInt(t *testing.T) {
 	assert.True(t, fd.Info.ValueScanner())
 
 	fd = field.Int("count").GoType(false).Descriptor()
-	assert.EqualError(t, fd.Err, `GoType must be a "int" type or ValueScanner`)
+	assert.EqualError(t, fd.Err, `GoType must be a "int" type, ValueScanner or provide an external ValueScanner`)
 	fd = field.Int("count").GoType(struct{}{}).Descriptor()
 	assert.Error(t, fd.Err)
 	fd = field.Int("count").GoType(new(Count)).Descriptor()
@@ -287,6 +290,58 @@ func TestBytes_DefaultFunc(t *testing.T) {
 	assert.EqualError(t, fd.Err, `field.Bytes("ip").DefaultFunc expects func but got slice`)
 }
 
+type nullBytes []byte
+
+func (b *nullBytes) Scan(v any) error {
+	if v == nil {
+		return nil
+	}
+	switch v := v.(type) {
+	case []byte:
+		*b = v
+		return nil
+	case string:
+		*b = []byte(v)
+		return nil
+	default:
+		return errors.New("unexpected type")
+	}
+}
+
+func (b nullBytes) Value() (driver.Value, error) { return b, nil }
+
+func TestBytes_ValueScanner(t *testing.T) {
+	fd := field.Bytes("dir").
+		ValueScanner(field.ValueScannerFunc[[]byte, *nullBytes]{
+			V: func(s []byte) (driver.Value, error) {
+				return []byte(hex.EncodeToString(s)), nil
+			},
+			S: func(ns *nullBytes) ([]byte, error) {
+				if ns == nil {
+					return nil, nil
+				}
+				b, err := hex.DecodeString(string(*ns))
+				if err != nil {
+					return nil, err
+				}
+				return b, nil
+			},
+		}).Descriptor()
+	require.NoError(t, fd.Err)
+	require.NotNil(t, fd.ValueScanner)
+	_, ok := fd.ValueScanner.(field.ValueScannerFunc[[]byte, *nullBytes])
+	require.True(t, ok)
+
+	fd = field.Bytes("url").
+		GoType(&url.URL{}).
+		ValueScanner(field.BinaryValueScanner[*url.URL]{}).
+		Descriptor()
+	require.NoError(t, fd.Err)
+	require.NotNil(t, fd.ValueScanner)
+	_, ok = fd.ValueScanner.(field.TypeValueScanner[*url.URL])
+	require.True(t, ok)
+}
+
 func TestString_DefaultFunc(t *testing.T) {
 	f1 := func() http.Dir { return "/tmp" }
 	fd := field.String("dir").GoType(http.Dir("/tmp")).DefaultFunc(f1).Descriptor()
@@ -310,6 +365,82 @@ func TestString_DefaultFunc(t *testing.T) {
 
 	fd = field.String("str").GoType(http.Dir("/tmp")).DefaultFunc("/tmp").Descriptor()
 	assert.EqualError(t, fd.Err, `field.String("str").DefaultFunc expects func but got string`)
+}
+
+func TestString_ValueScanner(t *testing.T) {
+	fd := field.String("dir").
+		ValueScanner(field.ValueScannerFunc[string, *sql.NullString]{
+			V: func(s string) (driver.Value, error) {
+				return base64.StdEncoding.EncodeToString([]byte(s)), nil
+			},
+			S: func(ns *sql.NullString) (string, error) {
+				if !ns.Valid {
+					return "", nil
+				}
+				b, err := base64.StdEncoding.DecodeString(ns.String)
+				if err != nil {
+					return "", err
+				}
+				return string(b), nil
+			},
+		}).Descriptor()
+	require.NoError(t, fd.Err)
+	require.NotNil(t, fd.ValueScanner)
+	_, ok := fd.ValueScanner.(field.TypeValueScanner[string])
+	require.True(t, ok)
+
+	fd = field.String("url").
+		GoType(&url.URL{}).
+		ValueScanner(field.BinaryValueScanner[*url.URL]{}).
+		Descriptor()
+	require.NoError(t, fd.Err)
+	require.NotNil(t, fd.ValueScanner)
+	_, ok = fd.ValueScanner.(field.TypeValueScanner[*url.URL])
+	require.True(t, ok)
+}
+
+func TestSlices(t *testing.T) {
+	fd := field.Strings("strings").
+		Default([]string{}).
+		Comment("comment").
+		Validate(func(xs []string) error {
+			return nil
+		}).
+		Descriptor()
+	assert.Equal(t, "strings", fd.Name)
+	assert.Equal(t, field.TypeJSON, fd.Info.Type)
+	assert.NotNil(t, fd.Default)
+	assert.Equal(t, []string{}, fd.Default)
+	assert.Equal(t, "comment", fd.Comment)
+	assert.Len(t, fd.Validators, 1)
+
+	fd = field.Ints("ints").
+		Default([]int{}).
+		Comment("comment").
+		Validate(func(xs []int) error {
+			return nil
+		}).
+		Descriptor()
+	assert.Equal(t, "ints", fd.Name)
+	assert.Equal(t, field.TypeJSON, fd.Info.Type)
+	assert.NotNil(t, fd.Default)
+	assert.Equal(t, []int{}, fd.Default)
+	assert.Equal(t, "comment", fd.Comment)
+	assert.Len(t, fd.Validators, 1)
+
+	fd = field.Floats("floats").
+		Default([]float64{}).
+		Comment("comment").
+		Validate(func(xs []float64) error {
+			return nil
+		}).
+		Descriptor()
+	assert.Equal(t, "floats", fd.Name)
+	assert.Equal(t, field.TypeJSON, fd.Info.Type)
+	assert.NotNil(t, fd.Default)
+	assert.Equal(t, []float64{}, fd.Default)
+	assert.Equal(t, "comment", fd.Comment)
+	assert.Len(t, fd.Validators, 1)
 }
 
 type VString string

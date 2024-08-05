@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"math"
 
+	"entgo.io/ent"
 	"entgo.io/ent/dialect"
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
@@ -28,7 +29,7 @@ import (
 type UserQuery struct {
 	config
 	ctx                *QueryContext
-	order              []OrderFunc
+	order              []user.OrderOption
 	inters             []Interceptor
 	predicates         []predicate.User
 	withCard           *CardQuery
@@ -82,7 +83,7 @@ func (uq *UserQuery) Unique(unique bool) *UserQuery {
 }
 
 // Order specifies how the records should be ordered.
-func (uq *UserQuery) Order(o ...OrderFunc) *UserQuery {
+func (uq *UserQuery) Order(o ...user.OrderOption) *UserQuery {
 	uq.order = append(uq.order, o...)
 	return uq
 }
@@ -332,7 +333,7 @@ func (uq *UserQuery) QueryParent() *UserQuery {
 // First returns the first User entity from the query.
 // Returns a *NotFoundError when no User was found.
 func (uq *UserQuery) First(ctx context.Context) (*User, error) {
-	nodes, err := uq.Limit(1).All(setContextOp(ctx, uq.ctx, "First"))
+	nodes, err := uq.Limit(1).All(setContextOp(ctx, uq.ctx, ent.OpQueryFirst))
 	if err != nil {
 		return nil, err
 	}
@@ -355,7 +356,7 @@ func (uq *UserQuery) FirstX(ctx context.Context) *User {
 // Returns a *NotFoundError when no User ID was found.
 func (uq *UserQuery) FirstID(ctx context.Context) (id int, err error) {
 	var ids []int
-	if ids, err = uq.Limit(1).IDs(setContextOp(ctx, uq.ctx, "FirstID")); err != nil {
+	if ids, err = uq.Limit(1).IDs(setContextOp(ctx, uq.ctx, ent.OpQueryFirstID)); err != nil {
 		return
 	}
 	if len(ids) == 0 {
@@ -378,7 +379,7 @@ func (uq *UserQuery) FirstIDX(ctx context.Context) int {
 // Returns a *NotSingularError when more than one User entity is found.
 // Returns a *NotFoundError when no User entities are found.
 func (uq *UserQuery) Only(ctx context.Context) (*User, error) {
-	nodes, err := uq.Limit(2).All(setContextOp(ctx, uq.ctx, "Only"))
+	nodes, err := uq.Limit(2).All(setContextOp(ctx, uq.ctx, ent.OpQueryOnly))
 	if err != nil {
 		return nil, err
 	}
@@ -406,7 +407,7 @@ func (uq *UserQuery) OnlyX(ctx context.Context) *User {
 // Returns a *NotFoundError when no entities are found.
 func (uq *UserQuery) OnlyID(ctx context.Context) (id int, err error) {
 	var ids []int
-	if ids, err = uq.Limit(2).IDs(setContextOp(ctx, uq.ctx, "OnlyID")); err != nil {
+	if ids, err = uq.Limit(2).IDs(setContextOp(ctx, uq.ctx, ent.OpQueryOnlyID)); err != nil {
 		return
 	}
 	switch len(ids) {
@@ -431,7 +432,7 @@ func (uq *UserQuery) OnlyIDX(ctx context.Context) int {
 
 // All executes the query and returns a list of Users.
 func (uq *UserQuery) All(ctx context.Context) ([]*User, error) {
-	ctx = setContextOp(ctx, uq.ctx, "All")
+	ctx = setContextOp(ctx, uq.ctx, ent.OpQueryAll)
 	if err := uq.prepareQuery(ctx); err != nil {
 		return nil, err
 	}
@@ -453,7 +454,7 @@ func (uq *UserQuery) IDs(ctx context.Context) (ids []int, err error) {
 	if uq.ctx.Unique == nil && uq.path != nil {
 		uq.Unique(true)
 	}
-	ctx = setContextOp(ctx, uq.ctx, "IDs")
+	ctx = setContextOp(ctx, uq.ctx, ent.OpQueryIDs)
 	if err = uq.Select(user.FieldID).Scan(ctx, &ids); err != nil {
 		return nil, err
 	}
@@ -471,7 +472,7 @@ func (uq *UserQuery) IDsX(ctx context.Context) []int {
 
 // Count returns the count of the given query.
 func (uq *UserQuery) Count(ctx context.Context) (int, error) {
-	ctx = setContextOp(ctx, uq.ctx, "Count")
+	ctx = setContextOp(ctx, uq.ctx, ent.OpQueryCount)
 	if err := uq.prepareQuery(ctx); err != nil {
 		return 0, err
 	}
@@ -489,7 +490,7 @@ func (uq *UserQuery) CountX(ctx context.Context) int {
 
 // Exist returns true if the query has elements in the graph.
 func (uq *UserQuery) Exist(ctx context.Context) (bool, error) {
-	ctx = setContextOp(ctx, uq.ctx, "Exist")
+	ctx = setContextOp(ctx, uq.ctx, ent.OpQueryExist)
 	switch _, err := uq.FirstID(ctx); {
 	case IsNotFound(err):
 		return false, nil
@@ -518,7 +519,7 @@ func (uq *UserQuery) Clone() *UserQuery {
 	return &UserQuery{
 		config:        uq.config,
 		ctx:           uq.ctx.Clone(),
-		order:         append([]OrderFunc{}, uq.order...),
+		order:         append([]user.OrderOption{}, uq.order...),
 		inters:        append([]Interceptor{}, uq.inters...),
 		predicates:    append([]predicate.User{}, uq.predicates...),
 		withCard:      uq.withCard.Clone(),
@@ -781,21 +782,36 @@ func (uq *UserQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*User, e
 	}
 	if query := uq.withCard; query != nil {
 		if err := uq.loadCard(ctx, query, nodes, nil,
-			func(n *User, e *Card) { n.Edges.Card = e }); err != nil {
+			func(n *User, e *Card) {
+				n.Edges.Card = e
+				if !e.Edges.loadedTypes[0] {
+					e.Edges.Owner = n
+				}
+			}); err != nil {
 			return nil, err
 		}
 	}
 	if query := uq.withPets; query != nil {
 		if err := uq.loadPets(ctx, query, nodes,
 			func(n *User) { n.Edges.Pets = []*Pet{} },
-			func(n *User, e *Pet) { n.Edges.Pets = append(n.Edges.Pets, e) }); err != nil {
+			func(n *User, e *Pet) {
+				n.Edges.Pets = append(n.Edges.Pets, e)
+				if !e.Edges.loadedTypes[1] {
+					e.Edges.Owner = n
+				}
+			}); err != nil {
 			return nil, err
 		}
 	}
 	if query := uq.withFiles; query != nil {
 		if err := uq.loadFiles(ctx, query, nodes,
 			func(n *User) { n.Edges.Files = []*File{} },
-			func(n *User, e *File) { n.Edges.Files = append(n.Edges.Files, e) }); err != nil {
+			func(n *User, e *File) {
+				n.Edges.Files = append(n.Edges.Files, e)
+				if !e.Edges.loadedTypes[0] {
+					e.Edges.Owner = n
+				}
+			}); err != nil {
 			return nil, err
 		}
 	}
@@ -829,7 +845,12 @@ func (uq *UserQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*User, e
 	}
 	if query := uq.withTeam; query != nil {
 		if err := uq.loadTeam(ctx, query, nodes, nil,
-			func(n *User, e *Pet) { n.Edges.Team = e }); err != nil {
+			func(n *User, e *Pet) {
+				n.Edges.Team = e
+				if !e.Edges.loadedTypes[0] {
+					e.Edges.Team = n
+				}
+			}); err != nil {
 			return nil, err
 		}
 	}
@@ -842,7 +863,12 @@ func (uq *UserQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*User, e
 	if query := uq.withChildren; query != nil {
 		if err := uq.loadChildren(ctx, query, nodes,
 			func(n *User) { n.Edges.Children = []*User{} },
-			func(n *User, e *User) { n.Edges.Children = append(n.Edges.Children, e) }); err != nil {
+			func(n *User, e *User) {
+				n.Edges.Children = append(n.Edges.Children, e)
+				if !e.Edges.loadedTypes[10] {
+					e.Edges.Parent = n
+				}
+			}); err != nil {
 			return nil, err
 		}
 	}
@@ -855,14 +881,24 @@ func (uq *UserQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*User, e
 	for name, query := range uq.withNamedPets {
 		if err := uq.loadPets(ctx, query, nodes,
 			func(n *User) { n.appendNamedPets(name) },
-			func(n *User, e *Pet) { n.appendNamedPets(name, e) }); err != nil {
+			func(n *User, e *Pet) {
+				n.appendNamedPets(name, e)
+				if !e.Edges.loadedTypes[1] {
+					e.Edges.Owner = n
+				}
+			}); err != nil {
 			return nil, err
 		}
 	}
 	for name, query := range uq.withNamedFiles {
 		if err := uq.loadFiles(ctx, query, nodes,
 			func(n *User) { n.appendNamedFiles(name) },
-			func(n *User, e *File) { n.appendNamedFiles(name, e) }); err != nil {
+			func(n *User, e *File) {
+				n.appendNamedFiles(name, e)
+				if !e.Edges.loadedTypes[0] {
+					e.Edges.Owner = n
+				}
+			}); err != nil {
 			return nil, err
 		}
 	}
@@ -897,7 +933,12 @@ func (uq *UserQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*User, e
 	for name, query := range uq.withNamedChildren {
 		if err := uq.loadChildren(ctx, query, nodes,
 			func(n *User) { n.appendNamedChildren(name) },
-			func(n *User, e *User) { n.appendNamedChildren(name, e) }); err != nil {
+			func(n *User, e *User) {
+				n.appendNamedChildren(name, e)
+				if !e.Edges.loadedTypes[10] {
+					e.Edges.Parent = n
+				}
+			}); err != nil {
 			return nil, err
 		}
 	}
@@ -913,7 +954,7 @@ func (uq *UserQuery) loadCard(ctx context.Context, query *CardQuery, nodes []*Us
 	}
 	query.withFKs = true
 	query.Where(predicate.Card(func(s *sql.Selector) {
-		s.Where(sql.InValues(user.CardColumn, fks...))
+		s.Where(sql.InValues(s.C(user.CardColumn), fks...))
 	}))
 	neighbors, err := query.All(ctx)
 	if err != nil {
@@ -926,7 +967,7 @@ func (uq *UserQuery) loadCard(ctx context.Context, query *CardQuery, nodes []*Us
 		}
 		node, ok := nodeids[*fk]
 		if !ok {
-			return fmt.Errorf(`unexpected foreign-key "user_card" returned %v for node %v`, *fk, n.ID)
+			return fmt.Errorf(`unexpected referenced foreign-key "user_card" returned %v for node %v`, *fk, n.ID)
 		}
 		assign(node, n)
 	}
@@ -944,7 +985,7 @@ func (uq *UserQuery) loadPets(ctx context.Context, query *PetQuery, nodes []*Use
 	}
 	query.withFKs = true
 	query.Where(predicate.Pet(func(s *sql.Selector) {
-		s.Where(sql.InValues(user.PetsColumn, fks...))
+		s.Where(sql.InValues(s.C(user.PetsColumn), fks...))
 	}))
 	neighbors, err := query.All(ctx)
 	if err != nil {
@@ -957,7 +998,7 @@ func (uq *UserQuery) loadPets(ctx context.Context, query *PetQuery, nodes []*Use
 		}
 		node, ok := nodeids[*fk]
 		if !ok {
-			return fmt.Errorf(`unexpected foreign-key "user_pets" returned %v for node %v`, *fk, n.ID)
+			return fmt.Errorf(`unexpected referenced foreign-key "user_pets" returned %v for node %v`, *fk, n.ID)
 		}
 		assign(node, n)
 	}
@@ -975,7 +1016,7 @@ func (uq *UserQuery) loadFiles(ctx context.Context, query *FileQuery, nodes []*U
 	}
 	query.withFKs = true
 	query.Where(predicate.File(func(s *sql.Selector) {
-		s.Where(sql.InValues(user.FilesColumn, fks...))
+		s.Where(sql.InValues(s.C(user.FilesColumn), fks...))
 	}))
 	neighbors, err := query.All(ctx)
 	if err != nil {
@@ -988,7 +1029,7 @@ func (uq *UserQuery) loadFiles(ctx context.Context, query *FileQuery, nodes []*U
 		}
 		node, ok := nodeids[*fk]
 		if !ok {
-			return fmt.Errorf(`unexpected foreign-key "user_files" returned %v for node %v`, *fk, n.ID)
+			return fmt.Errorf(`unexpected referenced foreign-key "user_files" returned %v for node %v`, *fk, n.ID)
 		}
 		assign(node, n)
 	}
@@ -1247,7 +1288,7 @@ func (uq *UserQuery) loadTeam(ctx context.Context, query *PetQuery, nodes []*Use
 	}
 	query.withFKs = true
 	query.Where(predicate.Pet(func(s *sql.Selector) {
-		s.Where(sql.InValues(user.TeamColumn, fks...))
+		s.Where(sql.InValues(s.C(user.TeamColumn), fks...))
 	}))
 	neighbors, err := query.All(ctx)
 	if err != nil {
@@ -1260,7 +1301,7 @@ func (uq *UserQuery) loadTeam(ctx context.Context, query *PetQuery, nodes []*Use
 		}
 		node, ok := nodeids[*fk]
 		if !ok {
-			return fmt.Errorf(`unexpected foreign-key "user_team" returned %v for node %v`, *fk, n.ID)
+			return fmt.Errorf(`unexpected referenced foreign-key "user_team" returned %v for node %v`, *fk, n.ID)
 		}
 		assign(node, n)
 	}
@@ -1310,7 +1351,7 @@ func (uq *UserQuery) loadChildren(ctx context.Context, query *UserQuery, nodes [
 	}
 	query.withFKs = true
 	query.Where(predicate.User(func(s *sql.Selector) {
-		s.Where(sql.InValues(user.ChildrenColumn, fks...))
+		s.Where(sql.InValues(s.C(user.ChildrenColumn), fks...))
 	}))
 	neighbors, err := query.All(ctx)
 	if err != nil {
@@ -1323,7 +1364,7 @@ func (uq *UserQuery) loadChildren(ctx context.Context, query *UserQuery, nodes [
 		}
 		node, ok := nodeids[*fk]
 		if !ok {
-			return fmt.Errorf(`unexpected foreign-key "user_parent" returned %v for node %v`, *fk, n.ID)
+			return fmt.Errorf(`unexpected referenced foreign-key "user_parent" returned %v for node %v`, *fk, n.ID)
 		}
 		assign(node, n)
 	}
@@ -1593,7 +1634,7 @@ func (ugb *UserGroupBy) Aggregate(fns ...AggregateFunc) *UserGroupBy {
 
 // Scan applies the selector query and scans the result into the given value.
 func (ugb *UserGroupBy) Scan(ctx context.Context, v any) error {
-	ctx = setContextOp(ctx, ugb.build.ctx, "GroupBy")
+	ctx = setContextOp(ctx, ugb.build.ctx, ent.OpQueryGroupBy)
 	if err := ugb.build.prepareQuery(ctx); err != nil {
 		return err
 	}
@@ -1641,7 +1682,7 @@ func (us *UserSelect) Aggregate(fns ...AggregateFunc) *UserSelect {
 
 // Scan applies the selector query and scans the result into the given value.
 func (us *UserSelect) Scan(ctx context.Context, v any) error {
-	ctx = setContextOp(ctx, us.ctx, "Select")
+	ctx = setContextOp(ctx, us.ctx, ent.OpQuerySelect)
 	if err := us.prepareQuery(ctx); err != nil {
 		return err
 	}

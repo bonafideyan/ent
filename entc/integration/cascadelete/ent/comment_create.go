@@ -48,7 +48,7 @@ func (cc *CommentCreate) Mutation() *CommentMutation {
 
 // Save creates the Comment in the database.
 func (cc *CommentCreate) Save(ctx context.Context) (*Comment, error) {
-	return withHooks[*Comment, CommentMutation](ctx, cc.sqlSave, cc.mutation, cc.hooks)
+	return withHooks(ctx, cc.sqlSave, cc.mutation, cc.hooks)
 }
 
 // SaveX calls Save and panics if Save returns an error.
@@ -81,7 +81,7 @@ func (cc *CommentCreate) check() error {
 	if _, ok := cc.mutation.PostID(); !ok {
 		return &ValidationError{Name: "post_id", err: errors.New(`ent: missing required field "Comment.post_id"`)}
 	}
-	if _, ok := cc.mutation.PostID(); !ok {
+	if len(cc.mutation.PostIDs()) == 0 {
 		return &ValidationError{Name: "post", err: errors.New(`ent: missing required edge "Comment.post"`)}
 	}
 	return nil
@@ -137,11 +137,15 @@ func (cc *CommentCreate) createSpec() (*Comment, *sqlgraph.CreateSpec) {
 // CommentCreateBulk is the builder for creating many Comment entities in bulk.
 type CommentCreateBulk struct {
 	config
+	err      error
 	builders []*CommentCreate
 }
 
 // Save creates the Comment entities in the database.
 func (ccb *CommentCreateBulk) Save(ctx context.Context) ([]*Comment, error) {
+	if ccb.err != nil {
+		return nil, ccb.err
+	}
 	specs := make([]*sqlgraph.CreateSpec, len(ccb.builders))
 	nodes := make([]*Comment, len(ccb.builders))
 	mutators := make([]Mutator, len(ccb.builders))
@@ -157,8 +161,8 @@ func (ccb *CommentCreateBulk) Save(ctx context.Context) ([]*Comment, error) {
 					return nil, err
 				}
 				builder.mutation = mutation
-				nodes[i], specs[i] = builder.createSpec()
 				var err error
+				nodes[i], specs[i] = builder.createSpec()
 				if i < len(mutators)-1 {
 					_, err = mutators[i+1].Mutate(root, ccb.builders[i+1].mutation)
 				} else {

@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/entc/integration/edgeschema/ent/tweet"
 	"entgo.io/ent/entc/integration/edgeschema/ent/tweetlike"
@@ -28,7 +29,8 @@ type TweetLike struct {
 	TweetID int `json:"tweet_id,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the TweetLikeQuery when eager-loading is set.
-	Edges TweetLikeEdges `json:"edges"`
+	Edges        TweetLikeEdges `json:"edges"`
+	selectValues sql.SelectValues
 }
 
 // TweetLikeEdges holds the relations/edges for other nodes in the graph.
@@ -45,12 +47,10 @@ type TweetLikeEdges struct {
 // TweetOrErr returns the Tweet value or an error if the edge
 // was not loaded in eager-loading, or loaded but was not found.
 func (e TweetLikeEdges) TweetOrErr() (*Tweet, error) {
-	if e.loadedTypes[0] {
-		if e.Tweet == nil {
-			// Edge was loaded but was not found.
-			return nil, &NotFoundError{label: tweet.Label}
-		}
+	if e.Tweet != nil {
 		return e.Tweet, nil
+	} else if e.loadedTypes[0] {
+		return nil, &NotFoundError{label: tweet.Label}
 	}
 	return nil, &NotLoadedError{edge: "tweet"}
 }
@@ -58,12 +58,10 @@ func (e TweetLikeEdges) TweetOrErr() (*Tweet, error) {
 // UserOrErr returns the User value or an error if the edge
 // was not loaded in eager-loading, or loaded but was not found.
 func (e TweetLikeEdges) UserOrErr() (*User, error) {
-	if e.loadedTypes[1] {
-		if e.User == nil {
-			// Edge was loaded but was not found.
-			return nil, &NotFoundError{label: user.Label}
-		}
+	if e.User != nil {
 		return e.User, nil
+	} else if e.loadedTypes[1] {
+		return nil, &NotFoundError{label: user.Label}
 	}
 	return nil, &NotLoadedError{edge: "user"}
 }
@@ -78,7 +76,7 @@ func (*TweetLike) scanValues(columns []string) ([]any, error) {
 		case tweetlike.FieldLikedAt:
 			values[i] = new(sql.NullTime)
 		default:
-			return nil, fmt.Errorf("unexpected column %q for type TweetLike", columns[i])
+			values[i] = new(sql.UnknownType)
 		}
 	}
 	return values, nil
@@ -110,9 +108,17 @@ func (tl *TweetLike) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				tl.TweetID = int(value.Int64)
 			}
+		default:
+			tl.selectValues.Set(columns[i], values[i])
 		}
 	}
 	return nil
+}
+
+// Value returns the ent.Value that was dynamically selected and assigned to the TweetLike.
+// This includes values selected through modifiers, order, etc.
+func (tl *TweetLike) Value(name string) (ent.Value, error) {
+	return tl.selectValues.Get(name)
 }
 
 // QueryTweet queries the "tweet" edge of the TweetLike entity.

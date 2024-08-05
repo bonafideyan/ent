@@ -88,6 +88,48 @@ func (tc *TaskCreate) SetNillableOwner(s *string) *TaskCreate {
 	return tc
 }
 
+// SetOrder sets the "order" field.
+func (tc *TaskCreate) SetOrder(i int) *TaskCreate {
+	tc.mutation.SetOrder(i)
+	return tc
+}
+
+// SetNillableOrder sets the "order" field if the given value is not nil.
+func (tc *TaskCreate) SetNillableOrder(i *int) *TaskCreate {
+	if i != nil {
+		tc.SetOrder(*i)
+	}
+	return tc
+}
+
+// SetOrderOption sets the "order_option" field.
+func (tc *TaskCreate) SetOrderOption(i int) *TaskCreate {
+	tc.mutation.SetOrderOption(i)
+	return tc
+}
+
+// SetNillableOrderOption sets the "order_option" field if the given value is not nil.
+func (tc *TaskCreate) SetNillableOrderOption(i *int) *TaskCreate {
+	if i != nil {
+		tc.SetOrderOption(*i)
+	}
+	return tc
+}
+
+// SetOp sets the "op" field.
+func (tc *TaskCreate) SetOp(s string) *TaskCreate {
+	tc.mutation.SetOpField(s)
+	return tc
+}
+
+// SetNillableOp sets the "op" field if the given value is not nil.
+func (tc *TaskCreate) SetNillableOp(s *string) *TaskCreate {
+	if s != nil {
+		tc.SetOp(*s)
+	}
+	return tc
+}
+
 // Mutation returns the TaskMutation object of the builder.
 func (tc *TaskCreate) Mutation() *TaskMutation {
 	return tc.mutation
@@ -96,7 +138,7 @@ func (tc *TaskCreate) Mutation() *TaskMutation {
 // Save creates the Task in the database.
 func (tc *TaskCreate) Save(ctx context.Context) (*Task, error) {
 	tc.defaults()
-	return withHooks[*Task, TaskMutation](ctx, tc.gremlinSave, tc.mutation, tc.hooks)
+	return withHooks(ctx, tc.gremlinSave, tc.mutation, tc.hooks)
 }
 
 // SaveX calls Save and panics if Save returns an error.
@@ -131,6 +173,10 @@ func (tc *TaskCreate) defaults() {
 		v := enttask.DefaultCreatedAt()
 		tc.mutation.SetCreatedAt(v)
 	}
+	if _, ok := tc.mutation.GetOp(); !ok {
+		v := enttask.DefaultOp
+		tc.mutation.SetOpField(v)
+	}
 }
 
 // check runs all checks and user-defined validators on the builder.
@@ -145,6 +191,14 @@ func (tc *TaskCreate) check() error {
 	}
 	if _, ok := tc.mutation.CreatedAt(); !ok {
 		return &ValidationError{Name: "created_at", err: errors.New(`ent: missing required field "Task.created_at"`)}
+	}
+	if _, ok := tc.mutation.GetOp(); !ok {
+		return &ValidationError{Name: "op", err: errors.New(`ent: missing required field "Task.op"`)}
+	}
+	if v, ok := tc.mutation.GetOp(); ok {
+		if err := enttask.OpValidator(v); err != nil {
+			return &ValidationError{Name: "op", err: fmt.Errorf(`ent: validator failed for field "Task.op": %w`, err)}
+		}
 	}
 	return nil
 }
@@ -161,13 +215,13 @@ func (tc *TaskCreate) gremlinSave(ctx context.Context) (*Task, error) {
 	if err, ok := isConstantError(res); ok {
 		return nil, err
 	}
-	t := &Task{config: tc.config}
-	if err := t.FromResponse(res); err != nil {
+	rnode := &Task{config: tc.config}
+	if err := rnode.FromResponse(res); err != nil {
 		return nil, err
 	}
-	tc.mutation.id = &t.ID
+	tc.mutation.id = &rnode.ID
 	tc.mutation.done = true
-	return t, nil
+	return rnode, nil
 }
 
 func (tc *TaskCreate) gremlin() *dsl.Traversal {
@@ -187,11 +241,21 @@ func (tc *TaskCreate) gremlin() *dsl.Traversal {
 	if value, ok := tc.mutation.Owner(); ok {
 		v.Property(dsl.Single, enttask.FieldOwner, value)
 	}
+	if value, ok := tc.mutation.Order(); ok {
+		v.Property(dsl.Single, enttask.FieldOrder, value)
+	}
+	if value, ok := tc.mutation.OrderOption(); ok {
+		v.Property(dsl.Single, enttask.FieldOrderOption, value)
+	}
+	if value, ok := tc.mutation.GetOp(); ok {
+		v.Property(dsl.Single, enttask.FieldOp, value)
+	}
 	return v.ValueMap(true)
 }
 
 // TaskCreateBulk is the builder for creating many Task entities in bulk.
 type TaskCreateBulk struct {
 	config
+	err      error
 	builders []*TaskCreate
 }

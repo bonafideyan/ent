@@ -89,7 +89,7 @@ func (gu *GroupUpdate) RemoveUsers(u ...*User) *GroupUpdate {
 
 // Save executes the query and returns the number of nodes affected by the update operation.
 func (gu *GroupUpdate) Save(ctx context.Context) (int, error) {
-	return withHooks[int, GroupMutation](ctx, gu.sqlSave, gu.mutation, gu.hooks)
+	return withHooks(ctx, gu.sqlSave, gu.mutation, gu.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
@@ -116,7 +116,7 @@ func (gu *GroupUpdate) ExecX(ctx context.Context) {
 
 // check runs all checks and user-defined validators on the builder.
 func (gu *GroupUpdate) check() error {
-	if _, ok := gu.mutation.TenantID(); gu.mutation.TenantCleared() && !ok {
+	if gu.mutation.TenantCleared() && len(gu.mutation.TenantIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "Group.tenant"`)
 	}
 	return nil
@@ -272,7 +272,7 @@ func (guo *GroupUpdateOne) Select(field string, fields ...string) *GroupUpdateOn
 
 // Save executes the query and returns the updated Group entity.
 func (guo *GroupUpdateOne) Save(ctx context.Context) (*Group, error) {
-	return withHooks[*Group, GroupMutation](ctx, guo.sqlSave, guo.mutation, guo.hooks)
+	return withHooks(ctx, guo.sqlSave, guo.mutation, guo.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
@@ -299,7 +299,7 @@ func (guo *GroupUpdateOne) ExecX(ctx context.Context) {
 
 // check runs all checks and user-defined validators on the builder.
 func (guo *GroupUpdateOne) check() error {
-	if _, ok := guo.mutation.TenantID(); guo.mutation.TenantCleared() && !ok {
+	if guo.mutation.TenantCleared() && len(guo.mutation.TenantIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "Group.tenant"`)
 	}
 	return nil

@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"math"
 
+	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/examples/o2orecur/ent/node"
@@ -23,7 +24,7 @@ import (
 type NodeQuery struct {
 	config
 	ctx        *QueryContext
-	order      []OrderFunc
+	order      []node.OrderOption
 	inters     []Interceptor
 	predicates []predicate.Node
 	withPrev   *NodeQuery
@@ -59,7 +60,7 @@ func (nq *NodeQuery) Unique(unique bool) *NodeQuery {
 }
 
 // Order specifies how the records should be ordered.
-func (nq *NodeQuery) Order(o ...OrderFunc) *NodeQuery {
+func (nq *NodeQuery) Order(o ...node.OrderOption) *NodeQuery {
 	nq.order = append(nq.order, o...)
 	return nq
 }
@@ -111,7 +112,7 @@ func (nq *NodeQuery) QueryNext() *NodeQuery {
 // First returns the first Node entity from the query.
 // Returns a *NotFoundError when no Node was found.
 func (nq *NodeQuery) First(ctx context.Context) (*Node, error) {
-	nodes, err := nq.Limit(1).All(setContextOp(ctx, nq.ctx, "First"))
+	nodes, err := nq.Limit(1).All(setContextOp(ctx, nq.ctx, ent.OpQueryFirst))
 	if err != nil {
 		return nil, err
 	}
@@ -134,7 +135,7 @@ func (nq *NodeQuery) FirstX(ctx context.Context) *Node {
 // Returns a *NotFoundError when no Node ID was found.
 func (nq *NodeQuery) FirstID(ctx context.Context) (id int, err error) {
 	var ids []int
-	if ids, err = nq.Limit(1).IDs(setContextOp(ctx, nq.ctx, "FirstID")); err != nil {
+	if ids, err = nq.Limit(1).IDs(setContextOp(ctx, nq.ctx, ent.OpQueryFirstID)); err != nil {
 		return
 	}
 	if len(ids) == 0 {
@@ -157,7 +158,7 @@ func (nq *NodeQuery) FirstIDX(ctx context.Context) int {
 // Returns a *NotSingularError when more than one Node entity is found.
 // Returns a *NotFoundError when no Node entities are found.
 func (nq *NodeQuery) Only(ctx context.Context) (*Node, error) {
-	nodes, err := nq.Limit(2).All(setContextOp(ctx, nq.ctx, "Only"))
+	nodes, err := nq.Limit(2).All(setContextOp(ctx, nq.ctx, ent.OpQueryOnly))
 	if err != nil {
 		return nil, err
 	}
@@ -185,7 +186,7 @@ func (nq *NodeQuery) OnlyX(ctx context.Context) *Node {
 // Returns a *NotFoundError when no entities are found.
 func (nq *NodeQuery) OnlyID(ctx context.Context) (id int, err error) {
 	var ids []int
-	if ids, err = nq.Limit(2).IDs(setContextOp(ctx, nq.ctx, "OnlyID")); err != nil {
+	if ids, err = nq.Limit(2).IDs(setContextOp(ctx, nq.ctx, ent.OpQueryOnlyID)); err != nil {
 		return
 	}
 	switch len(ids) {
@@ -210,7 +211,7 @@ func (nq *NodeQuery) OnlyIDX(ctx context.Context) int {
 
 // All executes the query and returns a list of Nodes.
 func (nq *NodeQuery) All(ctx context.Context) ([]*Node, error) {
-	ctx = setContextOp(ctx, nq.ctx, "All")
+	ctx = setContextOp(ctx, nq.ctx, ent.OpQueryAll)
 	if err := nq.prepareQuery(ctx); err != nil {
 		return nil, err
 	}
@@ -232,7 +233,7 @@ func (nq *NodeQuery) IDs(ctx context.Context) (ids []int, err error) {
 	if nq.ctx.Unique == nil && nq.path != nil {
 		nq.Unique(true)
 	}
-	ctx = setContextOp(ctx, nq.ctx, "IDs")
+	ctx = setContextOp(ctx, nq.ctx, ent.OpQueryIDs)
 	if err = nq.Select(node.FieldID).Scan(ctx, &ids); err != nil {
 		return nil, err
 	}
@@ -250,7 +251,7 @@ func (nq *NodeQuery) IDsX(ctx context.Context) []int {
 
 // Count returns the count of the given query.
 func (nq *NodeQuery) Count(ctx context.Context) (int, error) {
-	ctx = setContextOp(ctx, nq.ctx, "Count")
+	ctx = setContextOp(ctx, nq.ctx, ent.OpQueryCount)
 	if err := nq.prepareQuery(ctx); err != nil {
 		return 0, err
 	}
@@ -268,7 +269,7 @@ func (nq *NodeQuery) CountX(ctx context.Context) int {
 
 // Exist returns true if the query has elements in the graph.
 func (nq *NodeQuery) Exist(ctx context.Context) (bool, error) {
-	ctx = setContextOp(ctx, nq.ctx, "Exist")
+	ctx = setContextOp(ctx, nq.ctx, ent.OpQueryExist)
 	switch _, err := nq.FirstID(ctx); {
 	case IsNotFound(err):
 		return false, nil
@@ -297,7 +298,7 @@ func (nq *NodeQuery) Clone() *NodeQuery {
 	return &NodeQuery{
 		config:     nq.config,
 		ctx:        nq.ctx.Clone(),
-		order:      append([]OrderFunc{}, nq.order...),
+		order:      append([]node.OrderOption{}, nq.order...),
 		inters:     append([]Interceptor{}, nq.inters...),
 		predicates: append([]predicate.Node{}, nq.predicates...),
 		withPrev:   nq.withPrev.Clone(),
@@ -482,8 +483,11 @@ func (nq *NodeQuery) loadNext(ctx context.Context, query *NodeQuery, nodes []*No
 		fks = append(fks, nodes[i].ID)
 		nodeids[nodes[i].ID] = nodes[i]
 	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(node.FieldPrevID)
+	}
 	query.Where(predicate.Node(func(s *sql.Selector) {
-		s.Where(sql.InValues(node.NextColumn, fks...))
+		s.Where(sql.InValues(s.C(node.NextColumn), fks...))
 	}))
 	neighbors, err := query.All(ctx)
 	if err != nil {
@@ -493,7 +497,7 @@ func (nq *NodeQuery) loadNext(ctx context.Context, query *NodeQuery, nodes []*No
 		fk := n.PrevID
 		node, ok := nodeids[fk]
 		if !ok {
-			return fmt.Errorf(`unexpected foreign-key "prev_id" returned %v for node %v`, fk, n.ID)
+			return fmt.Errorf(`unexpected referenced foreign-key "prev_id" returned %v for node %v`, fk, n.ID)
 		}
 		assign(node, n)
 	}
@@ -524,6 +528,9 @@ func (nq *NodeQuery) querySpec() *sqlgraph.QuerySpec {
 			if fields[i] != node.FieldID {
 				_spec.Node.Columns = append(_spec.Node.Columns, fields[i])
 			}
+		}
+		if nq.withPrev != nil {
+			_spec.Node.AddColumnOnce(node.FieldPrevID)
 		}
 	}
 	if ps := nq.predicates; len(ps) > 0 {
@@ -595,7 +602,7 @@ func (ngb *NodeGroupBy) Aggregate(fns ...AggregateFunc) *NodeGroupBy {
 
 // Scan applies the selector query and scans the result into the given value.
 func (ngb *NodeGroupBy) Scan(ctx context.Context, v any) error {
-	ctx = setContextOp(ctx, ngb.build.ctx, "GroupBy")
+	ctx = setContextOp(ctx, ngb.build.ctx, ent.OpQueryGroupBy)
 	if err := ngb.build.prepareQuery(ctx); err != nil {
 		return err
 	}
@@ -643,7 +650,7 @@ func (ns *NodeSelect) Aggregate(fns ...AggregateFunc) *NodeSelect {
 
 // Scan applies the selector query and scans the result into the given value.
 func (ns *NodeSelect) Scan(ctx context.Context, v any) error {
-	ctx = setContextOp(ctx, ns.ctx, "Select")
+	ctx = setContextOp(ctx, ns.ctx, ent.OpQuerySelect)
 	if err := ns.prepareQuery(ctx); err != nil {
 		return err
 	}

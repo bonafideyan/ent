@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/entc/integration/hooks/ent/card"
 	"entgo.io/ent/entc/integration/hooks/ent/user"
@@ -33,8 +34,9 @@ type Card struct {
 	ExpiredAt time.Time `json:"expired_at,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the CardQuery when eager-loading is set.
-	Edges      CardEdges `json:"edges"`
-	user_cards *int
+	Edges        CardEdges `json:"edges"`
+	user_cards   *int
+	selectValues sql.SelectValues
 }
 
 // CardEdges holds the relations/edges for other nodes in the graph.
@@ -49,12 +51,10 @@ type CardEdges struct {
 // OwnerOrErr returns the Owner value or an error if the edge
 // was not loaded in eager-loading, or loaded but was not found.
 func (e CardEdges) OwnerOrErr() (*User, error) {
-	if e.loadedTypes[0] {
-		if e.Owner == nil {
-			// Edge was loaded but was not found.
-			return nil, &NotFoundError{label: user.Label}
-		}
+	if e.Owner != nil {
 		return e.Owner, nil
+	} else if e.loadedTypes[0] {
+		return nil, &NotFoundError{label: user.Label}
 	}
 	return nil, &NotLoadedError{edge: "owner"}
 }
@@ -73,7 +73,7 @@ func (*Card) scanValues(columns []string) ([]any, error) {
 		case card.ForeignKeys[0]: // user_cards
 			values[i] = new(sql.NullInt64)
 		default:
-			return nil, fmt.Errorf("unexpected column %q for type Card", columns[i])
+			values[i] = new(sql.UnknownType)
 		}
 	}
 	return values, nil
@@ -130,9 +130,17 @@ func (c *Card) assignValues(columns []string, values []any) error {
 				c.user_cards = new(int)
 				*c.user_cards = int(value.Int64)
 			}
+		default:
+			c.selectValues.Set(columns[i], values[i])
 		}
 	}
 	return nil
+}
+
+// Value returns the ent.Value that was dynamically selected and assigned to the Card.
+// This includes values selected through modifiers, order, etc.
+func (c *Card) Value(name string) (ent.Value, error) {
+	return c.selectValues.Get(name)
 }
 
 // QueryOwner queries the "owner" edge of the Card entity.

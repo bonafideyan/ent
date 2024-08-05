@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"strings"
 
+	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/examples/edgeindex/ent/city"
 	"entgo.io/ent/examples/edgeindex/ent/street"
@@ -26,6 +27,7 @@ type Street struct {
 	// The values are being populated by the StreetQuery when eager-loading is set.
 	Edges        StreetEdges `json:"edges"`
 	city_streets *int
+	selectValues sql.SelectValues
 }
 
 // StreetEdges holds the relations/edges for other nodes in the graph.
@@ -40,12 +42,10 @@ type StreetEdges struct {
 // CityOrErr returns the City value or an error if the edge
 // was not loaded in eager-loading, or loaded but was not found.
 func (e StreetEdges) CityOrErr() (*City, error) {
-	if e.loadedTypes[0] {
-		if e.City == nil {
-			// Edge was loaded but was not found.
-			return nil, &NotFoundError{label: city.Label}
-		}
+	if e.City != nil {
 		return e.City, nil
+	} else if e.loadedTypes[0] {
+		return nil, &NotFoundError{label: city.Label}
 	}
 	return nil, &NotLoadedError{edge: "city"}
 }
@@ -62,7 +62,7 @@ func (*Street) scanValues(columns []string) ([]any, error) {
 		case street.ForeignKeys[0]: // city_streets
 			values[i] = new(sql.NullInt64)
 		default:
-			return nil, fmt.Errorf("unexpected column %q for type Street", columns[i])
+			values[i] = new(sql.UnknownType)
 		}
 	}
 	return values, nil
@@ -95,9 +95,17 @@ func (s *Street) assignValues(columns []string, values []any) error {
 				s.city_streets = new(int)
 				*s.city_streets = int(value.Int64)
 			}
+		default:
+			s.selectValues.Set(columns[i], values[i])
 		}
 	}
 	return nil
+}
+
+// Value returns the ent.Value that was dynamically selected and assigned to the Street.
+// This includes values selected through modifiers, order, etc.
+func (s *Street) Value(name string) (ent.Value, error) {
+	return s.selectValues.Get(name)
 }
 
 // QueryCity queries the "city" edge of the Street entity.

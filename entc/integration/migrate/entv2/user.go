@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/entc/integration/migrate/entv2/pet"
 	"entgo.io/ent/entc/integration/migrate/entv2/user"
@@ -66,8 +67,9 @@ type User struct {
 	DropOptional string `json:"drop_optional,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the UserQuery when eager-loading is set.
-	Edges       UserEdges `json:"edges"`
-	blog_admins *int
+	Edges        UserEdges `json:"edges"`
+	blog_admins  *int
+	selectValues sql.SelectValues
 }
 
 // UserEdges holds the relations/edges for other nodes in the graph.
@@ -95,12 +97,10 @@ func (e UserEdges) CarOrErr() ([]*Car, error) {
 // PetsOrErr returns the Pets value or an error if the edge
 // was not loaded in eager-loading, or loaded but was not found.
 func (e UserEdges) PetsOrErr() (*Pet, error) {
-	if e.loadedTypes[1] {
-		if e.Pets == nil {
-			// Edge was loaded but was not found.
-			return nil, &NotFoundError{label: pet.Label}
-		}
+	if e.Pets != nil {
 		return e.Pets, nil
+	} else if e.loadedTypes[1] {
+		return nil, &NotFoundError{label: pet.Label}
 	}
 	return nil, &NotLoadedError{edge: "pets"}
 }
@@ -132,7 +132,7 @@ func (*User) scanValues(columns []string) ([]any, error) {
 		case user.ForeignKeys[0]: // blog_admins
 			values[i] = new(sql.NullInt64)
 		default:
-			return nil, fmt.Errorf("unexpected column %q for type User", columns[i])
+			values[i] = new(sql.UnknownType)
 		}
 	}
 	return values, nil
@@ -287,9 +287,17 @@ func (u *User) assignValues(columns []string, values []any) error {
 				u.blog_admins = new(int)
 				*u.blog_admins = int(value.Int64)
 			}
+		default:
+			u.selectValues.Set(columns[i], values[i])
 		}
 	}
 	return nil
+}
+
+// Value returns the ent.Value that was dynamically selected and assigned to the User.
+// This includes values selected through modifiers, order, etc.
+func (u *User) Value(name string) (ent.Value, error) {
+	return u.selectValues.Get(name)
 }
 
 // QueryCar queries the "car" edge of the User entity.

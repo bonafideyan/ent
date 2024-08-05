@@ -48,7 +48,7 @@ func (sc *SpecCreate) Mutation() *SpecMutation {
 
 // Save creates the Spec in the database.
 func (sc *SpecCreate) Save(ctx context.Context) (*Spec, error) {
-	return withHooks[*Spec, SpecMutation](ctx, sc.sqlSave, sc.mutation, sc.hooks)
+	return withHooks(ctx, sc.sqlSave, sc.mutation, sc.hooks)
 }
 
 // SaveX calls Save and panics if Save returns an error.
@@ -240,12 +240,16 @@ func (u *SpecUpsertOne) IDX(ctx context.Context) int {
 // SpecCreateBulk is the builder for creating many Spec entities in bulk.
 type SpecCreateBulk struct {
 	config
+	err      error
 	builders []*SpecCreate
 	conflict []sql.ConflictOption
 }
 
 // Save creates the Spec entities in the database.
 func (scb *SpecCreateBulk) Save(ctx context.Context) ([]*Spec, error) {
+	if scb.err != nil {
+		return nil, scb.err
+	}
 	specs := make([]*sqlgraph.CreateSpec, len(scb.builders))
 	nodes := make([]*Spec, len(scb.builders))
 	mutators := make([]Mutator, len(scb.builders))
@@ -261,8 +265,8 @@ func (scb *SpecCreateBulk) Save(ctx context.Context) ([]*Spec, error) {
 					return nil, err
 				}
 				builder.mutation = mutation
-				nodes[i], specs[i] = builder.createSpec()
 				var err error
+				nodes[i], specs[i] = builder.createSpec()
 				if i < len(mutators)-1 {
 					_, err = mutators[i+1].Mutate(root, scb.builders[i+1].mutation)
 				} else {
@@ -400,6 +404,9 @@ func (u *SpecUpsertBulk) Update(set func(*SpecUpsert)) *SpecUpsertBulk {
 
 // Exec executes the query.
 func (u *SpecUpsertBulk) Exec(ctx context.Context) error {
+	if u.create.err != nil {
+		return u.create.err
+	}
 	for i, b := range u.create.builders {
 		if len(b.conflict) != 0 {
 			return fmt.Errorf("ent: OnConflict was set for builder %d. Set it on the SpecCreateBulk instead", i)

@@ -39,9 +39,25 @@ func (cu *CardUpdate) SetExpired(t time.Time) *CardUpdate {
 	return cu
 }
 
+// SetNillableExpired sets the "expired" field if the given value is not nil.
+func (cu *CardUpdate) SetNillableExpired(t *time.Time) *CardUpdate {
+	if t != nil {
+		cu.SetExpired(*t)
+	}
+	return cu
+}
+
 // SetNumber sets the "number" field.
 func (cu *CardUpdate) SetNumber(s string) *CardUpdate {
 	cu.mutation.SetNumber(s)
+	return cu
+}
+
+// SetNillableNumber sets the "number" field if the given value is not nil.
+func (cu *CardUpdate) SetNillableNumber(s *string) *CardUpdate {
+	if s != nil {
+		cu.SetNumber(*s)
+	}
 	return cu
 }
 
@@ -69,7 +85,7 @@ func (cu *CardUpdate) ClearOwner() *CardUpdate {
 
 // Save executes the query and returns the number of nodes affected by the update operation.
 func (cu *CardUpdate) Save(ctx context.Context) (int, error) {
-	return withHooks[int, CardMutation](ctx, cu.sqlSave, cu.mutation, cu.hooks)
+	return withHooks(ctx, cu.sqlSave, cu.mutation, cu.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
@@ -96,7 +112,7 @@ func (cu *CardUpdate) ExecX(ctx context.Context) {
 
 // check runs all checks and user-defined validators on the builder.
 func (cu *CardUpdate) check() error {
-	if _, ok := cu.mutation.OwnerID(); cu.mutation.OwnerCleared() && !ok {
+	if cu.mutation.OwnerCleared() && len(cu.mutation.OwnerIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "Card.owner"`)
 	}
 	return nil
@@ -175,9 +191,25 @@ func (cuo *CardUpdateOne) SetExpired(t time.Time) *CardUpdateOne {
 	return cuo
 }
 
+// SetNillableExpired sets the "expired" field if the given value is not nil.
+func (cuo *CardUpdateOne) SetNillableExpired(t *time.Time) *CardUpdateOne {
+	if t != nil {
+		cuo.SetExpired(*t)
+	}
+	return cuo
+}
+
 // SetNumber sets the "number" field.
 func (cuo *CardUpdateOne) SetNumber(s string) *CardUpdateOne {
 	cuo.mutation.SetNumber(s)
+	return cuo
+}
+
+// SetNillableNumber sets the "number" field if the given value is not nil.
+func (cuo *CardUpdateOne) SetNillableNumber(s *string) *CardUpdateOne {
+	if s != nil {
+		cuo.SetNumber(*s)
+	}
 	return cuo
 }
 
@@ -218,7 +250,7 @@ func (cuo *CardUpdateOne) Select(field string, fields ...string) *CardUpdateOne 
 
 // Save executes the query and returns the updated Card entity.
 func (cuo *CardUpdateOne) Save(ctx context.Context) (*Card, error) {
-	return withHooks[*Card, CardMutation](ctx, cuo.sqlSave, cuo.mutation, cuo.hooks)
+	return withHooks(ctx, cuo.sqlSave, cuo.mutation, cuo.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
@@ -245,7 +277,7 @@ func (cuo *CardUpdateOne) ExecX(ctx context.Context) {
 
 // check runs all checks and user-defined validators on the builder.
 func (cuo *CardUpdateOne) check() error {
-	if _, ok := cuo.mutation.OwnerID(); cuo.mutation.OwnerCleared() && !ok {
+	if cuo.mutation.OwnerCleared() && len(cuo.mutation.OwnerIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "Card.owner"`)
 	}
 	return nil

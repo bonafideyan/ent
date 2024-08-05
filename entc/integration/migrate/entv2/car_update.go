@@ -76,7 +76,7 @@ func (cu *CarUpdate) ClearOwner() *CarUpdate {
 
 // Save executes the query and returns the number of nodes affected by the update operation.
 func (cu *CarUpdate) Save(ctx context.Context) (int, error) {
-	return withHooks[int, CarMutation](ctx, cu.sqlSave, cu.mutation, cu.hooks)
+	return withHooks(ctx, cu.sqlSave, cu.mutation, cu.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
@@ -103,7 +103,7 @@ func (cu *CarUpdate) ExecX(ctx context.Context) {
 
 // check runs all checks and user-defined validators on the builder.
 func (cu *CarUpdate) check() error {
-	if _, ok := cu.mutation.OwnerID(); cu.mutation.OwnerCleared() && !ok {
+	if cu.mutation.OwnerCleared() && len(cu.mutation.OwnerIDs()) > 0 {
 		return errors.New(`entv2: clearing a required unique edge "Car.owner"`)
 	}
 	return nil
@@ -233,7 +233,7 @@ func (cuo *CarUpdateOne) Select(field string, fields ...string) *CarUpdateOne {
 
 // Save executes the query and returns the updated Car entity.
 func (cuo *CarUpdateOne) Save(ctx context.Context) (*Car, error) {
-	return withHooks[*Car, CarMutation](ctx, cuo.sqlSave, cuo.mutation, cuo.hooks)
+	return withHooks(ctx, cuo.sqlSave, cuo.mutation, cuo.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
@@ -260,7 +260,7 @@ func (cuo *CarUpdateOne) ExecX(ctx context.Context) {
 
 // check runs all checks and user-defined validators on the builder.
 func (cuo *CarUpdateOne) check() error {
-	if _, ok := cuo.mutation.OwnerID(); cuo.mutation.OwnerCleared() && !ok {
+	if cuo.mutation.OwnerCleared() && len(cuo.mutation.OwnerIDs()) > 0 {
 		return errors.New(`entv2: clearing a required unique edge "Car.owner"`)
 	}
 	return nil

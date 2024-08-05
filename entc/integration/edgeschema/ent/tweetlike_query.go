@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"math"
 
+	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/entc/integration/edgeschema/ent/predicate"
@@ -24,7 +25,7 @@ import (
 type TweetLikeQuery struct {
 	config
 	ctx        *QueryContext
-	order      []OrderFunc
+	order      []tweetlike.OrderOption
 	inters     []Interceptor
 	predicates []predicate.TweetLike
 	withTweet  *TweetQuery
@@ -60,7 +61,7 @@ func (tlq *TweetLikeQuery) Unique(unique bool) *TweetLikeQuery {
 }
 
 // Order specifies how the records should be ordered.
-func (tlq *TweetLikeQuery) Order(o ...OrderFunc) *TweetLikeQuery {
+func (tlq *TweetLikeQuery) Order(o ...tweetlike.OrderOption) *TweetLikeQuery {
 	tlq.order = append(tlq.order, o...)
 	return tlq
 }
@@ -112,7 +113,7 @@ func (tlq *TweetLikeQuery) QueryUser() *UserQuery {
 // First returns the first TweetLike entity from the query.
 // Returns a *NotFoundError when no TweetLike was found.
 func (tlq *TweetLikeQuery) First(ctx context.Context) (*TweetLike, error) {
-	nodes, err := tlq.Limit(1).All(setContextOp(ctx, tlq.ctx, "First"))
+	nodes, err := tlq.Limit(1).All(setContextOp(ctx, tlq.ctx, ent.OpQueryFirst))
 	if err != nil {
 		return nil, err
 	}
@@ -135,7 +136,7 @@ func (tlq *TweetLikeQuery) FirstX(ctx context.Context) *TweetLike {
 // Returns a *NotSingularError when more than one TweetLike entity is found.
 // Returns a *NotFoundError when no TweetLike entities are found.
 func (tlq *TweetLikeQuery) Only(ctx context.Context) (*TweetLike, error) {
-	nodes, err := tlq.Limit(2).All(setContextOp(ctx, tlq.ctx, "Only"))
+	nodes, err := tlq.Limit(2).All(setContextOp(ctx, tlq.ctx, ent.OpQueryOnly))
 	if err != nil {
 		return nil, err
 	}
@@ -160,7 +161,7 @@ func (tlq *TweetLikeQuery) OnlyX(ctx context.Context) *TweetLike {
 
 // All executes the query and returns a list of TweetLikes.
 func (tlq *TweetLikeQuery) All(ctx context.Context) ([]*TweetLike, error) {
-	ctx = setContextOp(ctx, tlq.ctx, "All")
+	ctx = setContextOp(ctx, tlq.ctx, ent.OpQueryAll)
 	if err := tlq.prepareQuery(ctx); err != nil {
 		return nil, err
 	}
@@ -179,7 +180,7 @@ func (tlq *TweetLikeQuery) AllX(ctx context.Context) []*TweetLike {
 
 // Count returns the count of the given query.
 func (tlq *TweetLikeQuery) Count(ctx context.Context) (int, error) {
-	ctx = setContextOp(ctx, tlq.ctx, "Count")
+	ctx = setContextOp(ctx, tlq.ctx, ent.OpQueryCount)
 	if err := tlq.prepareQuery(ctx); err != nil {
 		return 0, err
 	}
@@ -197,7 +198,7 @@ func (tlq *TweetLikeQuery) CountX(ctx context.Context) int {
 
 // Exist returns true if the query has elements in the graph.
 func (tlq *TweetLikeQuery) Exist(ctx context.Context) (bool, error) {
-	ctx = setContextOp(ctx, tlq.ctx, "Exist")
+	ctx = setContextOp(ctx, tlq.ctx, ent.OpQueryExist)
 	switch _, err := tlq.First(ctx); {
 	case IsNotFound(err):
 		return false, nil
@@ -226,7 +227,7 @@ func (tlq *TweetLikeQuery) Clone() *TweetLikeQuery {
 	return &TweetLikeQuery{
 		config:     tlq.config,
 		ctx:        tlq.ctx.Clone(),
-		order:      append([]OrderFunc{}, tlq.order...),
+		order:      append([]tweetlike.OrderOption{}, tlq.order...),
 		inters:     append([]Interceptor{}, tlq.inters...),
 		predicates: append([]predicate.TweetLike{}, tlq.predicates...),
 		withTweet:  tlq.withTweet.Clone(),
@@ -460,6 +461,12 @@ func (tlq *TweetLikeQuery) querySpec() *sqlgraph.QuerySpec {
 		for i := range fields {
 			_spec.Node.Columns = append(_spec.Node.Columns, fields[i])
 		}
+		if tlq.withTweet != nil {
+			_spec.Node.AddColumnOnce(tweetlike.FieldTweetID)
+		}
+		if tlq.withUser != nil {
+			_spec.Node.AddColumnOnce(tweetlike.FieldUserID)
+		}
 	}
 	if ps := tlq.predicates; len(ps) > 0 {
 		_spec.Predicate = func(selector *sql.Selector) {
@@ -530,7 +537,7 @@ func (tlgb *TweetLikeGroupBy) Aggregate(fns ...AggregateFunc) *TweetLikeGroupBy 
 
 // Scan applies the selector query and scans the result into the given value.
 func (tlgb *TweetLikeGroupBy) Scan(ctx context.Context, v any) error {
-	ctx = setContextOp(ctx, tlgb.build.ctx, "GroupBy")
+	ctx = setContextOp(ctx, tlgb.build.ctx, ent.OpQueryGroupBy)
 	if err := tlgb.build.prepareQuery(ctx); err != nil {
 		return err
 	}
@@ -578,7 +585,7 @@ func (tls *TweetLikeSelect) Aggregate(fns ...AggregateFunc) *TweetLikeSelect {
 
 // Scan applies the selector query and scans the result into the given value.
 func (tls *TweetLikeSelect) Scan(ctx context.Context, v any) error {
-	ctx = setContextOp(ctx, tls.ctx, "Select")
+	ctx = setContextOp(ctx, tls.ctx, ent.OpQuerySelect)
 	if err := tls.prepareQuery(ctx); err != nil {
 		return err
 	}

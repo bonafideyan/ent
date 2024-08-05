@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"strings"
 
+	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/entc/integration/edgefield/ent/card"
 	"entgo.io/ent/entc/integration/edgefield/ent/metadata"
@@ -27,7 +28,8 @@ type User struct {
 	SpouseID int `json:"spouse_id,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the UserQuery when eager-loading is set.
-	Edges UserEdges `json:"edges"`
+	Edges        UserEdges `json:"edges"`
+	selectValues sql.SelectValues
 }
 
 // UserEdges holds the relations/edges for other nodes in the graph.
@@ -50,7 +52,11 @@ type UserEdges struct {
 	Rentals []*Rental `json:"rentals,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [8]bool
+	loadedTypes   [8]bool
+	namedPets     map[string][]*Pet
+	namedChildren map[string][]*User
+	namedInfo     map[string][]*Info
+	namedRentals  map[string][]*Rental
 }
 
 // PetsOrErr returns the Pets value or an error if the edge
@@ -65,12 +71,10 @@ func (e UserEdges) PetsOrErr() ([]*Pet, error) {
 // ParentOrErr returns the Parent value or an error if the edge
 // was not loaded in eager-loading, or loaded but was not found.
 func (e UserEdges) ParentOrErr() (*User, error) {
-	if e.loadedTypes[1] {
-		if e.Parent == nil {
-			// Edge was loaded but was not found.
-			return nil, &NotFoundError{label: user.Label}
-		}
+	if e.Parent != nil {
 		return e.Parent, nil
+	} else if e.loadedTypes[1] {
+		return nil, &NotFoundError{label: user.Label}
 	}
 	return nil, &NotLoadedError{edge: "parent"}
 }
@@ -87,12 +91,10 @@ func (e UserEdges) ChildrenOrErr() ([]*User, error) {
 // SpouseOrErr returns the Spouse value or an error if the edge
 // was not loaded in eager-loading, or loaded but was not found.
 func (e UserEdges) SpouseOrErr() (*User, error) {
-	if e.loadedTypes[3] {
-		if e.Spouse == nil {
-			// Edge was loaded but was not found.
-			return nil, &NotFoundError{label: user.Label}
-		}
+	if e.Spouse != nil {
 		return e.Spouse, nil
+	} else if e.loadedTypes[3] {
+		return nil, &NotFoundError{label: user.Label}
 	}
 	return nil, &NotLoadedError{edge: "spouse"}
 }
@@ -100,12 +102,10 @@ func (e UserEdges) SpouseOrErr() (*User, error) {
 // CardOrErr returns the Card value or an error if the edge
 // was not loaded in eager-loading, or loaded but was not found.
 func (e UserEdges) CardOrErr() (*Card, error) {
-	if e.loadedTypes[4] {
-		if e.Card == nil {
-			// Edge was loaded but was not found.
-			return nil, &NotFoundError{label: card.Label}
-		}
+	if e.Card != nil {
 		return e.Card, nil
+	} else if e.loadedTypes[4] {
+		return nil, &NotFoundError{label: card.Label}
 	}
 	return nil, &NotLoadedError{edge: "card"}
 }
@@ -113,12 +113,10 @@ func (e UserEdges) CardOrErr() (*Card, error) {
 // MetadataOrErr returns the Metadata value or an error if the edge
 // was not loaded in eager-loading, or loaded but was not found.
 func (e UserEdges) MetadataOrErr() (*Metadata, error) {
-	if e.loadedTypes[5] {
-		if e.Metadata == nil {
-			// Edge was loaded but was not found.
-			return nil, &NotFoundError{label: metadata.Label}
-		}
+	if e.Metadata != nil {
 		return e.Metadata, nil
+	} else if e.loadedTypes[5] {
+		return nil, &NotFoundError{label: metadata.Label}
 	}
 	return nil, &NotLoadedError{edge: "metadata"}
 }
@@ -149,7 +147,7 @@ func (*User) scanValues(columns []string) ([]any, error) {
 		case user.FieldID, user.FieldParentID, user.FieldSpouseID:
 			values[i] = new(sql.NullInt64)
 		default:
-			return nil, fmt.Errorf("unexpected column %q for type User", columns[i])
+			values[i] = new(sql.UnknownType)
 		}
 	}
 	return values, nil
@@ -181,9 +179,17 @@ func (u *User) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				u.SpouseID = int(value.Int64)
 			}
+		default:
+			u.selectValues.Set(columns[i], values[i])
 		}
 	}
 	return nil
+}
+
+// Value returns the ent.Value that was dynamically selected and assigned to the User.
+// This includes values selected through modifiers, order, etc.
+func (u *User) Value(name string) (ent.Value, error) {
+	return u.selectValues.Get(name)
 }
 
 // QueryPets queries the "pets" edge of the User entity.
@@ -256,6 +262,102 @@ func (u *User) String() string {
 	builder.WriteString(fmt.Sprintf("%v", u.SpouseID))
 	builder.WriteByte(')')
 	return builder.String()
+}
+
+// NamedPets returns the Pets named value or an error if the edge was not
+// loaded in eager-loading with this name.
+func (u *User) NamedPets(name string) ([]*Pet, error) {
+	if u.Edges.namedPets == nil {
+		return nil, &NotLoadedError{edge: name}
+	}
+	nodes, ok := u.Edges.namedPets[name]
+	if !ok {
+		return nil, &NotLoadedError{edge: name}
+	}
+	return nodes, nil
+}
+
+func (u *User) appendNamedPets(name string, edges ...*Pet) {
+	if u.Edges.namedPets == nil {
+		u.Edges.namedPets = make(map[string][]*Pet)
+	}
+	if len(edges) == 0 {
+		u.Edges.namedPets[name] = []*Pet{}
+	} else {
+		u.Edges.namedPets[name] = append(u.Edges.namedPets[name], edges...)
+	}
+}
+
+// NamedChildren returns the Children named value or an error if the edge was not
+// loaded in eager-loading with this name.
+func (u *User) NamedChildren(name string) ([]*User, error) {
+	if u.Edges.namedChildren == nil {
+		return nil, &NotLoadedError{edge: name}
+	}
+	nodes, ok := u.Edges.namedChildren[name]
+	if !ok {
+		return nil, &NotLoadedError{edge: name}
+	}
+	return nodes, nil
+}
+
+func (u *User) appendNamedChildren(name string, edges ...*User) {
+	if u.Edges.namedChildren == nil {
+		u.Edges.namedChildren = make(map[string][]*User)
+	}
+	if len(edges) == 0 {
+		u.Edges.namedChildren[name] = []*User{}
+	} else {
+		u.Edges.namedChildren[name] = append(u.Edges.namedChildren[name], edges...)
+	}
+}
+
+// NamedInfo returns the Info named value or an error if the edge was not
+// loaded in eager-loading with this name.
+func (u *User) NamedInfo(name string) ([]*Info, error) {
+	if u.Edges.namedInfo == nil {
+		return nil, &NotLoadedError{edge: name}
+	}
+	nodes, ok := u.Edges.namedInfo[name]
+	if !ok {
+		return nil, &NotLoadedError{edge: name}
+	}
+	return nodes, nil
+}
+
+func (u *User) appendNamedInfo(name string, edges ...*Info) {
+	if u.Edges.namedInfo == nil {
+		u.Edges.namedInfo = make(map[string][]*Info)
+	}
+	if len(edges) == 0 {
+		u.Edges.namedInfo[name] = []*Info{}
+	} else {
+		u.Edges.namedInfo[name] = append(u.Edges.namedInfo[name], edges...)
+	}
+}
+
+// NamedRentals returns the Rentals named value or an error if the edge was not
+// loaded in eager-loading with this name.
+func (u *User) NamedRentals(name string) ([]*Rental, error) {
+	if u.Edges.namedRentals == nil {
+		return nil, &NotLoadedError{edge: name}
+	}
+	nodes, ok := u.Edges.namedRentals[name]
+	if !ok {
+		return nil, &NotLoadedError{edge: name}
+	}
+	return nodes, nil
+}
+
+func (u *User) appendNamedRentals(name string, edges ...*Rental) {
+	if u.Edges.namedRentals == nil {
+		u.Edges.namedRentals = make(map[string][]*Rental)
+	}
+	if len(edges) == 0 {
+		u.Edges.namedRentals[name] = []*Rental{}
+	} else {
+		u.Edges.namedRentals[name] = append(u.Edges.namedRentals[name], edges...)
+	}
 }
 
 // Users is a parsable slice of User.

@@ -56,6 +56,14 @@ func (gu *GroupUpdate) SetExpire(t time.Time) *GroupUpdate {
 	return gu
 }
 
+// SetNillableExpire sets the "expire" field if the given value is not nil.
+func (gu *GroupUpdate) SetNillableExpire(t *time.Time) *GroupUpdate {
+	if t != nil {
+		gu.SetExpire(*t)
+	}
+	return gu
+}
+
 // SetType sets the "type" field.
 func (gu *GroupUpdate) SetType(s string) *GroupUpdate {
 	gu.mutation.SetType(s)
@@ -106,6 +114,14 @@ func (gu *GroupUpdate) ClearMaxUsers() *GroupUpdate {
 // SetName sets the "name" field.
 func (gu *GroupUpdate) SetName(s string) *GroupUpdate {
 	gu.mutation.SetName(s)
+	return gu
+}
+
+// SetNillableName sets the "name" field if the given value is not nil.
+func (gu *GroupUpdate) SetNillableName(s *string) *GroupUpdate {
+	if s != nil {
+		gu.SetName(*s)
+	}
 	return gu
 }
 
@@ -241,7 +257,7 @@ func (gu *GroupUpdate) ClearInfo() *GroupUpdate {
 
 // Save executes the query and returns the number of nodes affected by the update operation.
 func (gu *GroupUpdate) Save(ctx context.Context) (int, error) {
-	return withHooks[int, GroupMutation](ctx, gu.sqlSave, gu.mutation, gu.hooks)
+	return withHooks(ctx, gu.sqlSave, gu.mutation, gu.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
@@ -283,7 +299,7 @@ func (gu *GroupUpdate) check() error {
 			return &ValidationError{Name: "name", err: fmt.Errorf(`ent: validator failed for field "Group.name": %w`, err)}
 		}
 	}
-	if _, ok := gu.mutation.InfoID(); gu.mutation.InfoCleared() && !ok {
+	if gu.mutation.InfoCleared() && len(gu.mutation.InfoIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "Group.info"`)
 	}
 	return nil
@@ -537,6 +553,14 @@ func (guo *GroupUpdateOne) SetExpire(t time.Time) *GroupUpdateOne {
 	return guo
 }
 
+// SetNillableExpire sets the "expire" field if the given value is not nil.
+func (guo *GroupUpdateOne) SetNillableExpire(t *time.Time) *GroupUpdateOne {
+	if t != nil {
+		guo.SetExpire(*t)
+	}
+	return guo
+}
+
 // SetType sets the "type" field.
 func (guo *GroupUpdateOne) SetType(s string) *GroupUpdateOne {
 	guo.mutation.SetType(s)
@@ -587,6 +611,14 @@ func (guo *GroupUpdateOne) ClearMaxUsers() *GroupUpdateOne {
 // SetName sets the "name" field.
 func (guo *GroupUpdateOne) SetName(s string) *GroupUpdateOne {
 	guo.mutation.SetName(s)
+	return guo
+}
+
+// SetNillableName sets the "name" field if the given value is not nil.
+func (guo *GroupUpdateOne) SetNillableName(s *string) *GroupUpdateOne {
+	if s != nil {
+		guo.SetName(*s)
+	}
 	return guo
 }
 
@@ -735,7 +767,7 @@ func (guo *GroupUpdateOne) Select(field string, fields ...string) *GroupUpdateOn
 
 // Save executes the query and returns the updated Group entity.
 func (guo *GroupUpdateOne) Save(ctx context.Context) (*Group, error) {
-	return withHooks[*Group, GroupMutation](ctx, guo.sqlSave, guo.mutation, guo.hooks)
+	return withHooks(ctx, guo.sqlSave, guo.mutation, guo.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
@@ -777,7 +809,7 @@ func (guo *GroupUpdateOne) check() error {
 			return &ValidationError{Name: "name", err: fmt.Errorf(`ent: validator failed for field "Group.name": %w`, err)}
 		}
 	}
-	if _, ok := guo.mutation.InfoID(); guo.mutation.InfoCleared() && !ok {
+	if guo.mutation.InfoCleared() && len(guo.mutation.InfoIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "Group.info"`)
 	}
 	return nil

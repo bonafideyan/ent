@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"math"
 
+	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/entc/integration/edgefield/ent/metadata"
@@ -23,13 +24,14 @@ import (
 // MetadataQuery is the builder for querying Metadata entities.
 type MetadataQuery struct {
 	config
-	ctx          *QueryContext
-	order        []OrderFunc
-	inters       []Interceptor
-	predicates   []predicate.Metadata
-	withUser     *UserQuery
-	withChildren *MetadataQuery
-	withParent   *MetadataQuery
+	ctx               *QueryContext
+	order             []metadata.OrderOption
+	inters            []Interceptor
+	predicates        []predicate.Metadata
+	withUser          *UserQuery
+	withChildren      *MetadataQuery
+	withParent        *MetadataQuery
+	withNamedChildren map[string]*MetadataQuery
 	// intermediate query (i.e. traversal path).
 	sql  *sql.Selector
 	path func(context.Context) (*sql.Selector, error)
@@ -61,7 +63,7 @@ func (mq *MetadataQuery) Unique(unique bool) *MetadataQuery {
 }
 
 // Order specifies how the records should be ordered.
-func (mq *MetadataQuery) Order(o ...OrderFunc) *MetadataQuery {
+func (mq *MetadataQuery) Order(o ...metadata.OrderOption) *MetadataQuery {
 	mq.order = append(mq.order, o...)
 	return mq
 }
@@ -135,7 +137,7 @@ func (mq *MetadataQuery) QueryParent() *MetadataQuery {
 // First returns the first Metadata entity from the query.
 // Returns a *NotFoundError when no Metadata was found.
 func (mq *MetadataQuery) First(ctx context.Context) (*Metadata, error) {
-	nodes, err := mq.Limit(1).All(setContextOp(ctx, mq.ctx, "First"))
+	nodes, err := mq.Limit(1).All(setContextOp(ctx, mq.ctx, ent.OpQueryFirst))
 	if err != nil {
 		return nil, err
 	}
@@ -158,7 +160,7 @@ func (mq *MetadataQuery) FirstX(ctx context.Context) *Metadata {
 // Returns a *NotFoundError when no Metadata ID was found.
 func (mq *MetadataQuery) FirstID(ctx context.Context) (id int, err error) {
 	var ids []int
-	if ids, err = mq.Limit(1).IDs(setContextOp(ctx, mq.ctx, "FirstID")); err != nil {
+	if ids, err = mq.Limit(1).IDs(setContextOp(ctx, mq.ctx, ent.OpQueryFirstID)); err != nil {
 		return
 	}
 	if len(ids) == 0 {
@@ -181,7 +183,7 @@ func (mq *MetadataQuery) FirstIDX(ctx context.Context) int {
 // Returns a *NotSingularError when more than one Metadata entity is found.
 // Returns a *NotFoundError when no Metadata entities are found.
 func (mq *MetadataQuery) Only(ctx context.Context) (*Metadata, error) {
-	nodes, err := mq.Limit(2).All(setContextOp(ctx, mq.ctx, "Only"))
+	nodes, err := mq.Limit(2).All(setContextOp(ctx, mq.ctx, ent.OpQueryOnly))
 	if err != nil {
 		return nil, err
 	}
@@ -209,7 +211,7 @@ func (mq *MetadataQuery) OnlyX(ctx context.Context) *Metadata {
 // Returns a *NotFoundError when no entities are found.
 func (mq *MetadataQuery) OnlyID(ctx context.Context) (id int, err error) {
 	var ids []int
-	if ids, err = mq.Limit(2).IDs(setContextOp(ctx, mq.ctx, "OnlyID")); err != nil {
+	if ids, err = mq.Limit(2).IDs(setContextOp(ctx, mq.ctx, ent.OpQueryOnlyID)); err != nil {
 		return
 	}
 	switch len(ids) {
@@ -234,7 +236,7 @@ func (mq *MetadataQuery) OnlyIDX(ctx context.Context) int {
 
 // All executes the query and returns a list of MetadataSlice.
 func (mq *MetadataQuery) All(ctx context.Context) ([]*Metadata, error) {
-	ctx = setContextOp(ctx, mq.ctx, "All")
+	ctx = setContextOp(ctx, mq.ctx, ent.OpQueryAll)
 	if err := mq.prepareQuery(ctx); err != nil {
 		return nil, err
 	}
@@ -256,7 +258,7 @@ func (mq *MetadataQuery) IDs(ctx context.Context) (ids []int, err error) {
 	if mq.ctx.Unique == nil && mq.path != nil {
 		mq.Unique(true)
 	}
-	ctx = setContextOp(ctx, mq.ctx, "IDs")
+	ctx = setContextOp(ctx, mq.ctx, ent.OpQueryIDs)
 	if err = mq.Select(metadata.FieldID).Scan(ctx, &ids); err != nil {
 		return nil, err
 	}
@@ -274,7 +276,7 @@ func (mq *MetadataQuery) IDsX(ctx context.Context) []int {
 
 // Count returns the count of the given query.
 func (mq *MetadataQuery) Count(ctx context.Context) (int, error) {
-	ctx = setContextOp(ctx, mq.ctx, "Count")
+	ctx = setContextOp(ctx, mq.ctx, ent.OpQueryCount)
 	if err := mq.prepareQuery(ctx); err != nil {
 		return 0, err
 	}
@@ -292,7 +294,7 @@ func (mq *MetadataQuery) CountX(ctx context.Context) int {
 
 // Exist returns true if the query has elements in the graph.
 func (mq *MetadataQuery) Exist(ctx context.Context) (bool, error) {
-	ctx = setContextOp(ctx, mq.ctx, "Exist")
+	ctx = setContextOp(ctx, mq.ctx, ent.OpQueryExist)
 	switch _, err := mq.FirstID(ctx); {
 	case IsNotFound(err):
 		return false, nil
@@ -321,7 +323,7 @@ func (mq *MetadataQuery) Clone() *MetadataQuery {
 	return &MetadataQuery{
 		config:       mq.config,
 		ctx:          mq.ctx.Clone(),
-		order:        append([]OrderFunc{}, mq.order...),
+		order:        append([]metadata.OrderOption{}, mq.order...),
 		inters:       append([]Interceptor{}, mq.inters...),
 		predicates:   append([]predicate.Metadata{}, mq.predicates...),
 		withUser:     mq.withUser.Clone(),
@@ -487,6 +489,13 @@ func (mq *MetadataQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Met
 			return nil, err
 		}
 	}
+	for name, query := range mq.withNamedChildren {
+		if err := mq.loadChildren(ctx, query, nodes,
+			func(n *Metadata) { n.appendNamedChildren(name) },
+			func(n *Metadata, e *Metadata) { n.appendNamedChildren(name, e) }); err != nil {
+			return nil, err
+		}
+	}
 	return nodes, nil
 }
 
@@ -529,8 +538,11 @@ func (mq *MetadataQuery) loadChildren(ctx context.Context, query *MetadataQuery,
 			init(nodes[i])
 		}
 	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(metadata.FieldParentID)
+	}
 	query.Where(predicate.Metadata(func(s *sql.Selector) {
-		s.Where(sql.InValues(metadata.ChildrenColumn, fks...))
+		s.Where(sql.InValues(s.C(metadata.ChildrenColumn), fks...))
 	}))
 	neighbors, err := query.All(ctx)
 	if err != nil {
@@ -540,7 +552,7 @@ func (mq *MetadataQuery) loadChildren(ctx context.Context, query *MetadataQuery,
 		fk := n.ParentID
 		node, ok := nodeids[fk]
 		if !ok {
-			return fmt.Errorf(`unexpected foreign-key "parent_id" returned %v for node %v`, fk, n.ID)
+			return fmt.Errorf(`unexpected referenced foreign-key "parent_id" returned %v for node %v`, fk, n.ID)
 		}
 		assign(node, n)
 	}
@@ -601,6 +613,9 @@ func (mq *MetadataQuery) querySpec() *sqlgraph.QuerySpec {
 				_spec.Node.Columns = append(_spec.Node.Columns, fields[i])
 			}
 		}
+		if mq.withParent != nil {
+			_spec.Node.AddColumnOnce(metadata.FieldParentID)
+		}
 	}
 	if ps := mq.predicates; len(ps) > 0 {
 		_spec.Predicate = func(selector *sql.Selector) {
@@ -657,6 +672,20 @@ func (mq *MetadataQuery) sqlQuery(ctx context.Context) *sql.Selector {
 	return selector
 }
 
+// WithNamedChildren tells the query-builder to eager-load the nodes that are connected to the "children"
+// edge with the given name. The optional arguments are used to configure the query builder of the edge.
+func (mq *MetadataQuery) WithNamedChildren(name string, opts ...func(*MetadataQuery)) *MetadataQuery {
+	query := (&MetadataClient{config: mq.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	if mq.withNamedChildren == nil {
+		mq.withNamedChildren = make(map[string]*MetadataQuery)
+	}
+	mq.withNamedChildren[name] = query
+	return mq
+}
+
 // MetadataGroupBy is the group-by builder for Metadata entities.
 type MetadataGroupBy struct {
 	selector
@@ -671,7 +700,7 @@ func (mgb *MetadataGroupBy) Aggregate(fns ...AggregateFunc) *MetadataGroupBy {
 
 // Scan applies the selector query and scans the result into the given value.
 func (mgb *MetadataGroupBy) Scan(ctx context.Context, v any) error {
-	ctx = setContextOp(ctx, mgb.build.ctx, "GroupBy")
+	ctx = setContextOp(ctx, mgb.build.ctx, ent.OpQueryGroupBy)
 	if err := mgb.build.prepareQuery(ctx); err != nil {
 		return err
 	}
@@ -719,7 +748,7 @@ func (ms *MetadataSelect) Aggregate(fns ...AggregateFunc) *MetadataSelect {
 
 // Scan applies the selector query and scans the result into the given value.
 func (ms *MetadataSelect) Scan(ctx context.Context, v any) error {
-	ctx = setContextOp(ctx, ms.ctx, "Select")
+	ctx = setContextOp(ctx, ms.ctx, ent.OpQuerySelect)
 	if err := ms.prepareQuery(ctx); err != nil {
 		return err
 	}

@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"math"
 
+	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/examples/fs/ent/file"
@@ -23,7 +24,7 @@ import (
 type FileQuery struct {
 	config
 	ctx          *QueryContext
-	order        []OrderFunc
+	order        []file.OrderOption
 	inters       []Interceptor
 	predicates   []predicate.File
 	withParent   *FileQuery
@@ -59,7 +60,7 @@ func (fq *FileQuery) Unique(unique bool) *FileQuery {
 }
 
 // Order specifies how the records should be ordered.
-func (fq *FileQuery) Order(o ...OrderFunc) *FileQuery {
+func (fq *FileQuery) Order(o ...file.OrderOption) *FileQuery {
 	fq.order = append(fq.order, o...)
 	return fq
 }
@@ -111,7 +112,7 @@ func (fq *FileQuery) QueryChildren() *FileQuery {
 // First returns the first File entity from the query.
 // Returns a *NotFoundError when no File was found.
 func (fq *FileQuery) First(ctx context.Context) (*File, error) {
-	nodes, err := fq.Limit(1).All(setContextOp(ctx, fq.ctx, "First"))
+	nodes, err := fq.Limit(1).All(setContextOp(ctx, fq.ctx, ent.OpQueryFirst))
 	if err != nil {
 		return nil, err
 	}
@@ -134,7 +135,7 @@ func (fq *FileQuery) FirstX(ctx context.Context) *File {
 // Returns a *NotFoundError when no File ID was found.
 func (fq *FileQuery) FirstID(ctx context.Context) (id int, err error) {
 	var ids []int
-	if ids, err = fq.Limit(1).IDs(setContextOp(ctx, fq.ctx, "FirstID")); err != nil {
+	if ids, err = fq.Limit(1).IDs(setContextOp(ctx, fq.ctx, ent.OpQueryFirstID)); err != nil {
 		return
 	}
 	if len(ids) == 0 {
@@ -157,7 +158,7 @@ func (fq *FileQuery) FirstIDX(ctx context.Context) int {
 // Returns a *NotSingularError when more than one File entity is found.
 // Returns a *NotFoundError when no File entities are found.
 func (fq *FileQuery) Only(ctx context.Context) (*File, error) {
-	nodes, err := fq.Limit(2).All(setContextOp(ctx, fq.ctx, "Only"))
+	nodes, err := fq.Limit(2).All(setContextOp(ctx, fq.ctx, ent.OpQueryOnly))
 	if err != nil {
 		return nil, err
 	}
@@ -185,7 +186,7 @@ func (fq *FileQuery) OnlyX(ctx context.Context) *File {
 // Returns a *NotFoundError when no entities are found.
 func (fq *FileQuery) OnlyID(ctx context.Context) (id int, err error) {
 	var ids []int
-	if ids, err = fq.Limit(2).IDs(setContextOp(ctx, fq.ctx, "OnlyID")); err != nil {
+	if ids, err = fq.Limit(2).IDs(setContextOp(ctx, fq.ctx, ent.OpQueryOnlyID)); err != nil {
 		return
 	}
 	switch len(ids) {
@@ -210,7 +211,7 @@ func (fq *FileQuery) OnlyIDX(ctx context.Context) int {
 
 // All executes the query and returns a list of Files.
 func (fq *FileQuery) All(ctx context.Context) ([]*File, error) {
-	ctx = setContextOp(ctx, fq.ctx, "All")
+	ctx = setContextOp(ctx, fq.ctx, ent.OpQueryAll)
 	if err := fq.prepareQuery(ctx); err != nil {
 		return nil, err
 	}
@@ -232,7 +233,7 @@ func (fq *FileQuery) IDs(ctx context.Context) (ids []int, err error) {
 	if fq.ctx.Unique == nil && fq.path != nil {
 		fq.Unique(true)
 	}
-	ctx = setContextOp(ctx, fq.ctx, "IDs")
+	ctx = setContextOp(ctx, fq.ctx, ent.OpQueryIDs)
 	if err = fq.Select(file.FieldID).Scan(ctx, &ids); err != nil {
 		return nil, err
 	}
@@ -250,7 +251,7 @@ func (fq *FileQuery) IDsX(ctx context.Context) []int {
 
 // Count returns the count of the given query.
 func (fq *FileQuery) Count(ctx context.Context) (int, error) {
-	ctx = setContextOp(ctx, fq.ctx, "Count")
+	ctx = setContextOp(ctx, fq.ctx, ent.OpQueryCount)
 	if err := fq.prepareQuery(ctx); err != nil {
 		return 0, err
 	}
@@ -268,7 +269,7 @@ func (fq *FileQuery) CountX(ctx context.Context) int {
 
 // Exist returns true if the query has elements in the graph.
 func (fq *FileQuery) Exist(ctx context.Context) (bool, error) {
-	ctx = setContextOp(ctx, fq.ctx, "Exist")
+	ctx = setContextOp(ctx, fq.ctx, ent.OpQueryExist)
 	switch _, err := fq.FirstID(ctx); {
 	case IsNotFound(err):
 		return false, nil
@@ -297,7 +298,7 @@ func (fq *FileQuery) Clone() *FileQuery {
 	return &FileQuery{
 		config:       fq.config,
 		ctx:          fq.ctx.Clone(),
-		order:        append([]OrderFunc{}, fq.order...),
+		order:        append([]file.OrderOption{}, fq.order...),
 		inters:       append([]Interceptor{}, fq.inters...),
 		predicates:   append([]predicate.File{}, fq.predicates...),
 		withParent:   fq.withParent.Clone(),
@@ -486,8 +487,11 @@ func (fq *FileQuery) loadChildren(ctx context.Context, query *FileQuery, nodes [
 			init(nodes[i])
 		}
 	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(file.FieldParentID)
+	}
 	query.Where(predicate.File(func(s *sql.Selector) {
-		s.Where(sql.InValues(file.ChildrenColumn, fks...))
+		s.Where(sql.InValues(s.C(file.ChildrenColumn), fks...))
 	}))
 	neighbors, err := query.All(ctx)
 	if err != nil {
@@ -497,7 +501,7 @@ func (fq *FileQuery) loadChildren(ctx context.Context, query *FileQuery, nodes [
 		fk := n.ParentID
 		node, ok := nodeids[fk]
 		if !ok {
-			return fmt.Errorf(`unexpected foreign-key "parent_id" returned %v for node %v`, fk, n.ID)
+			return fmt.Errorf(`unexpected referenced foreign-key "parent_id" returned %v for node %v`, fk, n.ID)
 		}
 		assign(node, n)
 	}
@@ -528,6 +532,9 @@ func (fq *FileQuery) querySpec() *sqlgraph.QuerySpec {
 			if fields[i] != file.FieldID {
 				_spec.Node.Columns = append(_spec.Node.Columns, fields[i])
 			}
+		}
+		if fq.withParent != nil {
+			_spec.Node.AddColumnOnce(file.FieldParentID)
 		}
 	}
 	if ps := fq.predicates; len(ps) > 0 {
@@ -599,7 +606,7 @@ func (fgb *FileGroupBy) Aggregate(fns ...AggregateFunc) *FileGroupBy {
 
 // Scan applies the selector query and scans the result into the given value.
 func (fgb *FileGroupBy) Scan(ctx context.Context, v any) error {
-	ctx = setContextOp(ctx, fgb.build.ctx, "GroupBy")
+	ctx = setContextOp(ctx, fgb.build.ctx, ent.OpQueryGroupBy)
 	if err := fgb.build.prepareQuery(ctx); err != nil {
 		return err
 	}
@@ -647,7 +654,7 @@ func (fs *FileSelect) Aggregate(fns ...AggregateFunc) *FileSelect {
 
 // Scan applies the selector query and scans the result into the given value.
 func (fs *FileSelect) Scan(ctx context.Context, v any) error {
-	ctx = setContextOp(ctx, fs.ctx, "Select")
+	ctx = setContextOp(ctx, fs.ctx, ent.OpQuerySelect)
 	if err := fs.prepareQuery(ctx); err != nil {
 		return err
 	}

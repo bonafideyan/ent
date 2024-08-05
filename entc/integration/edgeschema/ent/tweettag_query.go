@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"math"
 
+	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/entc/integration/edgeschema/ent/predicate"
@@ -25,7 +26,7 @@ import (
 type TweetTagQuery struct {
 	config
 	ctx        *QueryContext
-	order      []OrderFunc
+	order      []tweettag.OrderOption
 	inters     []Interceptor
 	predicates []predicate.TweetTag
 	withTag    *TagQuery
@@ -61,7 +62,7 @@ func (ttq *TweetTagQuery) Unique(unique bool) *TweetTagQuery {
 }
 
 // Order specifies how the records should be ordered.
-func (ttq *TweetTagQuery) Order(o ...OrderFunc) *TweetTagQuery {
+func (ttq *TweetTagQuery) Order(o ...tweettag.OrderOption) *TweetTagQuery {
 	ttq.order = append(ttq.order, o...)
 	return ttq
 }
@@ -113,7 +114,7 @@ func (ttq *TweetTagQuery) QueryTweet() *TweetQuery {
 // First returns the first TweetTag entity from the query.
 // Returns a *NotFoundError when no TweetTag was found.
 func (ttq *TweetTagQuery) First(ctx context.Context) (*TweetTag, error) {
-	nodes, err := ttq.Limit(1).All(setContextOp(ctx, ttq.ctx, "First"))
+	nodes, err := ttq.Limit(1).All(setContextOp(ctx, ttq.ctx, ent.OpQueryFirst))
 	if err != nil {
 		return nil, err
 	}
@@ -136,7 +137,7 @@ func (ttq *TweetTagQuery) FirstX(ctx context.Context) *TweetTag {
 // Returns a *NotFoundError when no TweetTag ID was found.
 func (ttq *TweetTagQuery) FirstID(ctx context.Context) (id uuid.UUID, err error) {
 	var ids []uuid.UUID
-	if ids, err = ttq.Limit(1).IDs(setContextOp(ctx, ttq.ctx, "FirstID")); err != nil {
+	if ids, err = ttq.Limit(1).IDs(setContextOp(ctx, ttq.ctx, ent.OpQueryFirstID)); err != nil {
 		return
 	}
 	if len(ids) == 0 {
@@ -159,7 +160,7 @@ func (ttq *TweetTagQuery) FirstIDX(ctx context.Context) uuid.UUID {
 // Returns a *NotSingularError when more than one TweetTag entity is found.
 // Returns a *NotFoundError when no TweetTag entities are found.
 func (ttq *TweetTagQuery) Only(ctx context.Context) (*TweetTag, error) {
-	nodes, err := ttq.Limit(2).All(setContextOp(ctx, ttq.ctx, "Only"))
+	nodes, err := ttq.Limit(2).All(setContextOp(ctx, ttq.ctx, ent.OpQueryOnly))
 	if err != nil {
 		return nil, err
 	}
@@ -187,7 +188,7 @@ func (ttq *TweetTagQuery) OnlyX(ctx context.Context) *TweetTag {
 // Returns a *NotFoundError when no entities are found.
 func (ttq *TweetTagQuery) OnlyID(ctx context.Context) (id uuid.UUID, err error) {
 	var ids []uuid.UUID
-	if ids, err = ttq.Limit(2).IDs(setContextOp(ctx, ttq.ctx, "OnlyID")); err != nil {
+	if ids, err = ttq.Limit(2).IDs(setContextOp(ctx, ttq.ctx, ent.OpQueryOnlyID)); err != nil {
 		return
 	}
 	switch len(ids) {
@@ -212,7 +213,7 @@ func (ttq *TweetTagQuery) OnlyIDX(ctx context.Context) uuid.UUID {
 
 // All executes the query and returns a list of TweetTags.
 func (ttq *TweetTagQuery) All(ctx context.Context) ([]*TweetTag, error) {
-	ctx = setContextOp(ctx, ttq.ctx, "All")
+	ctx = setContextOp(ctx, ttq.ctx, ent.OpQueryAll)
 	if err := ttq.prepareQuery(ctx); err != nil {
 		return nil, err
 	}
@@ -234,7 +235,7 @@ func (ttq *TweetTagQuery) IDs(ctx context.Context) (ids []uuid.UUID, err error) 
 	if ttq.ctx.Unique == nil && ttq.path != nil {
 		ttq.Unique(true)
 	}
-	ctx = setContextOp(ctx, ttq.ctx, "IDs")
+	ctx = setContextOp(ctx, ttq.ctx, ent.OpQueryIDs)
 	if err = ttq.Select(tweettag.FieldID).Scan(ctx, &ids); err != nil {
 		return nil, err
 	}
@@ -252,7 +253,7 @@ func (ttq *TweetTagQuery) IDsX(ctx context.Context) []uuid.UUID {
 
 // Count returns the count of the given query.
 func (ttq *TweetTagQuery) Count(ctx context.Context) (int, error) {
-	ctx = setContextOp(ctx, ttq.ctx, "Count")
+	ctx = setContextOp(ctx, ttq.ctx, ent.OpQueryCount)
 	if err := ttq.prepareQuery(ctx); err != nil {
 		return 0, err
 	}
@@ -270,7 +271,7 @@ func (ttq *TweetTagQuery) CountX(ctx context.Context) int {
 
 // Exist returns true if the query has elements in the graph.
 func (ttq *TweetTagQuery) Exist(ctx context.Context) (bool, error) {
-	ctx = setContextOp(ctx, ttq.ctx, "Exist")
+	ctx = setContextOp(ctx, ttq.ctx, ent.OpQueryExist)
 	switch _, err := ttq.FirstID(ctx); {
 	case IsNotFound(err):
 		return false, nil
@@ -299,7 +300,7 @@ func (ttq *TweetTagQuery) Clone() *TweetTagQuery {
 	return &TweetTagQuery{
 		config:     ttq.config,
 		ctx:        ttq.ctx.Clone(),
-		order:      append([]OrderFunc{}, ttq.order...),
+		order:      append([]tweettag.OrderOption{}, ttq.order...),
 		inters:     append([]Interceptor{}, ttq.inters...),
 		predicates: append([]predicate.TweetTag{}, ttq.predicates...),
 		withTag:    ttq.withTag.Clone(),
@@ -532,6 +533,12 @@ func (ttq *TweetTagQuery) querySpec() *sqlgraph.QuerySpec {
 				_spec.Node.Columns = append(_spec.Node.Columns, fields[i])
 			}
 		}
+		if ttq.withTag != nil {
+			_spec.Node.AddColumnOnce(tweettag.FieldTagID)
+		}
+		if ttq.withTweet != nil {
+			_spec.Node.AddColumnOnce(tweettag.FieldTweetID)
+		}
 	}
 	if ps := ttq.predicates; len(ps) > 0 {
 		_spec.Predicate = func(selector *sql.Selector) {
@@ -602,7 +609,7 @@ func (ttgb *TweetTagGroupBy) Aggregate(fns ...AggregateFunc) *TweetTagGroupBy {
 
 // Scan applies the selector query and scans the result into the given value.
 func (ttgb *TweetTagGroupBy) Scan(ctx context.Context, v any) error {
-	ctx = setContextOp(ctx, ttgb.build.ctx, "GroupBy")
+	ctx = setContextOp(ctx, ttgb.build.ctx, ent.OpQueryGroupBy)
 	if err := ttgb.build.prepareQuery(ctx); err != nil {
 		return err
 	}
@@ -650,7 +657,7 @@ func (tts *TweetTagSelect) Aggregate(fns ...AggregateFunc) *TweetTagSelect {
 
 // Scan applies the selector query and scans the result into the given value.
 func (tts *TweetTagSelect) Scan(ctx context.Context, v any) error {
-	ctx = setContextOp(ctx, tts.ctx, "Select")
+	ctx = setContextOp(ctx, tts.ctx, ent.OpQuerySelect)
 	if err := tts.prepareQuery(ctx); err != nil {
 		return err
 	}

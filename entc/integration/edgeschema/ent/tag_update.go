@@ -42,6 +42,14 @@ func (tu *TagUpdate) SetValue(s string) *TagUpdate {
 	return tu
 }
 
+// SetNillableValue sets the "value" field if the given value is not nil.
+func (tu *TagUpdate) SetNillableValue(s *string) *TagUpdate {
+	if s != nil {
+		tu.SetValue(*s)
+	}
+	return tu
+}
+
 // AddTweetIDs adds the "tweets" edge to the Tweet entity by IDs.
 func (tu *TagUpdate) AddTweetIDs(ids ...int) *TagUpdate {
 	tu.mutation.AddTweetIDs(ids...)
@@ -193,7 +201,7 @@ func (tu *TagUpdate) RemoveGroupTags(g ...*GroupTag) *TagUpdate {
 
 // Save executes the query and returns the number of nodes affected by the update operation.
 func (tu *TagUpdate) Save(ctx context.Context) (int, error) {
-	return withHooks[int, TagMutation](ctx, tu.sqlSave, tu.mutation, tu.hooks)
+	return withHooks(ctx, tu.sqlSave, tu.mutation, tu.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
@@ -457,6 +465,14 @@ func (tuo *TagUpdateOne) SetValue(s string) *TagUpdateOne {
 	return tuo
 }
 
+// SetNillableValue sets the "value" field if the given value is not nil.
+func (tuo *TagUpdateOne) SetNillableValue(s *string) *TagUpdateOne {
+	if s != nil {
+		tuo.SetValue(*s)
+	}
+	return tuo
+}
+
 // AddTweetIDs adds the "tweets" edge to the Tweet entity by IDs.
 func (tuo *TagUpdateOne) AddTweetIDs(ids ...int) *TagUpdateOne {
 	tuo.mutation.AddTweetIDs(ids...)
@@ -621,7 +637,7 @@ func (tuo *TagUpdateOne) Select(field string, fields ...string) *TagUpdateOne {
 
 // Save executes the query and returns the updated Tag entity.
 func (tuo *TagUpdateOne) Save(ctx context.Context) (*Tag, error) {
-	return withHooks[*Tag, TagMutation](ctx, tuo.sqlSave, tuo.mutation, tuo.hooks)
+	return withHooks(ctx, tuo.sqlSave, tuo.mutation, tuo.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.

@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"strings"
 
+	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/entc/integration/edgefield/ent/metadata"
 	"entgo.io/ent/entc/integration/edgefield/ent/user"
@@ -26,7 +27,8 @@ type Metadata struct {
 	ParentID int `json:"parent_id,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the MetadataQuery when eager-loading is set.
-	Edges MetadataEdges `json:"edges"`
+	Edges        MetadataEdges `json:"edges"`
+	selectValues sql.SelectValues
 }
 
 // MetadataEdges holds the relations/edges for other nodes in the graph.
@@ -39,18 +41,17 @@ type MetadataEdges struct {
 	Parent *Metadata `json:"parent,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [3]bool
+	loadedTypes   [3]bool
+	namedChildren map[string][]*Metadata
 }
 
 // UserOrErr returns the User value or an error if the edge
 // was not loaded in eager-loading, or loaded but was not found.
 func (e MetadataEdges) UserOrErr() (*User, error) {
-	if e.loadedTypes[0] {
-		if e.User == nil {
-			// Edge was loaded but was not found.
-			return nil, &NotFoundError{label: user.Label}
-		}
+	if e.User != nil {
 		return e.User, nil
+	} else if e.loadedTypes[0] {
+		return nil, &NotFoundError{label: user.Label}
 	}
 	return nil, &NotLoadedError{edge: "user"}
 }
@@ -67,12 +68,10 @@ func (e MetadataEdges) ChildrenOrErr() ([]*Metadata, error) {
 // ParentOrErr returns the Parent value or an error if the edge
 // was not loaded in eager-loading, or loaded but was not found.
 func (e MetadataEdges) ParentOrErr() (*Metadata, error) {
-	if e.loadedTypes[2] {
-		if e.Parent == nil {
-			// Edge was loaded but was not found.
-			return nil, &NotFoundError{label: metadata.Label}
-		}
+	if e.Parent != nil {
 		return e.Parent, nil
+	} else if e.loadedTypes[2] {
+		return nil, &NotFoundError{label: metadata.Label}
 	}
 	return nil, &NotLoadedError{edge: "parent"}
 }
@@ -85,7 +84,7 @@ func (*Metadata) scanValues(columns []string) ([]any, error) {
 		case metadata.FieldID, metadata.FieldAge, metadata.FieldParentID:
 			values[i] = new(sql.NullInt64)
 		default:
-			return nil, fmt.Errorf("unexpected column %q for type Metadata", columns[i])
+			values[i] = new(sql.UnknownType)
 		}
 	}
 	return values, nil
@@ -117,9 +116,17 @@ func (m *Metadata) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				m.ParentID = int(value.Int64)
 			}
+		default:
+			m.selectValues.Set(columns[i], values[i])
 		}
 	}
 	return nil
+}
+
+// Value returns the ent.Value that was dynamically selected and assigned to the Metadata.
+// This includes values selected through modifiers, order, etc.
+func (m *Metadata) Value(name string) (ent.Value, error) {
+	return m.selectValues.Get(name)
 }
 
 // QueryUser queries the "user" edge of the Metadata entity.
@@ -167,6 +174,30 @@ func (m *Metadata) String() string {
 	builder.WriteString(fmt.Sprintf("%v", m.ParentID))
 	builder.WriteByte(')')
 	return builder.String()
+}
+
+// NamedChildren returns the Children named value or an error if the edge was not
+// loaded in eager-loading with this name.
+func (m *Metadata) NamedChildren(name string) ([]*Metadata, error) {
+	if m.Edges.namedChildren == nil {
+		return nil, &NotLoadedError{edge: name}
+	}
+	nodes, ok := m.Edges.namedChildren[name]
+	if !ok {
+		return nil, &NotLoadedError{edge: name}
+	}
+	return nodes, nil
+}
+
+func (m *Metadata) appendNamedChildren(name string, edges ...*Metadata) {
+	if m.Edges.namedChildren == nil {
+		m.Edges.namedChildren = make(map[string][]*Metadata)
+	}
+	if len(edges) == 0 {
+		m.Edges.namedChildren[name] = []*Metadata{}
+	} else {
+		m.Edges.namedChildren[name] = append(m.Edges.namedChildren[name], edges...)
+	}
 }
 
 // MetadataSlice is a parsable slice of Metadata.

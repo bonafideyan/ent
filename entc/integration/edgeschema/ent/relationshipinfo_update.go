@@ -37,6 +37,14 @@ func (riu *RelationshipInfoUpdate) SetText(s string) *RelationshipInfoUpdate {
 	return riu
 }
 
+// SetNillableText sets the "text" field if the given value is not nil.
+func (riu *RelationshipInfoUpdate) SetNillableText(s *string) *RelationshipInfoUpdate {
+	if s != nil {
+		riu.SetText(*s)
+	}
+	return riu
+}
+
 // Mutation returns the RelationshipInfoMutation object of the builder.
 func (riu *RelationshipInfoUpdate) Mutation() *RelationshipInfoMutation {
 	return riu.mutation
@@ -44,7 +52,7 @@ func (riu *RelationshipInfoUpdate) Mutation() *RelationshipInfoMutation {
 
 // Save executes the query and returns the number of nodes affected by the update operation.
 func (riu *RelationshipInfoUpdate) Save(ctx context.Context) (int, error) {
-	return withHooks[int, RelationshipInfoMutation](ctx, riu.sqlSave, riu.mutation, riu.hooks)
+	return withHooks(ctx, riu.sqlSave, riu.mutation, riu.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
@@ -107,6 +115,14 @@ func (riuo *RelationshipInfoUpdateOne) SetText(s string) *RelationshipInfoUpdate
 	return riuo
 }
 
+// SetNillableText sets the "text" field if the given value is not nil.
+func (riuo *RelationshipInfoUpdateOne) SetNillableText(s *string) *RelationshipInfoUpdateOne {
+	if s != nil {
+		riuo.SetText(*s)
+	}
+	return riuo
+}
+
 // Mutation returns the RelationshipInfoMutation object of the builder.
 func (riuo *RelationshipInfoUpdateOne) Mutation() *RelationshipInfoMutation {
 	return riuo.mutation
@@ -127,7 +143,7 @@ func (riuo *RelationshipInfoUpdateOne) Select(field string, fields ...string) *R
 
 // Save executes the query and returns the updated RelationshipInfo entity.
 func (riuo *RelationshipInfoUpdateOne) Save(ctx context.Context) (*RelationshipInfo, error) {
-	return withHooks[*RelationshipInfo, RelationshipInfoMutation](ctx, riuo.sqlSave, riuo.mutation, riuo.hooks)
+	return withHooks(ctx, riuo.sqlSave, riuo.mutation, riuo.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.

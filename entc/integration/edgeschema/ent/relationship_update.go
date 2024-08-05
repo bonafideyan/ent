@@ -60,9 +60,25 @@ func (ru *RelationshipUpdate) SetUserID(i int) *RelationshipUpdate {
 	return ru
 }
 
+// SetNillableUserID sets the "user_id" field if the given value is not nil.
+func (ru *RelationshipUpdate) SetNillableUserID(i *int) *RelationshipUpdate {
+	if i != nil {
+		ru.SetUserID(*i)
+	}
+	return ru
+}
+
 // SetRelativeID sets the "relative_id" field.
 func (ru *RelationshipUpdate) SetRelativeID(i int) *RelationshipUpdate {
 	ru.mutation.SetRelativeID(i)
+	return ru
+}
+
+// SetNillableRelativeID sets the "relative_id" field if the given value is not nil.
+func (ru *RelationshipUpdate) SetNillableRelativeID(i *int) *RelationshipUpdate {
+	if i != nil {
+		ru.SetRelativeID(*i)
+	}
 	return ru
 }
 
@@ -126,7 +142,7 @@ func (ru *RelationshipUpdate) ClearInfo() *RelationshipUpdate {
 
 // Save executes the query and returns the number of nodes affected by the update operation.
 func (ru *RelationshipUpdate) Save(ctx context.Context) (int, error) {
-	return withHooks[int, RelationshipMutation](ctx, ru.sqlSave, ru.mutation, ru.hooks)
+	return withHooks(ctx, ru.sqlSave, ru.mutation, ru.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
@@ -153,10 +169,10 @@ func (ru *RelationshipUpdate) ExecX(ctx context.Context) {
 
 // check runs all checks and user-defined validators on the builder.
 func (ru *RelationshipUpdate) check() error {
-	if _, ok := ru.mutation.UserID(); ru.mutation.UserCleared() && !ok {
+	if ru.mutation.UserCleared() && len(ru.mutation.UserIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "Relationship.user"`)
 	}
-	if _, ok := ru.mutation.RelativeID(); ru.mutation.RelativeCleared() && !ok {
+	if ru.mutation.RelativeCleared() && len(ru.mutation.RelativeIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "Relationship.relative"`)
 	}
 	return nil
@@ -314,9 +330,25 @@ func (ruo *RelationshipUpdateOne) SetUserID(i int) *RelationshipUpdateOne {
 	return ruo
 }
 
+// SetNillableUserID sets the "user_id" field if the given value is not nil.
+func (ruo *RelationshipUpdateOne) SetNillableUserID(i *int) *RelationshipUpdateOne {
+	if i != nil {
+		ruo.SetUserID(*i)
+	}
+	return ruo
+}
+
 // SetRelativeID sets the "relative_id" field.
 func (ruo *RelationshipUpdateOne) SetRelativeID(i int) *RelationshipUpdateOne {
 	ruo.mutation.SetRelativeID(i)
+	return ruo
+}
+
+// SetNillableRelativeID sets the "relative_id" field if the given value is not nil.
+func (ruo *RelationshipUpdateOne) SetNillableRelativeID(i *int) *RelationshipUpdateOne {
+	if i != nil {
+		ruo.SetRelativeID(*i)
+	}
 	return ruo
 }
 
@@ -393,7 +425,7 @@ func (ruo *RelationshipUpdateOne) Select(field string, fields ...string) *Relati
 
 // Save executes the query and returns the updated Relationship entity.
 func (ruo *RelationshipUpdateOne) Save(ctx context.Context) (*Relationship, error) {
-	return withHooks[*Relationship, RelationshipMutation](ctx, ruo.sqlSave, ruo.mutation, ruo.hooks)
+	return withHooks(ctx, ruo.sqlSave, ruo.mutation, ruo.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
@@ -420,10 +452,10 @@ func (ruo *RelationshipUpdateOne) ExecX(ctx context.Context) {
 
 // check runs all checks and user-defined validators on the builder.
 func (ruo *RelationshipUpdateOne) check() error {
-	if _, ok := ruo.mutation.UserID(); ruo.mutation.UserCleared() && !ok {
+	if ruo.mutation.UserCleared() && len(ruo.mutation.UserIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "Relationship.user"`)
 	}
-	if _, ok := ruo.mutation.RelativeID(); ruo.mutation.RelativeCleared() && !ok {
+	if ruo.mutation.RelativeCleared() && len(ruo.mutation.RelativeIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "Relationship.relative"`)
 	}
 	return nil

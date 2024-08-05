@@ -80,6 +80,16 @@ func Owner(v string) predicate.Task {
 	return predicate.Task(sql.FieldEQ(FieldOwner, v))
 }
 
+// Order applies equality check predicate on the "order" field. It's identical to OrderEQ.
+func Order(v int) predicate.Task {
+	return predicate.Task(sql.FieldEQ(FieldOrder, v))
+}
+
+// Op applies equality check predicate on the "op" field. It's identical to OpEQ.
+func Op(v string) predicate.Task {
+	return predicate.Task(sql.FieldEQ(FieldOp, v))
+}
+
 // PriorityEQ applies the EQ predicate on the "priority" field.
 func PriorityEQ(v task.Priority) predicate.Task {
 	vc := int(v)
@@ -334,34 +344,182 @@ func OwnerContainsFold(v string) predicate.Task {
 	return predicate.Task(sql.FieldContainsFold(FieldOwner, v))
 }
 
+// OrderEQ applies the EQ predicate on the "order" field.
+func OrderEQ(v int) predicate.Task {
+	return predicate.Task(sql.FieldEQ(FieldOrder, v))
+}
+
+// OrderNEQ applies the NEQ predicate on the "order" field.
+func OrderNEQ(v int) predicate.Task {
+	return predicate.Task(sql.FieldNEQ(FieldOrder, v))
+}
+
+// OrderIn applies the In predicate on the "order" field.
+func OrderIn(vs ...int) predicate.Task {
+	return predicate.Task(sql.FieldIn(FieldOrder, vs...))
+}
+
+// OrderNotIn applies the NotIn predicate on the "order" field.
+func OrderNotIn(vs ...int) predicate.Task {
+	return predicate.Task(sql.FieldNotIn(FieldOrder, vs...))
+}
+
+// OrderGT applies the GT predicate on the "order" field.
+func OrderGT(v int) predicate.Task {
+	return predicate.Task(sql.FieldGT(FieldOrder, v))
+}
+
+// OrderGTE applies the GTE predicate on the "order" field.
+func OrderGTE(v int) predicate.Task {
+	return predicate.Task(sql.FieldGTE(FieldOrder, v))
+}
+
+// OrderLT applies the LT predicate on the "order" field.
+func OrderLT(v int) predicate.Task {
+	return predicate.Task(sql.FieldLT(FieldOrder, v))
+}
+
+// OrderLTE applies the LTE predicate on the "order" field.
+func OrderLTE(v int) predicate.Task {
+	return predicate.Task(sql.FieldLTE(FieldOrder, v))
+}
+
+// OrderIsNil applies the IsNil predicate on the "order" field.
+func OrderIsNil() predicate.Task {
+	return predicate.Task(sql.FieldIsNull(FieldOrder))
+}
+
+// OrderNotNil applies the NotNil predicate on the "order" field.
+func OrderNotNil() predicate.Task {
+	return predicate.Task(sql.FieldNotNull(FieldOrder))
+}
+
+// OrderOptionEQ applies the EQ predicate on the "order_option" field.
+func OrderOptionEQ(v int) predicate.Task {
+	return predicate.Task(sql.FieldEQ(FieldOrderOption, v))
+}
+
+// OrderOptionNEQ applies the NEQ predicate on the "order_option" field.
+func OrderOptionNEQ(v int) predicate.Task {
+	return predicate.Task(sql.FieldNEQ(FieldOrderOption, v))
+}
+
+// OrderOptionIn applies the In predicate on the "order_option" field.
+func OrderOptionIn(vs ...int) predicate.Task {
+	return predicate.Task(sql.FieldIn(FieldOrderOption, vs...))
+}
+
+// OrderOptionNotIn applies the NotIn predicate on the "order_option" field.
+func OrderOptionNotIn(vs ...int) predicate.Task {
+	return predicate.Task(sql.FieldNotIn(FieldOrderOption, vs...))
+}
+
+// OrderOptionGT applies the GT predicate on the "order_option" field.
+func OrderOptionGT(v int) predicate.Task {
+	return predicate.Task(sql.FieldGT(FieldOrderOption, v))
+}
+
+// OrderOptionGTE applies the GTE predicate on the "order_option" field.
+func OrderOptionGTE(v int) predicate.Task {
+	return predicate.Task(sql.FieldGTE(FieldOrderOption, v))
+}
+
+// OrderOptionLT applies the LT predicate on the "order_option" field.
+func OrderOptionLT(v int) predicate.Task {
+	return predicate.Task(sql.FieldLT(FieldOrderOption, v))
+}
+
+// OrderOptionLTE applies the LTE predicate on the "order_option" field.
+func OrderOptionLTE(v int) predicate.Task {
+	return predicate.Task(sql.FieldLTE(FieldOrderOption, v))
+}
+
+// OrderOptionIsNil applies the IsNil predicate on the "order_option" field.
+func OrderOptionIsNil() predicate.Task {
+	return predicate.Task(sql.FieldIsNull(FieldOrderOption))
+}
+
+// OrderOptionNotNil applies the NotNil predicate on the "order_option" field.
+func OrderOptionNotNil() predicate.Task {
+	return predicate.Task(sql.FieldNotNull(FieldOrderOption))
+}
+
+// OpEQ applies the EQ predicate on the "op" field.
+func OpEQ(v string) predicate.Task {
+	return predicate.Task(sql.FieldEQ(FieldOp, v))
+}
+
+// OpNEQ applies the NEQ predicate on the "op" field.
+func OpNEQ(v string) predicate.Task {
+	return predicate.Task(sql.FieldNEQ(FieldOp, v))
+}
+
+// OpIn applies the In predicate on the "op" field.
+func OpIn(vs ...string) predicate.Task {
+	return predicate.Task(sql.FieldIn(FieldOp, vs...))
+}
+
+// OpNotIn applies the NotIn predicate on the "op" field.
+func OpNotIn(vs ...string) predicate.Task {
+	return predicate.Task(sql.FieldNotIn(FieldOp, vs...))
+}
+
+// OpGT applies the GT predicate on the "op" field.
+func OpGT(v string) predicate.Task {
+	return predicate.Task(sql.FieldGT(FieldOp, v))
+}
+
+// OpGTE applies the GTE predicate on the "op" field.
+func OpGTE(v string) predicate.Task {
+	return predicate.Task(sql.FieldGTE(FieldOp, v))
+}
+
+// OpLT applies the LT predicate on the "op" field.
+func OpLT(v string) predicate.Task {
+	return predicate.Task(sql.FieldLT(FieldOp, v))
+}
+
+// OpLTE applies the LTE predicate on the "op" field.
+func OpLTE(v string) predicate.Task {
+	return predicate.Task(sql.FieldLTE(FieldOp, v))
+}
+
+// OpContains applies the Contains predicate on the "op" field.
+func OpContains(v string) predicate.Task {
+	return predicate.Task(sql.FieldContains(FieldOp, v))
+}
+
+// OpHasPrefix applies the HasPrefix predicate on the "op" field.
+func OpHasPrefix(v string) predicate.Task {
+	return predicate.Task(sql.FieldHasPrefix(FieldOp, v))
+}
+
+// OpHasSuffix applies the HasSuffix predicate on the "op" field.
+func OpHasSuffix(v string) predicate.Task {
+	return predicate.Task(sql.FieldHasSuffix(FieldOp, v))
+}
+
+// OpEqualFold applies the EqualFold predicate on the "op" field.
+func OpEqualFold(v string) predicate.Task {
+	return predicate.Task(sql.FieldEqualFold(FieldOp, v))
+}
+
+// OpContainsFold applies the ContainsFold predicate on the "op" field.
+func OpContainsFold(v string) predicate.Task {
+	return predicate.Task(sql.FieldContainsFold(FieldOp, v))
+}
+
 // And groups predicates with the AND operator between them.
 func And(predicates ...predicate.Task) predicate.Task {
-	return predicate.Task(func(s *sql.Selector) {
-		s1 := s.Clone().SetP(nil)
-		for _, p := range predicates {
-			p(s1)
-		}
-		s.Where(s1.P())
-	})
+	return predicate.Task(sql.AndPredicates(predicates...))
 }
 
 // Or groups predicates with the OR operator between them.
 func Or(predicates ...predicate.Task) predicate.Task {
-	return predicate.Task(func(s *sql.Selector) {
-		s1 := s.Clone().SetP(nil)
-		for i, p := range predicates {
-			if i > 0 {
-				s1.Or()
-			}
-			p(s1)
-		}
-		s.Where(s1.P())
-	})
+	return predicate.Task(sql.OrPredicates(predicates...))
 }
 
 // Not applies the not operator on the given predicate.
 func Not(p predicate.Task) predicate.Task {
-	return predicate.Task(func(s *sql.Selector) {
-		p(s.Not())
-	})
+	return predicate.Task(sql.NotPredicates(p))
 }

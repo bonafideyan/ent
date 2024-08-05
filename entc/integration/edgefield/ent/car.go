@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"strings"
 
+	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/entc/integration/edgefield/ent/car"
 	"github.com/google/uuid"
@@ -24,7 +25,8 @@ type Car struct {
 	Number string `json:"number,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the CarQuery when eager-loading is set.
-	Edges CarEdges `json:"edges"`
+	Edges        CarEdges `json:"edges"`
+	selectValues sql.SelectValues
 }
 
 // CarEdges holds the relations/edges for other nodes in the graph.
@@ -33,7 +35,8 @@ type CarEdges struct {
 	Rentals []*Rental `json:"rentals,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [1]bool
+	loadedTypes  [1]bool
+	namedRentals map[string][]*Rental
 }
 
 // RentalsOrErr returns the Rentals value or an error if the edge
@@ -55,7 +58,7 @@ func (*Car) scanValues(columns []string) ([]any, error) {
 		case car.FieldID:
 			values[i] = new(uuid.UUID)
 		default:
-			return nil, fmt.Errorf("unexpected column %q for type Car", columns[i])
+			values[i] = new(sql.UnknownType)
 		}
 	}
 	return values, nil
@@ -81,9 +84,17 @@ func (c *Car) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				c.Number = value.String
 			}
+		default:
+			c.selectValues.Set(columns[i], values[i])
 		}
 	}
 	return nil
+}
+
+// Value returns the ent.Value that was dynamically selected and assigned to the Car.
+// This includes values selected through modifiers, order, etc.
+func (c *Car) Value(name string) (ent.Value, error) {
+	return c.selectValues.Get(name)
 }
 
 // QueryRentals queries the "rentals" edge of the Car entity.
@@ -118,6 +129,30 @@ func (c *Car) String() string {
 	builder.WriteString(c.Number)
 	builder.WriteByte(')')
 	return builder.String()
+}
+
+// NamedRentals returns the Rentals named value or an error if the edge was not
+// loaded in eager-loading with this name.
+func (c *Car) NamedRentals(name string) ([]*Rental, error) {
+	if c.Edges.namedRentals == nil {
+		return nil, &NotLoadedError{edge: name}
+	}
+	nodes, ok := c.Edges.namedRentals[name]
+	if !ok {
+		return nil, &NotLoadedError{edge: name}
+	}
+	return nodes, nil
+}
+
+func (c *Car) appendNamedRentals(name string, edges ...*Rental) {
+	if c.Edges.namedRentals == nil {
+		c.Edges.namedRentals = make(map[string][]*Rental)
+	}
+	if len(edges) == 0 {
+		c.Edges.namedRentals[name] = []*Rental{}
+	} else {
+		c.Edges.namedRentals[name] = append(c.Edges.namedRentals[name], edges...)
+	}
 }
 
 // Cars is a parsable slice of Car.

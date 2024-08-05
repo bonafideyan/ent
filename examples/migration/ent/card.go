@@ -9,7 +9,9 @@ package ent
 import (
 	"fmt"
 	"strings"
+	"time"
 
+	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/examples/migration/ent/card"
 	"entgo.io/ent/examples/migration/ent/user"
@@ -20,33 +22,51 @@ type Card struct {
 	config `json:"-"`
 	// ID of the ent.
 	ID int `json:"id,omitempty"`
+	// Type holds the value of the "type" field.
+	Type string `json:"type,omitempty"`
+	// NumberHash holds the value of the "number_hash" field.
+	NumberHash string `json:"number_hash,omitempty"`
+	// CvvHash holds the value of the "cvv_hash" field.
+	CvvHash string `json:"cvv_hash,omitempty"`
+	// ExpiresAt holds the value of the "expires_at" field.
+	ExpiresAt time.Time `json:"expires_at,omitempty"`
 	// OwnerID holds the value of the "owner_id" field.
 	OwnerID int `json:"owner_id,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the CardQuery when eager-loading is set.
-	Edges CardEdges `json:"edges"`
+	Edges        CardEdges `json:"edges"`
+	selectValues sql.SelectValues
 }
 
 // CardEdges holds the relations/edges for other nodes in the graph.
 type CardEdges struct {
 	// Owner holds the value of the owner edge.
 	Owner *User `json:"owner,omitempty"`
+	// Payments holds the value of the payments edge.
+	Payments []*Payment `json:"payments,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [1]bool
+	loadedTypes [2]bool
 }
 
 // OwnerOrErr returns the Owner value or an error if the edge
 // was not loaded in eager-loading, or loaded but was not found.
 func (e CardEdges) OwnerOrErr() (*User, error) {
-	if e.loadedTypes[0] {
-		if e.Owner == nil {
-			// Edge was loaded but was not found.
-			return nil, &NotFoundError{label: user.Label}
-		}
+	if e.Owner != nil {
 		return e.Owner, nil
+	} else if e.loadedTypes[0] {
+		return nil, &NotFoundError{label: user.Label}
 	}
 	return nil, &NotLoadedError{edge: "owner"}
+}
+
+// PaymentsOrErr returns the Payments value or an error if the edge
+// was not loaded in eager-loading.
+func (e CardEdges) PaymentsOrErr() ([]*Payment, error) {
+	if e.loadedTypes[1] {
+		return e.Payments, nil
+	}
+	return nil, &NotLoadedError{edge: "payments"}
 }
 
 // scanValues returns the types for scanning values from sql.Rows.
@@ -56,8 +76,12 @@ func (*Card) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case card.FieldID, card.FieldOwnerID:
 			values[i] = new(sql.NullInt64)
+		case card.FieldType, card.FieldNumberHash, card.FieldCvvHash:
+			values[i] = new(sql.NullString)
+		case card.FieldExpiresAt:
+			values[i] = new(sql.NullTime)
 		default:
-			return nil, fmt.Errorf("unexpected column %q for type Card", columns[i])
+			values[i] = new(sql.UnknownType)
 		}
 	}
 	return values, nil
@@ -77,20 +101,57 @@ func (c *Card) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field id", value)
 			}
 			c.ID = int(value.Int64)
+		case card.FieldType:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field type", values[i])
+			} else if value.Valid {
+				c.Type = value.String
+			}
+		case card.FieldNumberHash:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field number_hash", values[i])
+			} else if value.Valid {
+				c.NumberHash = value.String
+			}
+		case card.FieldCvvHash:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field cvv_hash", values[i])
+			} else if value.Valid {
+				c.CvvHash = value.String
+			}
+		case card.FieldExpiresAt:
+			if value, ok := values[i].(*sql.NullTime); !ok {
+				return fmt.Errorf("unexpected type %T for field expires_at", values[i])
+			} else if value.Valid {
+				c.ExpiresAt = value.Time
+			}
 		case card.FieldOwnerID:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
 				return fmt.Errorf("unexpected type %T for field owner_id", values[i])
 			} else if value.Valid {
 				c.OwnerID = int(value.Int64)
 			}
+		default:
+			c.selectValues.Set(columns[i], values[i])
 		}
 	}
 	return nil
 }
 
+// Value returns the ent.Value that was dynamically selected and assigned to the Card.
+// This includes values selected through modifiers, order, etc.
+func (c *Card) Value(name string) (ent.Value, error) {
+	return c.selectValues.Get(name)
+}
+
 // QueryOwner queries the "owner" edge of the Card entity.
 func (c *Card) QueryOwner() *UserQuery {
 	return NewCardClient(c.config).QueryOwner(c)
+}
+
+// QueryPayments queries the "payments" edge of the Card entity.
+func (c *Card) QueryPayments() *PaymentQuery {
+	return NewCardClient(c.config).QueryPayments(c)
 }
 
 // Update returns a builder for updating this Card.
@@ -116,6 +177,18 @@ func (c *Card) String() string {
 	var builder strings.Builder
 	builder.WriteString("Card(")
 	builder.WriteString(fmt.Sprintf("id=%v, ", c.ID))
+	builder.WriteString("type=")
+	builder.WriteString(c.Type)
+	builder.WriteString(", ")
+	builder.WriteString("number_hash=")
+	builder.WriteString(c.NumberHash)
+	builder.WriteString(", ")
+	builder.WriteString("cvv_hash=")
+	builder.WriteString(c.CvvHash)
+	builder.WriteString(", ")
+	builder.WriteString("expires_at=")
+	builder.WriteString(c.ExpiresAt.Format(time.ANSIC))
+	builder.WriteString(", ")
 	builder.WriteString("owner_id=")
 	builder.WriteString(fmt.Sprintf("%v", c.OwnerID))
 	builder.WriteByte(')')

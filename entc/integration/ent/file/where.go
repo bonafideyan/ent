@@ -57,6 +57,11 @@ func IDLTE(id int) predicate.File {
 	return predicate.File(sql.FieldLTE(FieldID, id))
 }
 
+// SetID applies equality check predicate on the "set_id" field. It's identical to SetIDEQ.
+func SetID(v int) predicate.File {
+	return predicate.File(sql.FieldEQ(FieldSetID, v))
+}
+
 // Size applies equality check predicate on the "size" field. It's identical to SizeEQ.
 func Size(v int) predicate.File {
 	return predicate.File(sql.FieldEQ(FieldSize, v))
@@ -80,6 +85,56 @@ func Group(v string) predicate.File {
 // Op applies equality check predicate on the "op" field. It's identical to OpEQ.
 func Op(v bool) predicate.File {
 	return predicate.File(sql.FieldEQ(FieldOp, v))
+}
+
+// SetIDEQ applies the EQ predicate on the "set_id" field.
+func SetIDEQ(v int) predicate.File {
+	return predicate.File(sql.FieldEQ(FieldSetID, v))
+}
+
+// SetIDNEQ applies the NEQ predicate on the "set_id" field.
+func SetIDNEQ(v int) predicate.File {
+	return predicate.File(sql.FieldNEQ(FieldSetID, v))
+}
+
+// SetIDIn applies the In predicate on the "set_id" field.
+func SetIDIn(vs ...int) predicate.File {
+	return predicate.File(sql.FieldIn(FieldSetID, vs...))
+}
+
+// SetIDNotIn applies the NotIn predicate on the "set_id" field.
+func SetIDNotIn(vs ...int) predicate.File {
+	return predicate.File(sql.FieldNotIn(FieldSetID, vs...))
+}
+
+// SetIDGT applies the GT predicate on the "set_id" field.
+func SetIDGT(v int) predicate.File {
+	return predicate.File(sql.FieldGT(FieldSetID, v))
+}
+
+// SetIDGTE applies the GTE predicate on the "set_id" field.
+func SetIDGTE(v int) predicate.File {
+	return predicate.File(sql.FieldGTE(FieldSetID, v))
+}
+
+// SetIDLT applies the LT predicate on the "set_id" field.
+func SetIDLT(v int) predicate.File {
+	return predicate.File(sql.FieldLT(FieldSetID, v))
+}
+
+// SetIDLTE applies the LTE predicate on the "set_id" field.
+func SetIDLTE(v int) predicate.File {
+	return predicate.File(sql.FieldLTE(FieldSetID, v))
+}
+
+// SetIDIsNil applies the IsNil predicate on the "set_id" field.
+func SetIDIsNil() predicate.File {
+	return predicate.File(sql.FieldIsNull(FieldSetID))
+}
+
+// SetIDNotNil applies the NotNil predicate on the "set_id" field.
+func SetIDNotNil() predicate.File {
+	return predicate.File(sql.FieldNotNull(FieldSetID))
 }
 
 // SizeEQ applies the EQ predicate on the "size" field.
@@ -421,11 +476,7 @@ func HasOwner() predicate.File {
 // HasOwnerWith applies the HasEdge predicate on the "owner" edge with a given conditions (other predicates).
 func HasOwnerWith(preds ...predicate.User) predicate.File {
 	return predicate.File(func(s *sql.Selector) {
-		step := sqlgraph.NewStep(
-			sqlgraph.From(Table, FieldID),
-			sqlgraph.To(OwnerInverseTable, FieldID),
-			sqlgraph.Edge(sqlgraph.M2O, true, OwnerTable, OwnerColumn),
-		)
+		step := newOwnerStep()
 		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
 			for _, p := range preds {
 				p(s)
@@ -448,11 +499,7 @@ func HasType() predicate.File {
 // HasTypeWith applies the HasEdge predicate on the "type" edge with a given conditions (other predicates).
 func HasTypeWith(preds ...predicate.FileType) predicate.File {
 	return predicate.File(func(s *sql.Selector) {
-		step := sqlgraph.NewStep(
-			sqlgraph.From(Table, FieldID),
-			sqlgraph.To(TypeInverseTable, FieldID),
-			sqlgraph.Edge(sqlgraph.M2O, true, TypeTable, TypeColumn),
-		)
+		step := newTypeStep()
 		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
 			for _, p := range preds {
 				p(s)
@@ -475,11 +522,7 @@ func HasField() predicate.File {
 // HasFieldWith applies the HasEdge predicate on the "field" edge with a given conditions (other predicates).
 func HasFieldWith(preds ...predicate.FieldType) predicate.File {
 	return predicate.File(func(s *sql.Selector) {
-		step := sqlgraph.NewStep(
-			sqlgraph.From(Table, FieldID),
-			sqlgraph.To(FieldInverseTable, FieldID),
-			sqlgraph.Edge(sqlgraph.O2M, false, FieldTable, FieldColumn),
-		)
+		step := newFieldStep()
 		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
 			for _, p := range preds {
 				p(s)
@@ -490,32 +533,15 @@ func HasFieldWith(preds ...predicate.FieldType) predicate.File {
 
 // And groups predicates with the AND operator between them.
 func And(predicates ...predicate.File) predicate.File {
-	return predicate.File(func(s *sql.Selector) {
-		s1 := s.Clone().SetP(nil)
-		for _, p := range predicates {
-			p(s1)
-		}
-		s.Where(s1.P())
-	})
+	return predicate.File(sql.AndPredicates(predicates...))
 }
 
 // Or groups predicates with the OR operator between them.
 func Or(predicates ...predicate.File) predicate.File {
-	return predicate.File(func(s *sql.Selector) {
-		s1 := s.Clone().SetP(nil)
-		for i, p := range predicates {
-			if i > 0 {
-				s1.Or()
-			}
-			p(s1)
-		}
-		s.Where(s1.P())
-	})
+	return predicate.File(sql.OrPredicates(predicates...))
 }
 
 // Not applies the not operator on the given predicate.
 func Not(p predicate.File) predicate.File {
-	return predicate.File(func(s *sql.Selector) {
-		p(s.Not())
-	})
+	return predicate.File(sql.NotPredicates(p))
 }

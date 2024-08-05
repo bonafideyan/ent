@@ -76,7 +76,7 @@ func (fu *FriendshipUpdate) Mutation() *FriendshipMutation {
 
 // Save executes the query and returns the number of nodes affected by the update operation.
 func (fu *FriendshipUpdate) Save(ctx context.Context) (int, error) {
-	return withHooks[int, FriendshipMutation](ctx, fu.sqlSave, fu.mutation, fu.hooks)
+	return withHooks(ctx, fu.sqlSave, fu.mutation, fu.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
@@ -103,10 +103,10 @@ func (fu *FriendshipUpdate) ExecX(ctx context.Context) {
 
 // check runs all checks and user-defined validators on the builder.
 func (fu *FriendshipUpdate) check() error {
-	if _, ok := fu.mutation.UserID(); fu.mutation.UserCleared() && !ok {
+	if fu.mutation.UserCleared() && len(fu.mutation.UserIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "Friendship.user"`)
 	}
-	if _, ok := fu.mutation.FriendID(); fu.mutation.FriendCleared() && !ok {
+	if fu.mutation.FriendCleared() && len(fu.mutation.FriendIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "Friendship.friend"`)
 	}
 	return nil
@@ -218,7 +218,7 @@ func (fuo *FriendshipUpdateOne) Select(field string, fields ...string) *Friendsh
 
 // Save executes the query and returns the updated Friendship entity.
 func (fuo *FriendshipUpdateOne) Save(ctx context.Context) (*Friendship, error) {
-	return withHooks[*Friendship, FriendshipMutation](ctx, fuo.sqlSave, fuo.mutation, fuo.hooks)
+	return withHooks(ctx, fuo.sqlSave, fuo.mutation, fuo.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
@@ -245,10 +245,10 @@ func (fuo *FriendshipUpdateOne) ExecX(ctx context.Context) {
 
 // check runs all checks and user-defined validators on the builder.
 func (fuo *FriendshipUpdateOne) check() error {
-	if _, ok := fuo.mutation.UserID(); fuo.mutation.UserCleared() && !ok {
+	if fuo.mutation.UserCleared() && len(fuo.mutation.UserIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "Friendship.user"`)
 	}
-	if _, ok := fuo.mutation.FriendID(); fuo.mutation.FriendCleared() && !ok {
+	if fuo.mutation.FriendCleared() && len(fuo.mutation.FriendIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "Friendship.friend"`)
 	}
 	return nil

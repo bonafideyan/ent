@@ -28,6 +28,20 @@ type FileCreate struct {
 	hooks    []Hook
 }
 
+// SetSetID sets the "set_id" field.
+func (fc *FileCreate) SetSetID(i int) *FileCreate {
+	fc.mutation.SetSetID(i)
+	return fc
+}
+
+// SetNillableSetID sets the "set_id" field if the given value is not nil.
+func (fc *FileCreate) SetNillableSetID(i *int) *FileCreate {
+	if i != nil {
+		fc.SetSetID(*i)
+	}
+	return fc
+}
+
 // SetSize sets the "size" field.
 func (fc *FileCreate) SetSize(i int) *FileCreate {
 	fc.mutation.SetSize(i)
@@ -165,7 +179,7 @@ func (fc *FileCreate) Mutation() *FileMutation {
 // Save creates the File in the database.
 func (fc *FileCreate) Save(ctx context.Context) (*File, error) {
 	fc.defaults()
-	return withHooks[*File, FileMutation](ctx, fc.gremlinSave, fc.mutation, fc.hooks)
+	return withHooks(ctx, fc.gremlinSave, fc.mutation, fc.hooks)
 }
 
 // SaveX calls Save and panics if Save returns an error.
@@ -200,6 +214,11 @@ func (fc *FileCreate) defaults() {
 
 // check runs all checks and user-defined validators on the builder.
 func (fc *FileCreate) check() error {
+	if v, ok := fc.mutation.SetID(); ok {
+		if err := file.SetIDValidator(v); err != nil {
+			return &ValidationError{Name: "set_id", err: fmt.Errorf(`ent: validator failed for field "File.set_id": %w`, err)}
+		}
+	}
 	if _, ok := fc.mutation.Size(); !ok {
 		return &ValidationError{Name: "size", err: errors.New(`ent: missing required field "File.size"`)}
 	}
@@ -226,13 +245,13 @@ func (fc *FileCreate) gremlinSave(ctx context.Context) (*File, error) {
 	if err, ok := isConstantError(res); ok {
 		return nil, err
 	}
-	f := &File{config: fc.config}
-	if err := f.FromResponse(res); err != nil {
+	rnode := &File{config: fc.config}
+	if err := rnode.FromResponse(res); err != nil {
 		return nil, err
 	}
-	fc.mutation.id = &f.ID
+	fc.mutation.id = &rnode.ID
 	fc.mutation.done = true
-	return f, nil
+	return rnode, nil
 }
 
 func (fc *FileCreate) gremlin() *dsl.Traversal {
@@ -242,6 +261,9 @@ func (fc *FileCreate) gremlin() *dsl.Traversal {
 	}
 	constraints := make([]*constraint, 0, 1)
 	v := g.AddV(file.Label)
+	if value, ok := fc.mutation.SetID(); ok {
+		v.Property(dsl.Single, file.FieldSetID, value)
+	}
 	if value, ok := fc.mutation.Size(); ok {
 		v.Property(dsl.Single, file.FieldSize, value)
 	}
@@ -286,5 +308,6 @@ func (fc *FileCreate) gremlin() *dsl.Traversal {
 // FileCreateBulk is the builder for creating many File entities in bulk.
 type FileCreateBulk struct {
 	config
+	err      error
 	builders []*FileCreate
 }

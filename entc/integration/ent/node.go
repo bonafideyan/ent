@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/entc/integration/ent/node"
 )
@@ -26,8 +27,9 @@ type Node struct {
 	UpdatedAt *time.Time `json:"updated_at,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the NodeQuery when eager-loading is set.
-	Edges     NodeEdges `json:"edges"`
-	node_next *int
+	Edges        NodeEdges `json:"edges"`
+	node_next    *int
+	selectValues sql.SelectValues
 }
 
 // NodeEdges holds the relations/edges for other nodes in the graph.
@@ -44,12 +46,10 @@ type NodeEdges struct {
 // PrevOrErr returns the Prev value or an error if the edge
 // was not loaded in eager-loading, or loaded but was not found.
 func (e NodeEdges) PrevOrErr() (*Node, error) {
-	if e.loadedTypes[0] {
-		if e.Prev == nil {
-			// Edge was loaded but was not found.
-			return nil, &NotFoundError{label: node.Label}
-		}
+	if e.Prev != nil {
 		return e.Prev, nil
+	} else if e.loadedTypes[0] {
+		return nil, &NotFoundError{label: node.Label}
 	}
 	return nil, &NotLoadedError{edge: "prev"}
 }
@@ -57,12 +57,10 @@ func (e NodeEdges) PrevOrErr() (*Node, error) {
 // NextOrErr returns the Next value or an error if the edge
 // was not loaded in eager-loading, or loaded but was not found.
 func (e NodeEdges) NextOrErr() (*Node, error) {
-	if e.loadedTypes[1] {
-		if e.Next == nil {
-			// Edge was loaded but was not found.
-			return nil, &NotFoundError{label: node.Label}
-		}
+	if e.Next != nil {
 		return e.Next, nil
+	} else if e.loadedTypes[1] {
+		return nil, &NotFoundError{label: node.Label}
 	}
 	return nil, &NotLoadedError{edge: "next"}
 }
@@ -79,7 +77,7 @@ func (*Node) scanValues(columns []string) ([]any, error) {
 		case node.ForeignKeys[0]: // node_next
 			values[i] = new(sql.NullInt64)
 		default:
-			return nil, fmt.Errorf("unexpected column %q for type Node", columns[i])
+			values[i] = new(sql.UnknownType)
 		}
 	}
 	return values, nil
@@ -119,9 +117,17 @@ func (n *Node) assignValues(columns []string, values []any) error {
 				n.node_next = new(int)
 				*n.node_next = int(value.Int64)
 			}
+		default:
+			n.selectValues.Set(columns[i], values[i])
 		}
 	}
 	return nil
+}
+
+// GetValue returns the ent.Value that was dynamically selected and assigned to the Node.
+// This includes values selected through modifiers, order, etc.
+func (n *Node) GetValue(name string) (ent.Value, error) {
+	return n.selectValues.Get(name)
 }
 
 // QueryPrev queries the "prev" edge of the Node entity.

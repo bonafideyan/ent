@@ -72,7 +72,7 @@ func (ugc *UserGroupCreate) Mutation() *UserGroupMutation {
 // Save creates the UserGroup in the database.
 func (ugc *UserGroupCreate) Save(ctx context.Context) (*UserGroup, error) {
 	ugc.defaults()
-	return withHooks[*UserGroup, UserGroupMutation](ctx, ugc.sqlSave, ugc.mutation, ugc.hooks)
+	return withHooks(ctx, ugc.sqlSave, ugc.mutation, ugc.hooks)
 }
 
 // SaveX calls Save and panics if Save returns an error.
@@ -116,10 +116,10 @@ func (ugc *UserGroupCreate) check() error {
 	if _, ok := ugc.mutation.GroupID(); !ok {
 		return &ValidationError{Name: "group_id", err: errors.New(`ent: missing required field "UserGroup.group_id"`)}
 	}
-	if _, ok := ugc.mutation.UserID(); !ok {
+	if len(ugc.mutation.UserIDs()) == 0 {
 		return &ValidationError{Name: "user", err: errors.New(`ent: missing required edge "UserGroup.user"`)}
 	}
-	if _, ok := ugc.mutation.GroupID(); !ok {
+	if len(ugc.mutation.GroupIDs()) == 0 {
 		return &ValidationError{Name: "group", err: errors.New(`ent: missing required edge "UserGroup.group"`)}
 	}
 	return nil
@@ -393,12 +393,16 @@ func (u *UserGroupUpsertOne) IDX(ctx context.Context) int {
 // UserGroupCreateBulk is the builder for creating many UserGroup entities in bulk.
 type UserGroupCreateBulk struct {
 	config
+	err      error
 	builders []*UserGroupCreate
 	conflict []sql.ConflictOption
 }
 
 // Save creates the UserGroup entities in the database.
 func (ugcb *UserGroupCreateBulk) Save(ctx context.Context) ([]*UserGroup, error) {
+	if ugcb.err != nil {
+		return nil, ugcb.err
+	}
 	specs := make([]*sqlgraph.CreateSpec, len(ugcb.builders))
 	nodes := make([]*UserGroup, len(ugcb.builders))
 	mutators := make([]Mutator, len(ugcb.builders))
@@ -415,8 +419,8 @@ func (ugcb *UserGroupCreateBulk) Save(ctx context.Context) ([]*UserGroup, error)
 					return nil, err
 				}
 				builder.mutation = mutation
-				nodes[i], specs[i] = builder.createSpec()
 				var err error
+				nodes[i], specs[i] = builder.createSpec()
 				if i < len(mutators)-1 {
 					_, err = mutators[i+1].Mutate(root, ugcb.builders[i+1].mutation)
 				} else {
@@ -601,6 +605,9 @@ func (u *UserGroupUpsertBulk) UpdateGroupID() *UserGroupUpsertBulk {
 
 // Exec executes the query.
 func (u *UserGroupUpsertBulk) Exec(ctx context.Context) error {
+	if u.create.err != nil {
+		return u.create.err
+	}
 	for i, b := range u.create.builders {
 		if len(b.conflict) != 0 {
 			return fmt.Errorf("ent: OnConflict was set for builder %d. Set it on the UserGroupCreateBulk instead", i)

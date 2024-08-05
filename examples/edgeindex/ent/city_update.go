@@ -38,6 +38,14 @@ func (cu *CityUpdate) SetName(s string) *CityUpdate {
 	return cu
 }
 
+// SetNillableName sets the "name" field if the given value is not nil.
+func (cu *CityUpdate) SetNillableName(s *string) *CityUpdate {
+	if s != nil {
+		cu.SetName(*s)
+	}
+	return cu
+}
+
 // AddStreetIDs adds the "streets" edge to the Street entity by IDs.
 func (cu *CityUpdate) AddStreetIDs(ids ...int) *CityUpdate {
 	cu.mutation.AddStreetIDs(ids...)
@@ -81,7 +89,7 @@ func (cu *CityUpdate) RemoveStreets(s ...*Street) *CityUpdate {
 
 // Save executes the query and returns the number of nodes affected by the update operation.
 func (cu *CityUpdate) Save(ctx context.Context) (int, error) {
-	return withHooks[int, CityMutation](ctx, cu.sqlSave, cu.mutation, cu.hooks)
+	return withHooks(ctx, cu.sqlSave, cu.mutation, cu.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
@@ -189,6 +197,14 @@ func (cuo *CityUpdateOne) SetName(s string) *CityUpdateOne {
 	return cuo
 }
 
+// SetNillableName sets the "name" field if the given value is not nil.
+func (cuo *CityUpdateOne) SetNillableName(s *string) *CityUpdateOne {
+	if s != nil {
+		cuo.SetName(*s)
+	}
+	return cuo
+}
+
 // AddStreetIDs adds the "streets" edge to the Street entity by IDs.
 func (cuo *CityUpdateOne) AddStreetIDs(ids ...int) *CityUpdateOne {
 	cuo.mutation.AddStreetIDs(ids...)
@@ -245,7 +261,7 @@ func (cuo *CityUpdateOne) Select(field string, fields ...string) *CityUpdateOne 
 
 // Save executes the query and returns the updated City entity.
 func (cuo *CityUpdateOne) Save(ctx context.Context) (*City, error) {
-	return withHooks[*City, CityMutation](ctx, cuo.sqlSave, cuo.mutation, cuo.hooks)
+	return withHooks(ctx, cuo.sqlSave, cuo.mutation, cuo.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.

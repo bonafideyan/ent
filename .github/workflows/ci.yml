@@ -10,34 +10,49 @@ on:
       - 'doc/**'
 
 jobs:
+  typos-check:
+    name: Spell Check with Typos
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Actions Repository
+        uses: actions/checkout@v3
+      - name: Check spelling with custom config file
+        uses: crate-ci/typos@v1.13.10
+        with:
+          config: .github/workflows/typos.toml
+
+
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-go@v3
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
         with:
-          go-version: 1.19
+          go-version: '1.22'
       - name: Run linters
-        uses: golangci/golangci-lint-action@v3.4.0
+        uses: golangci/golangci-lint-action@v5
         with:
-          version: v1.50.1 # The next version requires Go 1.20
+          args: --verbose
 
   unit:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        go: ['1.18', '1.19']
+        go: ['1.21', '1.22']
     steps:
       - uses: actions/checkout@v3
-      - uses: actions/setup-go@v3
+      - uses: actions/setup-go@v5
         with:
           go-version: ${{ matrix.go }}
-      - uses: actions/cache@v3
+      - uses: actions/cache@v4
         with:
           path: ~/go/pkg/mod
           key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
           restore-keys: |
             ${{ runner.os }}-go-
+      - name: Run cmd tests
+        run: go test -race ./...
+        working-directory: cmd
       - name: Run dialect tests
         run: go test -race ./...
         working-directory: dialect
@@ -58,10 +73,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      - uses: actions/setup-go@v3
+      - uses: actions/setup-go@v5
         with:
-          go-version: '1.19.3'
-      - uses: actions/cache@v3
+          go-version: '1.22'
+      - uses: actions/cache@v4
         with:
           path: ~/go/pkg/mod
           key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
@@ -71,6 +86,9 @@ jobs:
         run: go generate ./... && go mod tidy
       - name: Run go generate on examples directory
         working-directory: examples
+        run: go generate ./... && go mod tidy
+      - name: Run go generate on integration directory
+        working-directory: entc/integration
         run: go generate ./... && go mod tidy
       - name: Check generated files
         run: |
@@ -125,7 +143,7 @@ jobs:
           --health-timeout 5s
           --health-retries 10
       maria:
-        image: mariadb
+        image: mariadb:10.4 # Temporary to unblock PRs from failing.
         env:
           MYSQL_DATABASE: test
           MYSQL_ROOT_PASSWORD: pass
@@ -246,10 +264,10 @@ jobs:
           --health-retries 5
     steps:
       - uses: actions/checkout@v3
-      - uses: actions/setup-go@v3
+      - uses: actions/setup-go@v5
         with:
-          go-version: '1.18'
-      - uses: actions/cache@v3
+          go-version: '1.22'
+      - uses: actions/cache@v4
         with:
           path: ~/go/pkg/mod
           key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
@@ -303,7 +321,7 @@ jobs:
           --health-timeout 5s
           --health-retries 10
       maria:
-        image: mariadb
+        image: mariadb:10.4 # Temporary to unblock PRs from failing.
         env:
           MYSQL_DATABASE: test
           MYSQL_ROOT_PASSWORD: pass
@@ -426,10 +444,10 @@ jobs:
       - uses: actions/checkout@v3
         with:
           fetch-depth: 0
-      - uses: actions/setup-go@v3
+      - uses: actions/setup-go@v5
         with:
-          go-version: '1.18'
-      - uses: actions/cache@v3
+          go-version: '1.22'
+      - uses: actions/cache@v4
         with:
           path: ~/go/pkg/mod
           key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}

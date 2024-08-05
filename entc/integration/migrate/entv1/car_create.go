@@ -49,7 +49,7 @@ func (cc *CarCreate) Mutation() *CarMutation {
 
 // Save creates the Car in the database.
 func (cc *CarCreate) Save(ctx context.Context) (*Car, error) {
-	return withHooks[*Car, CarMutation](ctx, cc.sqlSave, cc.mutation, cc.hooks)
+	return withHooks(ctx, cc.sqlSave, cc.mutation, cc.hooks)
 }
 
 // SaveX calls Save and panics if Save returns an error.
@@ -125,11 +125,15 @@ func (cc *CarCreate) createSpec() (*Car, *sqlgraph.CreateSpec) {
 // CarCreateBulk is the builder for creating many Car entities in bulk.
 type CarCreateBulk struct {
 	config
+	err      error
 	builders []*CarCreate
 }
 
 // Save creates the Car entities in the database.
 func (ccb *CarCreateBulk) Save(ctx context.Context) ([]*Car, error) {
+	if ccb.err != nil {
+		return nil, ccb.err
+	}
 	specs := make([]*sqlgraph.CreateSpec, len(ccb.builders))
 	nodes := make([]*Car, len(ccb.builders))
 	mutators := make([]Mutator, len(ccb.builders))
@@ -145,8 +149,8 @@ func (ccb *CarCreateBulk) Save(ctx context.Context) ([]*Car, error) {
 					return nil, err
 				}
 				builder.mutation = mutation
-				nodes[i], specs[i] = builder.createSpec()
 				var err error
+				nodes[i], specs[i] = builder.createSpec()
 				if i < len(mutators)-1 {
 					_, err = mutators[i+1].Mutate(root, ccb.builders[i+1].mutation)
 				} else {

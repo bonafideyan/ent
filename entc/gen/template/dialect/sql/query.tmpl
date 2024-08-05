@@ -39,14 +39,16 @@ func ({{ $receiver }} *{{ $builder }}) sqlAll(ctx context.Context, hooks ...quer
 		{{- end }}
 	)
 	{{- with $.UnexportedForeignKeys }}
-			{{- with $.FKEdges }}
-				if {{ range $i, $e := . }}{{ if gt $i 0 }} || {{ end }}{{ $receiver }}.{{ $e.EagerLoadField }} != nil{{ end }} {
-					withFKs = true
-				}
-			{{- end }}
-			if withFKs {
-				_spec.Node.Columns = append(_spec.Node.Columns, {{ $.Package }}.ForeignKeys...)
+		{{- $edgesWithoutField := list }}
+		{{- range $.FKEdges }}{{ if not .Field }}{{ $edgesWithoutField = append $edgesWithoutField . }}{{ end }}{{ end }}
+		{{- if $edgesWithoutField }}
+			if {{ range $i, $e := $edgesWithoutField }}{{ if $i }} || {{ end }}{{ $receiver }}.{{ $e.EagerLoadField }} != nil{{ end }} {
+				withFKs = true
 			}
+		{{- end }}
+		if withFKs {
+			_spec.Node.Columns = append(_spec.Node.Columns, {{ $.Package }}.ForeignKeys...)
+		}
 	{{- end }}
 	_spec.ScanValues = func(columns []string) ([]any, error) {
 		return (*{{ $.Name }}).scanValues(nil, columns)
@@ -78,7 +80,21 @@ func ({{ $receiver }} *{{ $builder }}) sqlAll(ctx context.Context, hooks ...quer
 		if query := {{ $receiver }}.{{ $e.EagerLoadField }}; query != nil {
 			if err := {{ $receiver }}.load{{ $e.StructField }}(ctx, query, nodes, {{ if $e.Unique }}nil{{ else }}
 				func(n *{{ $.Name }}){ n.Edges.{{ $e.StructField }} = []*{{ $e.Type.Name }}{} }{{ end }},
-				func(n *{{ $.Name }}, e *{{ $e.Type.Name }}){ n.Edges.{{ $e.StructField }} = {{ if $e.Unique }}e{{ else }}append(n.Edges.{{ $e.StructField }}, e){{ end }} }); err != nil {
+				{{- $lhs := printf "n.Edges.%s" $e.StructField }}
+				{{- $rhs := print "e" }}{{- if not $e.Unique }}{{ $rhs = printf "append(%s, e)" $lhs }}{{ end }}
+				{{- if and ($.FeatureEnabled "bidiedges") $e.Ref $e.Ref.Unique }}
+					func(n *{{ $.Name }}, e *{{ $e.Type.Name }}){
+						{{ printf "%s = %s" $lhs $rhs }}
+						{{- $idx := $e.Ref.Index }}
+						{{- /* Set only in case this type was not loaded explicitly (without custom options). */}}
+						if !e.Edges.loadedTypes[{{ $idx }}] {
+							e.Edges.{{ $e.Ref.StructField }} = n
+						}
+					}); err != nil {
+				{{- else }}
+					{{- /* Keep it one-liner if there is not inverse-condition. */}}
+					func(n *{{ $.Name }}, e *{{ $e.Type.Name }}){ {{ printf "%s = %s" $lhs $rhs }} }); err != nil {
+				{{- end }}
 				return nil, err
 			}
 		}
@@ -213,8 +229,14 @@ func ({{ $receiver }} *{{ $builder }}) sqlAll(ctx context.Context, hooks ...quer
 			{{- with $e.Type.UnexportedForeignKeys }}
 				query.withFKs = true
 			{{- end }}
+			{{- /* In case of custom field selection, ensure edge-fields used for binding below were selected. */}}
+			{{- if and $e.Ref $e.Ref.Field }}
+				if len(query.ctx.Fields) > 0 {
+					query.ctx.AppendFieldOnce({{ $e.Type.Package }}.{{ $e.Ref.Field.Constant }})
+				}
+			{{- end }}
 			query.Where(predicate.{{ $e.Type.Name }}(func(s *sql.Selector) {
-				s.Where(sql.InValues({{ $.Package }}.{{ $e.ColumnConstant }}, fks...))
+				s.Where(sql.InValues(s.C({{ $.Package }}.{{ $e.ColumnConstant }}), fks...))
 			}))
 			neighbors, err := query.All(ctx)
 			if err != nil {
@@ -230,7 +252,7 @@ func ({{ $receiver }} *{{ $builder }}) sqlAll(ctx context.Context, hooks ...quer
 				{{- end }}
 				node, ok := nodeids[{{ if $fk.Field.Nillable }}*{{ end }}fk]
 				if !ok {
-					return fmt.Errorf(`unexpected foreign-key "{{ $fk.Field.Name }}" returned %v for node %v`, {{ if $fk.Field.Nillable }}*{{ end }}fk, n{{ if $e.Type.HasOneFieldID }}.ID{{ end }})
+					return fmt.Errorf(`unexpected referenced foreign-key "{{ $fk.Field.Name }}" returned %v for node %v`, {{ if $fk.Field.Nillable }}*{{ end }}fk, n{{ if $e.Type.HasOneFieldID }}.ID{{ end }})
 				}
 				assign(node, n)
 			}
@@ -284,6 +306,16 @@ func ({{ $receiver }} *{{ $builder }}) querySpec() *sqlgraph.QuerySpec {
 				_spec.Node.Columns = append(_spec.Node.Columns, fields[i])
 			}
 		{{- end }}
+		{{- /* In case of custom field selection, ensure edge-fields are loaded in case their edges were loaded. */}}
+		{{- range $.FKEdges }}
+			{{- $f := .Field }}
+			{{- if not $f }}
+				{{- continue }}
+			{{- end }}
+			if {{ $receiver }}.{{ .EagerLoadField }} != nil {
+				_spec.Node.AddColumnOnce({{ $.Package }}.{{ $f.Constant }})
+			}
+		{{- end }}
 	}
 	if ps := {{ $receiver }}.predicates; len(ps) > 0 {
 		_spec.Predicate = func(selector *sql.Selector) {
@@ -310,7 +342,6 @@ func ({{ $receiver }} *{{ $builder }}) querySpec() *sqlgraph.QuerySpec {
 
 {{ template "dialect/sql/query/selector" $ }}
 
-
 {{- /* Allow adding methods to the query-builder by ent extensions or user templates.*/}}
 {{- with $tmpls := matchTemplate "dialect/sql/query/additional/*" }}
 	{{- range $tmpl := $tmpls }}
@@ -325,13 +356,14 @@ func ({{ $receiver }} *{{ $builder }}) querySpec() *sqlgraph.QuerySpec {
 {{ $receiver := receiver $builder }}
 
 func ({{ $receiver }} *{{ $builder }}) sqlQuery(ctx context.Context) *sql.Selector {
-	builder := sql.Dialect({{ $receiver }}.driver.Dialect())
-	t1 := builder.Table({{ $.Package }}.Table)
+	{{- $builderV := "builder" }}{{ if eq $.Package $builderV }}{{ $builderV = "builderC" }}{{ end }}
+	{{ $builderV }} := sql.Dialect({{ $receiver }}.driver.Dialect())
+	t1 := {{ $builderV }}.Table({{ $.Package }}.Table)
 	columns := {{ $receiver }}.ctx.Fields
 	if len(columns) == 0 {
 		columns = {{ $.Package }}.Columns
 	}
-	selector := builder.Select(t1.Columns(columns...)...).From(t1)
+	selector := {{ $builderV }}.Select(t1.Columns(columns...)...).From(t1)
 	if {{ $receiver }}.sql != nil {
 		selector = {{ $receiver }}.sql
 		selector.Select(selector.Columns(columns...)...)

@@ -51,6 +51,16 @@ var (
 		Description: "NamedEdges provides an API for eager-loading edges with dynamic names",
 	}
 
+	// FeatureBidiEdgeRefs provides a feature-flag for sql dialect to set two-way
+	// references when loading (unique) edges. Note, users that use the standard
+	// encoding/json.MarshalJSON should detach the circular references before marshaling.
+	FeatureBidiEdgeRefs = Feature{
+		Name:        "bidiedges",
+		Stage:       Experimental,
+		Default:     false,
+		Description: "This features guides Ent to set two-way references when loading (O2M/O2O) edges",
+	}
+
 	// FeatureSnapshot stores a snapshot of ent/schema and auto-solve merge-conflict (issue #852).
 	FeatureSnapshot = Feature{
 		Name:        "schema/snapshot",
@@ -73,7 +83,7 @@ var (
 	// multiple databases.
 	FeatureSchemaConfig = Feature{
 		Name:        "sql/schemaconfig",
-		Stage:       Experimental,
+		Stage:       Stable,
 		Default:     false,
 		Description: "Allows alternate schema names for each ent model. Useful if SQL tables are spread out against multiple databases",
 		GraphTemplates: []GraphTemplate{
@@ -85,6 +95,14 @@ var (
 		cleanup: func(c *Config) error {
 			return remove(filepath.Join(c.Target, "internal"), "schemaconfig.go")
 		},
+	}
+
+	// featureMultiSchema indicates that ent/schema is annotated with multiple schemas.
+	// This feature-flag is enabled by default by the storage driver and exists to pass
+	// this info to the templates.
+	featureMultiSchema = Feature{
+		Name:  "sql/multischema",
+		Stage: Beta,
 	}
 
 	// FeatureLock provides a feature-flag for sql locking extension.
@@ -132,6 +150,7 @@ var (
 		FeatureIntercept,
 		FeatureEntQL,
 		FeatureNamedEdges,
+		FeatureBidiEdgeRefs,
 		FeatureSnapshot,
 		FeatureSchemaConfig,
 		FeatureLock,
@@ -140,6 +159,8 @@ var (
 		FeatureUpsert,
 		FeatureVersionedMigration,
 	}
+	// allFeatures includes all public and private features.
+	allFeatures = append(AllFeatures, featureMultiSchema)
 )
 
 // FeatureStage describes the stage of the codegen feature.

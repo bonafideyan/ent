@@ -56,7 +56,7 @@ func (sc *StreetCreate) Mutation() *StreetMutation {
 
 // Save creates the Street in the database.
 func (sc *StreetCreate) Save(ctx context.Context) (*Street, error) {
-	return withHooks[*Street, StreetMutation](ctx, sc.sqlSave, sc.mutation, sc.hooks)
+	return withHooks(ctx, sc.sqlSave, sc.mutation, sc.hooks)
 }
 
 // SaveX calls Save and panics if Save returns an error.
@@ -139,11 +139,15 @@ func (sc *StreetCreate) createSpec() (*Street, *sqlgraph.CreateSpec) {
 // StreetCreateBulk is the builder for creating many Street entities in bulk.
 type StreetCreateBulk struct {
 	config
+	err      error
 	builders []*StreetCreate
 }
 
 // Save creates the Street entities in the database.
 func (scb *StreetCreateBulk) Save(ctx context.Context) ([]*Street, error) {
+	if scb.err != nil {
+		return nil, scb.err
+	}
 	specs := make([]*sqlgraph.CreateSpec, len(scb.builders))
 	nodes := make([]*Street, len(scb.builders))
 	mutators := make([]Mutator, len(scb.builders))
@@ -159,8 +163,8 @@ func (scb *StreetCreateBulk) Save(ctx context.Context) ([]*Street, error) {
 					return nil, err
 				}
 				builder.mutation = mutation
-				nodes[i], specs[i] = builder.createSpec()
 				var err error
+				nodes[i], specs[i] = builder.createSpec()
 				if i < len(mutators)-1 {
 					_, err = mutators[i+1].Mutate(root, scb.builders[i+1].mutation)
 				} else {

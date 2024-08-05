@@ -53,7 +53,7 @@ func (ru *RentalUpdate) Mutation() *RentalMutation {
 
 // Save executes the query and returns the number of nodes affected by the update operation.
 func (ru *RentalUpdate) Save(ctx context.Context) (int, error) {
-	return withHooks[int, RentalMutation](ctx, ru.sqlSave, ru.mutation, ru.hooks)
+	return withHooks(ctx, ru.sqlSave, ru.mutation, ru.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
@@ -80,10 +80,10 @@ func (ru *RentalUpdate) ExecX(ctx context.Context) {
 
 // check runs all checks and user-defined validators on the builder.
 func (ru *RentalUpdate) check() error {
-	if _, ok := ru.mutation.UserID(); ru.mutation.UserCleared() && !ok {
+	if ru.mutation.UserCleared() && len(ru.mutation.UserIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "Rental.user"`)
 	}
-	if _, ok := ru.mutation.CarID(); ru.mutation.CarCleared() && !ok {
+	if ru.mutation.CarCleared() && len(ru.mutation.CarIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "Rental.car"`)
 	}
 	return nil
@@ -158,7 +158,7 @@ func (ruo *RentalUpdateOne) Select(field string, fields ...string) *RentalUpdate
 
 // Save executes the query and returns the updated Rental entity.
 func (ruo *RentalUpdateOne) Save(ctx context.Context) (*Rental, error) {
-	return withHooks[*Rental, RentalMutation](ctx, ruo.sqlSave, ruo.mutation, ruo.hooks)
+	return withHooks(ctx, ruo.sqlSave, ruo.mutation, ruo.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
@@ -185,10 +185,10 @@ func (ruo *RentalUpdateOne) ExecX(ctx context.Context) {
 
 // check runs all checks and user-defined validators on the builder.
 func (ruo *RentalUpdateOne) check() error {
-	if _, ok := ruo.mutation.UserID(); ruo.mutation.UserCleared() && !ok {
+	if ruo.mutation.UserCleared() && len(ruo.mutation.UserIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "Rental.user"`)
 	}
-	if _, ok := ruo.mutation.CarID(); ruo.mutation.CarCleared() && !ok {
+	if ruo.mutation.CarCleared() && len(ruo.mutation.CarIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "Rental.car"`)
 	}
 	return nil

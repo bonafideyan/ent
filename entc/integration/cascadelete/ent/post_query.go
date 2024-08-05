@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"math"
 
+	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/entc/integration/cascadelete/ent/comment"
@@ -25,7 +26,7 @@ import (
 type PostQuery struct {
 	config
 	ctx          *QueryContext
-	order        []OrderFunc
+	order        []post.OrderOption
 	inters       []Interceptor
 	predicates   []predicate.Post
 	withAuthor   *UserQuery
@@ -61,7 +62,7 @@ func (pq *PostQuery) Unique(unique bool) *PostQuery {
 }
 
 // Order specifies how the records should be ordered.
-func (pq *PostQuery) Order(o ...OrderFunc) *PostQuery {
+func (pq *PostQuery) Order(o ...post.OrderOption) *PostQuery {
 	pq.order = append(pq.order, o...)
 	return pq
 }
@@ -113,7 +114,7 @@ func (pq *PostQuery) QueryComments() *CommentQuery {
 // First returns the first Post entity from the query.
 // Returns a *NotFoundError when no Post was found.
 func (pq *PostQuery) First(ctx context.Context) (*Post, error) {
-	nodes, err := pq.Limit(1).All(setContextOp(ctx, pq.ctx, "First"))
+	nodes, err := pq.Limit(1).All(setContextOp(ctx, pq.ctx, ent.OpQueryFirst))
 	if err != nil {
 		return nil, err
 	}
@@ -136,7 +137,7 @@ func (pq *PostQuery) FirstX(ctx context.Context) *Post {
 // Returns a *NotFoundError when no Post ID was found.
 func (pq *PostQuery) FirstID(ctx context.Context) (id int, err error) {
 	var ids []int
-	if ids, err = pq.Limit(1).IDs(setContextOp(ctx, pq.ctx, "FirstID")); err != nil {
+	if ids, err = pq.Limit(1).IDs(setContextOp(ctx, pq.ctx, ent.OpQueryFirstID)); err != nil {
 		return
 	}
 	if len(ids) == 0 {
@@ -159,7 +160,7 @@ func (pq *PostQuery) FirstIDX(ctx context.Context) int {
 // Returns a *NotSingularError when more than one Post entity is found.
 // Returns a *NotFoundError when no Post entities are found.
 func (pq *PostQuery) Only(ctx context.Context) (*Post, error) {
-	nodes, err := pq.Limit(2).All(setContextOp(ctx, pq.ctx, "Only"))
+	nodes, err := pq.Limit(2).All(setContextOp(ctx, pq.ctx, ent.OpQueryOnly))
 	if err != nil {
 		return nil, err
 	}
@@ -187,7 +188,7 @@ func (pq *PostQuery) OnlyX(ctx context.Context) *Post {
 // Returns a *NotFoundError when no entities are found.
 func (pq *PostQuery) OnlyID(ctx context.Context) (id int, err error) {
 	var ids []int
-	if ids, err = pq.Limit(2).IDs(setContextOp(ctx, pq.ctx, "OnlyID")); err != nil {
+	if ids, err = pq.Limit(2).IDs(setContextOp(ctx, pq.ctx, ent.OpQueryOnlyID)); err != nil {
 		return
 	}
 	switch len(ids) {
@@ -212,7 +213,7 @@ func (pq *PostQuery) OnlyIDX(ctx context.Context) int {
 
 // All executes the query and returns a list of Posts.
 func (pq *PostQuery) All(ctx context.Context) ([]*Post, error) {
-	ctx = setContextOp(ctx, pq.ctx, "All")
+	ctx = setContextOp(ctx, pq.ctx, ent.OpQueryAll)
 	if err := pq.prepareQuery(ctx); err != nil {
 		return nil, err
 	}
@@ -234,7 +235,7 @@ func (pq *PostQuery) IDs(ctx context.Context) (ids []int, err error) {
 	if pq.ctx.Unique == nil && pq.path != nil {
 		pq.Unique(true)
 	}
-	ctx = setContextOp(ctx, pq.ctx, "IDs")
+	ctx = setContextOp(ctx, pq.ctx, ent.OpQueryIDs)
 	if err = pq.Select(post.FieldID).Scan(ctx, &ids); err != nil {
 		return nil, err
 	}
@@ -252,7 +253,7 @@ func (pq *PostQuery) IDsX(ctx context.Context) []int {
 
 // Count returns the count of the given query.
 func (pq *PostQuery) Count(ctx context.Context) (int, error) {
-	ctx = setContextOp(ctx, pq.ctx, "Count")
+	ctx = setContextOp(ctx, pq.ctx, ent.OpQueryCount)
 	if err := pq.prepareQuery(ctx); err != nil {
 		return 0, err
 	}
@@ -270,7 +271,7 @@ func (pq *PostQuery) CountX(ctx context.Context) int {
 
 // Exist returns true if the query has elements in the graph.
 func (pq *PostQuery) Exist(ctx context.Context) (bool, error) {
-	ctx = setContextOp(ctx, pq.ctx, "Exist")
+	ctx = setContextOp(ctx, pq.ctx, ent.OpQueryExist)
 	switch _, err := pq.FirstID(ctx); {
 	case IsNotFound(err):
 		return false, nil
@@ -299,7 +300,7 @@ func (pq *PostQuery) Clone() *PostQuery {
 	return &PostQuery{
 		config:       pq.config,
 		ctx:          pq.ctx.Clone(),
-		order:        append([]OrderFunc{}, pq.order...),
+		order:        append([]post.OrderOption{}, pq.order...),
 		inters:       append([]Interceptor{}, pq.inters...),
 		predicates:   append([]predicate.Post{}, pq.predicates...),
 		withAuthor:   pq.withAuthor.Clone(),
@@ -488,8 +489,11 @@ func (pq *PostQuery) loadComments(ctx context.Context, query *CommentQuery, node
 			init(nodes[i])
 		}
 	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(comment.FieldPostID)
+	}
 	query.Where(predicate.Comment(func(s *sql.Selector) {
-		s.Where(sql.InValues(post.CommentsColumn, fks...))
+		s.Where(sql.InValues(s.C(post.CommentsColumn), fks...))
 	}))
 	neighbors, err := query.All(ctx)
 	if err != nil {
@@ -499,7 +503,7 @@ func (pq *PostQuery) loadComments(ctx context.Context, query *CommentQuery, node
 		fk := n.PostID
 		node, ok := nodeids[fk]
 		if !ok {
-			return fmt.Errorf(`unexpected foreign-key "post_id" returned %v for node %v`, fk, n.ID)
+			return fmt.Errorf(`unexpected referenced foreign-key "post_id" returned %v for node %v`, fk, n.ID)
 		}
 		assign(node, n)
 	}
@@ -530,6 +534,9 @@ func (pq *PostQuery) querySpec() *sqlgraph.QuerySpec {
 			if fields[i] != post.FieldID {
 				_spec.Node.Columns = append(_spec.Node.Columns, fields[i])
 			}
+		}
+		if pq.withAuthor != nil {
+			_spec.Node.AddColumnOnce(post.FieldAuthorID)
 		}
 	}
 	if ps := pq.predicates; len(ps) > 0 {
@@ -601,7 +608,7 @@ func (pgb *PostGroupBy) Aggregate(fns ...AggregateFunc) *PostGroupBy {
 
 // Scan applies the selector query and scans the result into the given value.
 func (pgb *PostGroupBy) Scan(ctx context.Context, v any) error {
-	ctx = setContextOp(ctx, pgb.build.ctx, "GroupBy")
+	ctx = setContextOp(ctx, pgb.build.ctx, ent.OpQueryGroupBy)
 	if err := pgb.build.prepareQuery(ctx); err != nil {
 		return err
 	}
@@ -649,7 +656,7 @@ func (ps *PostSelect) Aggregate(fns ...AggregateFunc) *PostSelect {
 
 // Scan applies the selector query and scans the result into the given value.
 func (ps *PostSelect) Scan(ctx context.Context, v any) error {
-	ctx = setContextOp(ctx, ps.ctx, "Select")
+	ctx = setContextOp(ctx, ps.ctx, ent.OpQuerySelect)
 	if err := ps.prepareQuery(ctx); err != nil {
 		return err
 	}

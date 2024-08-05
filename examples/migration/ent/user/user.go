@@ -6,6 +6,11 @@
 
 package user
 
+import (
+	"entgo.io/ent/dialect/sql"
+	"entgo.io/ent/dialect/sql/sqlgraph"
+)
+
 const (
 	// Label holds the string label denoting the user type in the database.
 	Label = "user"
@@ -13,8 +18,10 @@ const (
 	FieldID = "id"
 	// FieldAge holds the string denoting the age field in the database.
 	FieldAge = "age"
-	// FieldName holds the string denoting the name field in the database.
-	FieldName = "name"
+	// FieldFirstName holds the string denoting the first_name field in the database.
+	FieldFirstName = "first_name"
+	// FieldLastName holds the string denoting the last_name field in the database.
+	FieldLastName = "last_name"
 	// FieldTags holds the string denoting the tags field in the database.
 	FieldTags = "tags"
 	// EdgeCards holds the string denoting the cards edge name in mutations.
@@ -34,7 +41,8 @@ const (
 var Columns = []string{
 	FieldID,
 	FieldAge,
-	FieldName,
+	FieldFirstName,
+	FieldLastName,
 	FieldTags,
 }
 
@@ -46,4 +54,48 @@ func ValidColumn(column string) bool {
 		}
 	}
 	return false
+}
+
+// OrderOption defines the ordering options for the User queries.
+type OrderOption func(*sql.Selector)
+
+// ByID orders the results by the id field.
+func ByID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldID, opts...).ToFunc()
+}
+
+// ByAge orders the results by the age field.
+func ByAge(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldAge, opts...).ToFunc()
+}
+
+// ByFirstName orders the results by the first_name field.
+func ByFirstName(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldFirstName, opts...).ToFunc()
+}
+
+// ByLastName orders the results by the last_name field.
+func ByLastName(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldLastName, opts...).ToFunc()
+}
+
+// ByCardsCount orders the results by cards count.
+func ByCardsCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newCardsStep(), opts...)
+	}
+}
+
+// ByCards orders the results by cards terms.
+func ByCards(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newCardsStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
+func newCardsStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(CardsInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, CardsTable, CardsColumn),
+	)
 }

@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"strings"
 
+	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/examples/traversal/ent/group"
 	"entgo.io/ent/examples/traversal/ent/user"
@@ -24,8 +25,9 @@ type Group struct {
 	Name string `json:"name,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the GroupQuery when eager-loading is set.
-	Edges       GroupEdges `json:"edges"`
-	group_admin *int
+	Edges        GroupEdges `json:"edges"`
+	group_admin  *int
+	selectValues sql.SelectValues
 }
 
 // GroupEdges holds the relations/edges for other nodes in the graph.
@@ -51,12 +53,10 @@ func (e GroupEdges) UsersOrErr() ([]*User, error) {
 // AdminOrErr returns the Admin value or an error if the edge
 // was not loaded in eager-loading, or loaded but was not found.
 func (e GroupEdges) AdminOrErr() (*User, error) {
-	if e.loadedTypes[1] {
-		if e.Admin == nil {
-			// Edge was loaded but was not found.
-			return nil, &NotFoundError{label: user.Label}
-		}
+	if e.Admin != nil {
 		return e.Admin, nil
+	} else if e.loadedTypes[1] {
+		return nil, &NotFoundError{label: user.Label}
 	}
 	return nil, &NotLoadedError{edge: "admin"}
 }
@@ -73,7 +73,7 @@ func (*Group) scanValues(columns []string) ([]any, error) {
 		case group.ForeignKeys[0]: // group_admin
 			values[i] = new(sql.NullInt64)
 		default:
-			return nil, fmt.Errorf("unexpected column %q for type Group", columns[i])
+			values[i] = new(sql.UnknownType)
 		}
 	}
 	return values, nil
@@ -106,9 +106,17 @@ func (gr *Group) assignValues(columns []string, values []any) error {
 				gr.group_admin = new(int)
 				*gr.group_admin = int(value.Int64)
 			}
+		default:
+			gr.selectValues.Set(columns[i], values[i])
 		}
 	}
 	return nil
+}
+
+// Value returns the ent.Value that was dynamically selected and assigned to the Group.
+// This includes values selected through modifiers, order, etc.
+func (gr *Group) Value(name string) (ent.Value, error) {
+	return gr.selectValues.Get(name)
 }
 
 // QueryUsers queries the "users" edge of the Group entity.

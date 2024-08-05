@@ -83,7 +83,7 @@ func (ftc *FileTypeCreate) Mutation() *FileTypeMutation {
 // Save creates the FileType in the database.
 func (ftc *FileTypeCreate) Save(ctx context.Context) (*FileType, error) {
 	ftc.defaults()
-	return withHooks[*FileType, FileTypeMutation](ctx, ftc.sqlSave, ftc.mutation, ftc.hooks)
+	return withHooks(ctx, ftc.sqlSave, ftc.mutation, ftc.hooks)
 }
 
 // SaveX calls Save and panics if Save returns an error.
@@ -402,12 +402,16 @@ func (u *FileTypeUpsertOne) IDX(ctx context.Context) int {
 // FileTypeCreateBulk is the builder for creating many FileType entities in bulk.
 type FileTypeCreateBulk struct {
 	config
+	err      error
 	builders []*FileTypeCreate
 	conflict []sql.ConflictOption
 }
 
 // Save creates the FileType entities in the database.
 func (ftcb *FileTypeCreateBulk) Save(ctx context.Context) ([]*FileType, error) {
+	if ftcb.err != nil {
+		return nil, ftcb.err
+	}
 	specs := make([]*sqlgraph.CreateSpec, len(ftcb.builders))
 	nodes := make([]*FileType, len(ftcb.builders))
 	mutators := make([]Mutator, len(ftcb.builders))
@@ -424,8 +428,8 @@ func (ftcb *FileTypeCreateBulk) Save(ctx context.Context) ([]*FileType, error) {
 					return nil, err
 				}
 				builder.mutation = mutation
-				nodes[i], specs[i] = builder.createSpec()
 				var err error
+				nodes[i], specs[i] = builder.createSpec()
 				if i < len(mutators)-1 {
 					_, err = mutators[i+1].Mutate(root, ftcb.builders[i+1].mutation)
 				} else {
@@ -610,6 +614,9 @@ func (u *FileTypeUpsertBulk) UpdateState() *FileTypeUpsertBulk {
 
 // Exec executes the query.
 func (u *FileTypeUpsertBulk) Exec(ctx context.Context) error {
+	if u.create.err != nil {
+		return u.create.err
+	}
 	for i, b := range u.create.builders {
 		if len(b.conflict) != 0 {
 			return fmt.Errorf("ent: OnConflict was set for builder %d. Set it on the FileTypeCreateBulk instead", i)

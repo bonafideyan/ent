@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"strings"
 
+	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/examples/o2mrecur/ent/node"
 )
@@ -25,7 +26,8 @@ type Node struct {
 	ParentID int `json:"parent_id,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the NodeQuery when eager-loading is set.
-	Edges NodeEdges `json:"edges"`
+	Edges        NodeEdges `json:"edges"`
+	selectValues sql.SelectValues
 }
 
 // NodeEdges holds the relations/edges for other nodes in the graph.
@@ -42,12 +44,10 @@ type NodeEdges struct {
 // ParentOrErr returns the Parent value or an error if the edge
 // was not loaded in eager-loading, or loaded but was not found.
 func (e NodeEdges) ParentOrErr() (*Node, error) {
-	if e.loadedTypes[0] {
-		if e.Parent == nil {
-			// Edge was loaded but was not found.
-			return nil, &NotFoundError{label: node.Label}
-		}
+	if e.Parent != nil {
 		return e.Parent, nil
+	} else if e.loadedTypes[0] {
+		return nil, &NotFoundError{label: node.Label}
 	}
 	return nil, &NotLoadedError{edge: "parent"}
 }
@@ -69,7 +69,7 @@ func (*Node) scanValues(columns []string) ([]any, error) {
 		case node.FieldID, node.FieldValue, node.FieldParentID:
 			values[i] = new(sql.NullInt64)
 		default:
-			return nil, fmt.Errorf("unexpected column %q for type Node", columns[i])
+			values[i] = new(sql.UnknownType)
 		}
 	}
 	return values, nil
@@ -101,9 +101,17 @@ func (n *Node) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				n.ParentID = int(value.Int64)
 			}
+		default:
+			n.selectValues.Set(columns[i], values[i])
 		}
 	}
 	return nil
+}
+
+// GetValue returns the ent.Value that was dynamically selected and assigned to the Node.
+// This includes values selected through modifiers, order, etc.
+func (n *Node) GetValue(name string) (ent.Value, error) {
+	return n.selectValues.Get(name)
 }
 
 // QueryParent queries the "parent" edge of the Node entity.

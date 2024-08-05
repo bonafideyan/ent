@@ -39,6 +39,14 @@ func (tu *TokenUpdate) SetBody(s string) *TokenUpdate {
 	return tu
 }
 
+// SetNillableBody sets the "body" field if the given value is not nil.
+func (tu *TokenUpdate) SetNillableBody(s *string) *TokenUpdate {
+	if s != nil {
+		tu.SetBody(*s)
+	}
+	return tu
+}
+
 // SetAccountID sets the "account" edge to the Account entity by ID.
 func (tu *TokenUpdate) SetAccountID(id sid.ID) *TokenUpdate {
 	tu.mutation.SetAccountID(id)
@@ -63,7 +71,7 @@ func (tu *TokenUpdate) ClearAccount() *TokenUpdate {
 
 // Save executes the query and returns the number of nodes affected by the update operation.
 func (tu *TokenUpdate) Save(ctx context.Context) (int, error) {
-	return withHooks[int, TokenMutation](ctx, tu.sqlSave, tu.mutation, tu.hooks)
+	return withHooks(ctx, tu.sqlSave, tu.mutation, tu.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
@@ -95,7 +103,7 @@ func (tu *TokenUpdate) check() error {
 			return &ValidationError{Name: "body", err: fmt.Errorf(`ent: validator failed for field "Token.body": %w`, err)}
 		}
 	}
-	if _, ok := tu.mutation.AccountID(); tu.mutation.AccountCleared() && !ok {
+	if tu.mutation.AccountCleared() && len(tu.mutation.AccountIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "Token.account"`)
 	}
 	return nil
@@ -171,6 +179,14 @@ func (tuo *TokenUpdateOne) SetBody(s string) *TokenUpdateOne {
 	return tuo
 }
 
+// SetNillableBody sets the "body" field if the given value is not nil.
+func (tuo *TokenUpdateOne) SetNillableBody(s *string) *TokenUpdateOne {
+	if s != nil {
+		tuo.SetBody(*s)
+	}
+	return tuo
+}
+
 // SetAccountID sets the "account" edge to the Account entity by ID.
 func (tuo *TokenUpdateOne) SetAccountID(id sid.ID) *TokenUpdateOne {
 	tuo.mutation.SetAccountID(id)
@@ -208,7 +224,7 @@ func (tuo *TokenUpdateOne) Select(field string, fields ...string) *TokenUpdateOn
 
 // Save executes the query and returns the updated Token entity.
 func (tuo *TokenUpdateOne) Save(ctx context.Context) (*Token, error) {
-	return withHooks[*Token, TokenMutation](ctx, tuo.sqlSave, tuo.mutation, tuo.hooks)
+	return withHooks(ctx, tuo.sqlSave, tuo.mutation, tuo.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
@@ -240,7 +256,7 @@ func (tuo *TokenUpdateOne) check() error {
 			return &ValidationError{Name: "body", err: fmt.Errorf(`ent: validator failed for field "Token.body": %w`, err)}
 		}
 	}
-	if _, ok := tuo.mutation.AccountID(); tuo.mutation.AccountCleared() && !ok {
+	if tuo.mutation.AccountCleared() && len(tuo.mutation.AccountIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "Token.account"`)
 	}
 	return nil

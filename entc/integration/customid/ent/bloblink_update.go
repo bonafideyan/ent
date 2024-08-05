@@ -54,9 +54,25 @@ func (blu *BlobLinkUpdate) SetBlobID(u uuid.UUID) *BlobLinkUpdate {
 	return blu
 }
 
+// SetNillableBlobID sets the "blob_id" field if the given value is not nil.
+func (blu *BlobLinkUpdate) SetNillableBlobID(u *uuid.UUID) *BlobLinkUpdate {
+	if u != nil {
+		blu.SetBlobID(*u)
+	}
+	return blu
+}
+
 // SetLinkID sets the "link_id" field.
 func (blu *BlobLinkUpdate) SetLinkID(u uuid.UUID) *BlobLinkUpdate {
 	blu.mutation.SetLinkID(u)
+	return blu
+}
+
+// SetNillableLinkID sets the "link_id" field if the given value is not nil.
+func (blu *BlobLinkUpdate) SetNillableLinkID(u *uuid.UUID) *BlobLinkUpdate {
+	if u != nil {
+		blu.SetLinkID(*u)
+	}
 	return blu
 }
 
@@ -89,7 +105,7 @@ func (blu *BlobLinkUpdate) ClearLink() *BlobLinkUpdate {
 
 // Save executes the query and returns the number of nodes affected by the update operation.
 func (blu *BlobLinkUpdate) Save(ctx context.Context) (int, error) {
-	return withHooks[int, BlobLinkMutation](ctx, blu.sqlSave, blu.mutation, blu.hooks)
+	return withHooks(ctx, blu.sqlSave, blu.mutation, blu.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
@@ -116,10 +132,10 @@ func (blu *BlobLinkUpdate) ExecX(ctx context.Context) {
 
 // check runs all checks and user-defined validators on the builder.
 func (blu *BlobLinkUpdate) check() error {
-	if _, ok := blu.mutation.BlobID(); blu.mutation.BlobCleared() && !ok {
+	if blu.mutation.BlobCleared() && len(blu.mutation.BlobIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "BlobLink.blob"`)
 	}
-	if _, ok := blu.mutation.LinkID(); blu.mutation.LinkCleared() && !ok {
+	if blu.mutation.LinkCleared() && len(blu.mutation.LinkIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "BlobLink.link"`)
 	}
 	return nil
@@ -238,9 +254,25 @@ func (bluo *BlobLinkUpdateOne) SetBlobID(u uuid.UUID) *BlobLinkUpdateOne {
 	return bluo
 }
 
+// SetNillableBlobID sets the "blob_id" field if the given value is not nil.
+func (bluo *BlobLinkUpdateOne) SetNillableBlobID(u *uuid.UUID) *BlobLinkUpdateOne {
+	if u != nil {
+		bluo.SetBlobID(*u)
+	}
+	return bluo
+}
+
 // SetLinkID sets the "link_id" field.
 func (bluo *BlobLinkUpdateOne) SetLinkID(u uuid.UUID) *BlobLinkUpdateOne {
 	bluo.mutation.SetLinkID(u)
+	return bluo
+}
+
+// SetNillableLinkID sets the "link_id" field if the given value is not nil.
+func (bluo *BlobLinkUpdateOne) SetNillableLinkID(u *uuid.UUID) *BlobLinkUpdateOne {
+	if u != nil {
+		bluo.SetLinkID(*u)
+	}
 	return bluo
 }
 
@@ -286,7 +318,7 @@ func (bluo *BlobLinkUpdateOne) Select(field string, fields ...string) *BlobLinkU
 
 // Save executes the query and returns the updated BlobLink entity.
 func (bluo *BlobLinkUpdateOne) Save(ctx context.Context) (*BlobLink, error) {
-	return withHooks[*BlobLink, BlobLinkMutation](ctx, bluo.sqlSave, bluo.mutation, bluo.hooks)
+	return withHooks(ctx, bluo.sqlSave, bluo.mutation, bluo.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
@@ -313,10 +345,10 @@ func (bluo *BlobLinkUpdateOne) ExecX(ctx context.Context) {
 
 // check runs all checks and user-defined validators on the builder.
 func (bluo *BlobLinkUpdateOne) check() error {
-	if _, ok := bluo.mutation.BlobID(); bluo.mutation.BlobCleared() && !ok {
+	if bluo.mutation.BlobCleared() && len(bluo.mutation.BlobIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "BlobLink.blob"`)
 	}
-	if _, ok := bluo.mutation.LinkID(); bluo.mutation.LinkCleared() && !ok {
+	if bluo.mutation.LinkCleared() && len(bluo.mutation.LinkIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "BlobLink.link"`)
 	}
 	return nil

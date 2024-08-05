@@ -38,6 +38,14 @@ func (gu *GroupUpdate) SetMaxUsers(i int) *GroupUpdate {
 	return gu
 }
 
+// SetNillableMaxUsers sets the "max_users" field if the given value is not nil.
+func (gu *GroupUpdate) SetNillableMaxUsers(i *int) *GroupUpdate {
+	if i != nil {
+		gu.SetMaxUsers(*i)
+	}
+	return gu
+}
+
 // AddMaxUsers adds i to the "max_users" field.
 func (gu *GroupUpdate) AddMaxUsers(i int) *GroupUpdate {
 	gu.mutation.AddMaxUsers(i)
@@ -51,7 +59,7 @@ func (gu *GroupUpdate) Mutation() *GroupMutation {
 
 // Save executes the query and returns the number of nodes affected by the update operation.
 func (gu *GroupUpdate) Save(ctx context.Context) (int, error) {
-	return withHooks[int, GroupMutation](ctx, gu.sqlSave, gu.mutation, gu.hooks)
+	return withHooks(ctx, gu.sqlSave, gu.mutation, gu.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
@@ -118,6 +126,14 @@ func (guo *GroupUpdateOne) SetMaxUsers(i int) *GroupUpdateOne {
 	return guo
 }
 
+// SetNillableMaxUsers sets the "max_users" field if the given value is not nil.
+func (guo *GroupUpdateOne) SetNillableMaxUsers(i *int) *GroupUpdateOne {
+	if i != nil {
+		guo.SetMaxUsers(*i)
+	}
+	return guo
+}
+
 // AddMaxUsers adds i to the "max_users" field.
 func (guo *GroupUpdateOne) AddMaxUsers(i int) *GroupUpdateOne {
 	guo.mutation.AddMaxUsers(i)
@@ -144,7 +160,7 @@ func (guo *GroupUpdateOne) Select(field string, fields ...string) *GroupUpdateOn
 
 // Save executes the query and returns the updated Group entity.
 func (guo *GroupUpdateOne) Save(ctx context.Context) (*Group, error) {
-	return withHooks[*Group, GroupMutation](ctx, guo.sqlSave, guo.mutation, guo.hooks)
+	return withHooks(ctx, guo.sqlSave, guo.mutation, guo.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.

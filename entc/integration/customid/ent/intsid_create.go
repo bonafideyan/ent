@@ -73,7 +73,7 @@ func (isc *IntSIDCreate) Mutation() *IntSIDMutation {
 
 // Save creates the IntSID in the database.
 func (isc *IntSIDCreate) Save(ctx context.Context) (*IntSID, error) {
-	return withHooks[*IntSID, IntSIDMutation](ctx, isc.sqlSave, isc.mutation, isc.hooks)
+	return withHooks(ctx, isc.sqlSave, isc.mutation, isc.hooks)
 }
 
 // SaveX calls Save and panics if Save returns an error.
@@ -299,12 +299,16 @@ func (u *IntSIDUpsertOne) IDX(ctx context.Context) sid.ID {
 // IntSIDCreateBulk is the builder for creating many IntSID entities in bulk.
 type IntSIDCreateBulk struct {
 	config
+	err      error
 	builders []*IntSIDCreate
 	conflict []sql.ConflictOption
 }
 
 // Save creates the IntSID entities in the database.
 func (iscb *IntSIDCreateBulk) Save(ctx context.Context) ([]*IntSID, error) {
+	if iscb.err != nil {
+		return nil, iscb.err
+	}
 	specs := make([]*sqlgraph.CreateSpec, len(iscb.builders))
 	nodes := make([]*IntSID, len(iscb.builders))
 	mutators := make([]Mutator, len(iscb.builders))
@@ -320,8 +324,8 @@ func (iscb *IntSIDCreateBulk) Save(ctx context.Context) ([]*IntSID, error) {
 					return nil, err
 				}
 				builder.mutation = mutation
-				nodes[i], specs[i] = builder.createSpec()
 				var err error
+				nodes[i], specs[i] = builder.createSpec()
 				if i < len(mutators)-1 {
 					_, err = mutators[i+1].Mutate(root, iscb.builders[i+1].mutation)
 				} else {
@@ -470,6 +474,9 @@ func (u *IntSIDUpsertBulk) Update(set func(*IntSIDUpsert)) *IntSIDUpsertBulk {
 
 // Exec executes the query.
 func (u *IntSIDUpsertBulk) Exec(ctx context.Context) error {
+	if u.create.err != nil {
+		return u.create.err
+	}
 	for i, b := range u.create.builders {
 		if len(b.conflict) != 0 {
 			return fmt.Errorf("ent: OnConflict was set for builder %d. Set it on the IntSIDCreateBulk instead", i)

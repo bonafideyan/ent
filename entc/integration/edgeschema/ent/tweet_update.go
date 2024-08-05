@@ -42,6 +42,14 @@ func (tu *TweetUpdate) SetText(s string) *TweetUpdate {
 	return tu
 }
 
+// SetNillableText sets the "text" field if the given value is not nil.
+func (tu *TweetUpdate) SetNillableText(s *string) *TweetUpdate {
+	if s != nil {
+		tu.SetText(*s)
+	}
+	return tu
+}
+
 // AddLikedUserIDs adds the "liked_users" edge to the User entity by IDs.
 func (tu *TweetUpdate) AddLikedUserIDs(ids ...int) *TweetUpdate {
 	tu.mutation.AddLikedUserIDs(ids...)
@@ -229,7 +237,7 @@ func (tu *TweetUpdate) RemoveTweetTags(t ...*TweetTag) *TweetUpdate {
 
 // Save executes the query and returns the number of nodes affected by the update operation.
 func (tu *TweetUpdate) Save(ctx context.Context) (int, error) {
-	return withHooks[int, TweetMutation](ctx, tu.sqlSave, tu.mutation, tu.hooks)
+	return withHooks(ctx, tu.sqlSave, tu.mutation, tu.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
@@ -562,6 +570,14 @@ func (tuo *TweetUpdateOne) SetText(s string) *TweetUpdateOne {
 	return tuo
 }
 
+// SetNillableText sets the "text" field if the given value is not nil.
+func (tuo *TweetUpdateOne) SetNillableText(s *string) *TweetUpdateOne {
+	if s != nil {
+		tuo.SetText(*s)
+	}
+	return tuo
+}
+
 // AddLikedUserIDs adds the "liked_users" edge to the User entity by IDs.
 func (tuo *TweetUpdateOne) AddLikedUserIDs(ids ...int) *TweetUpdateOne {
 	tuo.mutation.AddLikedUserIDs(ids...)
@@ -762,7 +778,7 @@ func (tuo *TweetUpdateOne) Select(field string, fields ...string) *TweetUpdateOn
 
 // Save executes the query and returns the updated Tweet entity.
 func (tuo *TweetUpdateOne) Save(ctx context.Context) (*Tweet, error) {
-	return withHooks[*Tweet, TweetMutation](ctx, tuo.sqlSave, tuo.mutation, tuo.hooks)
+	return withHooks(ctx, tuo.sqlSave, tuo.mutation, tuo.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.

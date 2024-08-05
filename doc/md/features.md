@@ -80,6 +80,16 @@ The `namedges` option provides an API for preloading edges with custom names.
 This option can be added to a project using the `--feature namedges` flag, and you can learn more about in the
 [Eager Loading](eager-load.mdx) documentation.
 
+### Bidirectional Edge Refs
+
+The `bidiedges` option guides Ent to set two-way references when eager-loading (O2M/O2O) edges.
+
+This option can be added to a project using the `--feature bidiedges` flag.
+
+:::note
+Users that use the standard encoding/json.MarshalJSON should detach the circular references before calling `json.Marshal`.
+:::
+
 ### Schema Config
 
 The `sql/schemaconfig` option lets you pass alternate SQL database names to models. This is useful when your models don't all live under one database and are spread out across different schemas.
@@ -142,6 +152,30 @@ The above code will produce the following SQL query:
 
 ```sql
 SELECT SUM(LENGTH(name)) FROM `pet`
+```
+
+#### Select and Scan Dynamic Values
+
+If you work with SQL modifiers and need to scan dynamic values not present in your Ent schema definition, such as
+aggregation or custom ordering, you can apply `AppendSelect`/`AppendSelectAs` to the `sql.Selector`. You can later
+access their values using the `Value` method defined on each entity:
+
+```go {6,11}
+const as = "name_length"
+
+// Query the entity with the dynamic value.
+p := client.Pet.Query().
+	Modify(func(s *sql.Selector) {
+		s.AppendSelectAs("LENGTH(name)", as)
+	}).
+	FirstX(ctx)
+
+// Read the value from the entity.
+n, err := p.Value(as)
+if err != nil {
+    log.Fatal(err)
+}
+fmt.Println("Name length: %d == %d", n, len(p.Name))
 ```
 
 #### Modify Example 2

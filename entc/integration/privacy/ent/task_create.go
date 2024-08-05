@@ -118,7 +118,7 @@ func (tc *TaskCreate) Save(ctx context.Context) (*Task, error) {
 	if err := tc.defaults(); err != nil {
 		return nil, err
 	}
-	return withHooks[*Task, TaskMutation](ctx, tc.sqlSave, tc.mutation, tc.hooks)
+	return withHooks(ctx, tc.sqlSave, tc.mutation, tc.hooks)
 }
 
 // SaveX calls Save and panics if Save returns an error.
@@ -251,11 +251,15 @@ func (tc *TaskCreate) createSpec() (*Task, *sqlgraph.CreateSpec) {
 // TaskCreateBulk is the builder for creating many Task entities in bulk.
 type TaskCreateBulk struct {
 	config
+	err      error
 	builders []*TaskCreate
 }
 
 // Save creates the Task entities in the database.
 func (tcb *TaskCreateBulk) Save(ctx context.Context) ([]*Task, error) {
+	if tcb.err != nil {
+		return nil, tcb.err
+	}
 	specs := make([]*sqlgraph.CreateSpec, len(tcb.builders))
 	nodes := make([]*Task, len(tcb.builders))
 	mutators := make([]Mutator, len(tcb.builders))
@@ -272,8 +276,8 @@ func (tcb *TaskCreateBulk) Save(ctx context.Context) ([]*Task, error) {
 					return nil, err
 				}
 				builder.mutation = mutation
-				nodes[i], specs[i] = builder.createSpec()
 				var err error
+				nodes[i], specs[i] = builder.createSpec()
 				if i < len(mutators)-1 {
 					_, err = mutators[i+1].Mutate(root, tcb.builders[i+1].mutation)
 				} else {

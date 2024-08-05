@@ -135,7 +135,7 @@ func (pc *PetCreate) Mutation() *PetMutation {
 // Save creates the Pet in the database.
 func (pc *PetCreate) Save(ctx context.Context) (*Pet, error) {
 	pc.defaults()
-	return withHooks[*Pet, PetMutation](ctx, pc.sqlSave, pc.mutation, pc.hooks)
+	return withHooks(ctx, pc.sqlSave, pc.mutation, pc.hooks)
 }
 
 // SaveX calls Save and panics if Save returns an error.
@@ -561,12 +561,16 @@ func (u *PetUpsertOne) IDX(ctx context.Context) int {
 // PetCreateBulk is the builder for creating many Pet entities in bulk.
 type PetCreateBulk struct {
 	config
+	err      error
 	builders []*PetCreate
 	conflict []sql.ConflictOption
 }
 
 // Save creates the Pet entities in the database.
 func (pcb *PetCreateBulk) Save(ctx context.Context) ([]*Pet, error) {
+	if pcb.err != nil {
+		return nil, pcb.err
+	}
 	specs := make([]*sqlgraph.CreateSpec, len(pcb.builders))
 	nodes := make([]*Pet, len(pcb.builders))
 	mutators := make([]Mutator, len(pcb.builders))
@@ -583,8 +587,8 @@ func (pcb *PetCreateBulk) Save(ctx context.Context) ([]*Pet, error) {
 					return nil, err
 				}
 				builder.mutation = mutation
-				nodes[i], specs[i] = builder.createSpec()
 				var err error
+				nodes[i], specs[i] = builder.createSpec()
 				if i < len(mutators)-1 {
 					_, err = mutators[i+1].Mutate(root, pcb.builders[i+1].mutation)
 				} else {
@@ -818,6 +822,9 @@ func (u *PetUpsertBulk) UpdateTrained() *PetUpsertBulk {
 
 // Exec executes the query.
 func (u *PetUpsertBulk) Exec(ctx context.Context) error {
+	if u.create.err != nil {
+		return u.create.err
+	}
 	for i, b := range u.create.builders {
 		if len(b.conflict) != 0 {
 			return fmt.Errorf("ent: OnConflict was set for builder %d. Set it on the PetCreateBulk instead", i)

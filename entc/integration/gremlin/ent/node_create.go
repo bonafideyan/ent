@@ -98,7 +98,7 @@ func (nc *NodeCreate) Mutation() *NodeMutation {
 
 // Save creates the Node in the database.
 func (nc *NodeCreate) Save(ctx context.Context) (*Node, error) {
-	return withHooks[*Node, NodeMutation](ctx, nc.gremlinSave, nc.mutation, nc.hooks)
+	return withHooks(ctx, nc.gremlinSave, nc.mutation, nc.hooks)
 }
 
 // SaveX calls Save and panics if Save returns an error.
@@ -140,13 +140,13 @@ func (nc *NodeCreate) gremlinSave(ctx context.Context) (*Node, error) {
 	if err, ok := isConstantError(res); ok {
 		return nil, err
 	}
-	n := &Node{config: nc.config}
-	if err := n.FromResponse(res); err != nil {
+	rnode := &Node{config: nc.config}
+	if err := rnode.FromResponse(res); err != nil {
 		return nil, err
 	}
-	nc.mutation.id = &n.ID
+	nc.mutation.id = &rnode.ID
 	nc.mutation.done = true
-	return n, nil
+	return rnode, nil
 }
 
 func (nc *NodeCreate) gremlin() *dsl.Traversal {
@@ -189,5 +189,6 @@ func (nc *NodeCreate) gremlin() *dsl.Traversal {
 // NodeCreateBulk is the builder for creating many Node entities in bulk.
 type NodeCreateBulk struct {
 	config
+	err      error
 	builders []*NodeCreate
 }

@@ -213,16 +213,7 @@ func NewType(c *Config, schema *load.Schema) (*Type, error) {
 		idType = defaultIDType
 	}
 	typ := &Type{
-		Config: c,
-		ID: &Field{
-			cfg:  c,
-			Name: "id",
-			def: &load.Field{
-				Name: "id",
-			},
-			Type:      idType,
-			StructTag: structTag("id", ""),
-		},
+		Config:      c,
 		schema:      schema,
 		Name:        schema.Name,
 		Annotations: schema.Annotations,
@@ -230,7 +221,18 @@ func NewType(c *Config, schema *load.Schema) (*Type, error) {
 		fields:      make(map[string]*Field, len(schema.Fields)),
 		foreignKeys: make(map[string]struct{}),
 	}
-	typ.ID.typ = typ
+	if !typ.IsView() {
+		typ.ID = &Field{
+			cfg:  c,
+			typ:  typ,
+			Name: "id",
+			def: &load.Field{
+				Name: "id",
+			},
+			Type:      idType,
+			StructTag: structTag("id", ""),
+		}
+	}
 	if err := ValidSchemaName(typ.Name); err != nil {
 		return nil, err
 	}
@@ -257,9 +259,12 @@ func NewType(c *Config, schema *load.Schema) (*Type, error) {
 			return nil, err
 		}
 		// User defined id field.
-		if tf.Name == typ.ID.Name {
-			if tf.Optional {
+		if typ.ID != nil && tf.Name == typ.ID.Name {
+			switch {
+			case tf.Optional:
 				return nil, errors.New("id field cannot be optional")
+			case f.ValueScanner:
+				return nil, errors.New("id field cannot have an external ValueScanner")
 			}
 			typ.ID = tf
 		} else {
@@ -268,6 +273,11 @@ func NewType(c *Config, schema *load.Schema) (*Type, error) {
 		}
 	}
 	return typ, nil
+}
+
+// IsView indicates if the type (schema) is a view.
+func (t Type) IsView() bool {
+	return t.schema != nil && t.schema.View
 }
 
 // IsEdgeSchema indicates if the type (schema) is used as an edge-schema.
@@ -283,7 +293,7 @@ func (t Type) HasCompositeID() bool {
 
 // HasOneFieldID indicates if the type has an ID with one field (not composite).
 func (t Type) HasOneFieldID() bool {
-	return !t.HasCompositeID()
+	return !t.HasCompositeID() && t.ID != nil
 }
 
 // Label returns Gremlin label name of the node/type.
@@ -326,7 +336,11 @@ func (t Type) PackageAlias() string { return t.alias }
 // Receiver returns the receiver name of this node. It makes sure the
 // receiver names doesn't conflict with import names.
 func (t Type) Receiver() string {
-	return receiver(t.Name)
+	r := receiver(t.Name)
+	if t.Package() == r {
+		return "_" + r
+	}
+	return r
 }
 
 // hasEdge returns true if this type as an edge (reverse or assoc)
@@ -747,7 +761,7 @@ func (t *Type) setupFKs() error {
 	return nil
 }
 
-// setupEdgeField check the field-edge validity and configures it and its foreign-key.
+// setupFieldEdge check the field-edge validity and configures it and its foreign-key.
 func (t *Type) setupFieldEdge(fk *ForeignKey, fkOwner *Edge, fkName string) error {
 	tf, ok := t.fields[fkName]
 	if !ok {
@@ -764,6 +778,8 @@ func (t *Type) setupFieldEdge(fk *ForeignKey, fkOwner *Edge, fkName string) erro
 		return fmt.Errorf("edge-field %q was set as Immutable, but edge %q is not", fkName, fkOwner.Name)
 	case !tf.Immutable && fkOwner.Immutable:
 		return fmt.Errorf("edge %q was set as Immutable, but edge-field %q is not", fkOwner.Name, fkName)
+	case tf.HasValueScanner():
+		return fmt.Errorf("edge-field %q cannot have an external ValueScanner", fkName)
 	}
 	if t1, t2 := tf.Type.Type, fkOwner.Type.ID.Type.Type; t1 != t2 {
 		return fmt.Errorf("mismatch field type between edge field %q and id of type %q (%s != %s)", fkName, fkOwner.Type.Name, t1, t2)
@@ -817,9 +833,27 @@ func (t Type) CreateName() string {
 	return pascal(t.Name) + "Create"
 }
 
+// CreateReceiver returns the receiver name of the create-builder for this type.
+func (t Type) CreateReceiver() string {
+	r := receiver(t.CreateName())
+	if t.Package() == r {
+		return "_" + r
+	}
+	return r
+}
+
 // CreateBulkName returns the struct name denoting the create-bulk-builder for this type.
 func (t Type) CreateBulkName() string {
 	return pascal(t.Name) + "CreateBulk"
+}
+
+// CreateBulReceiver returns the receiver name of the create-bulk-builder for this type.
+func (t Type) CreateBulReceiver() string {
+	r := receiver(t.CreateBulkName())
+	if t.Package() == r {
+		return "_" + r
+	}
+	return r
 }
 
 // UpdateName returns the struct name denoting the update-builder for this type.
@@ -827,9 +861,27 @@ func (t Type) UpdateName() string {
 	return pascal(t.Name) + "Update"
 }
 
+// UpdateReceiver returns the receiver name of the update-builder for this type.
+func (t Type) UpdateReceiver() string {
+	r := receiver(t.UpdateName())
+	if t.Package() == r {
+		return "_" + r
+	}
+	return r
+}
+
 // UpdateOneName returns the struct name denoting the update-one-builder for this type.
 func (t Type) UpdateOneName() string {
 	return pascal(t.Name) + "UpdateOne"
+}
+
+// UpdateOneReceiver returns the receiver name of the update-one-builder for this type.
+func (t Type) UpdateOneReceiver() string {
+	r := receiver(t.UpdateOneName())
+	if t.Package() == r {
+		return "_" + r
+	}
+	return r
 }
 
 // DeleteName returns the struct name denoting the delete-builder for this type.
@@ -837,9 +889,27 @@ func (t Type) DeleteName() string {
 	return pascal(t.Name) + "Delete"
 }
 
+// DeleteReceiver returns the receiver name of the delete-builder for this type.
+func (t Type) DeleteReceiver() string {
+	r := receiver(t.DeleteName())
+	if t.Package() == r {
+		return "_" + r
+	}
+	return r
+}
+
 // DeleteOneName returns the struct name denoting the delete-one-builder for this type.
 func (t Type) DeleteOneName() string {
 	return pascal(t.Name) + "DeleteOne"
+}
+
+// DeleteOneReceiver returns the receiver name of the delete-one-builder for this type.
+func (t Type) DeleteOneReceiver() string {
+	r := receiver(t.DeleteOneName())
+	if t.Package() == r {
+		return "_" + r
+	}
+	return r
 }
 
 // MutationName returns the struct name of the mutation builder for this type.
@@ -850,6 +920,14 @@ func (t Type) MutationName() string {
 // TypeName returns the constant name of the type defined in mutation.go.
 func (t Type) TypeName() string {
 	return "Type" + pascal(t.Name)
+}
+
+// ValueName returns the name of the value method for this type.
+func (t Type) ValueName() string {
+	if t.fields["Value"] == nil && t.fields["value"] == nil {
+		return "Value"
+	}
+	return "GetValue"
 }
 
 // SiblingImports returns all sibling packages that are needed for the different builders.
@@ -968,10 +1046,12 @@ func (t *Type) checkField(tf *Field, f *load.Field) (err error) {
 			// Enum types should be named as follows: typepkg.Field.
 			f.Info.Ident = fmt.Sprintf("%s.%s", t.PackageDir(), pascal(f.Name))
 		}
-	case tf.Validators > 0 && !tf.ConvertedToBasic():
+	case tf.Validators > 0 && !tf.ConvertedToBasic() && f.Info.Type != field.TypeJSON:
 		err = fmt.Errorf("GoType %q for field %q must be converted to the basic %q type for validators", tf.Type, f.Name, tf.Type.Type)
 	case ant != nil && ant.Default != "" && (ant.DefaultExpr != "" || ant.DefaultExprs != nil):
 		err = fmt.Errorf("field %q cannot have both default value and default expression annotations", f.Name)
+	case tf.HasValueScanner() && tf.IsJSON():
+		err = fmt.Errorf("json field %q cannot have an external ValueScanner", f.Name)
 	}
 	return err
 }
@@ -1051,6 +1131,22 @@ func (f Field) DefaultValue() any { return f.def.DefaultValue }
 // DefaultFunc returns a bool stating if the default value is a func. Invoked by the template.
 func (f Field) DefaultFunc() bool { return f.def.DefaultKind == reflect.Func }
 
+// OrderName returns the function/option name for ordering by this field.
+func (f Field) OrderName() string {
+	name := "By" + pascal(f.Name)
+	// Some users store associations count as a separate field.
+	// In this case, we suffix the order name with "Field".
+	if f.typ == nil || !strings.HasSuffix(name, "Count") {
+		return name
+	}
+	for _, e := range f.typ.Edges {
+		if nameE, err := e.OrderCountName(); err == nil && nameE == name {
+			return name + "Field"
+		}
+	}
+	return name
+}
+
 // BuilderField returns the struct member of the field in the builder.
 func (f Field) BuilderField() string {
 	if f.IsEdgeField() {
@@ -1119,7 +1215,7 @@ var mutMethods = func() map[string]bool {
 // with the mutation methods, prefix the method with "Get".
 func (f Field) MutationGet() string {
 	name := pascal(f.Name)
-	if mutMethods[name] {
+	if mutMethods[name] || (name == "SetID" && f.typ.ID.UserDefined) {
 		name = "Get" + name
 	}
 	return name
@@ -1272,6 +1368,17 @@ func (f Field) IsEnum() bool { return f.Type != nil && f.Type.Type == field.Type
 // that was referenced by one of the edges.
 func (f Field) IsEdgeField() bool { return f.fk != nil }
 
+// IsDeprecated returns true if the field is deprecated.
+func (f Field) IsDeprecated() bool { return f.def != nil && f.def.Deprecated }
+
+// DeprecationReason returns the deprecation reason of the field.
+func (f Field) DeprecationReason() string {
+	if f.def != nil {
+		return f.def.DeprecatedReason
+	}
+	return ""
+}
+
 // Edge returns the edge this field is point to.
 func (f Field) Edge() (*Edge, error) {
 	if !f.IsEdgeField() {
@@ -1326,8 +1433,58 @@ func (f Field) ScanType() string {
 	return f.Type.String()
 }
 
-// NewScanType returns an expression for creating an new object
-// to be used by the `rows.Scan` method. An sql.Scanner or a
+// HasValueScanner reports if any of the fields has (an external) ValueScanner.
+func (t Type) HasValueScanner() bool {
+	for _, f := range t.Fields {
+		if f.HasValueScanner() {
+			return true
+		}
+	}
+	return false
+}
+
+// DeprecatedFields returns all deprecated fields of the type.
+func (t Type) DeprecatedFields() []*Field {
+	fs := make([]*Field, 0, len(t.Fields))
+	for _, f := range t.Fields {
+		if f.IsDeprecated() {
+			fs = append(fs, f)
+		}
+	}
+	return fs
+}
+
+// HasValueScanner indicates if the field has (an external) ValueScanner.
+func (f Field) HasValueScanner() bool {
+	return f.def != nil && f.def.ValueScanner
+}
+
+// ValueFunc returns a path to the Value field (func) of the external ValueScanner.
+func (f Field) ValueFunc() (string, error) {
+	if !f.HasValueScanner() {
+		return "", fmt.Errorf("%q does not have an external ValueScanner", f.Name)
+	}
+	return fmt.Sprintf("%s.ValueScanner.%s.Value", f.typ.Package(), f.StructField()), nil
+}
+
+// ScanValueFunc returns a path to the ScanValue field (func) of the external ValueScanner.
+func (f Field) ScanValueFunc() (string, error) {
+	if !f.HasValueScanner() {
+		return "", fmt.Errorf("%q does not have an external ValueScanner", f.Name)
+	}
+	return fmt.Sprintf("%s.ValueScanner.%s.ScanValue", f.typ.Package(), f.StructField()), nil
+}
+
+// FromValueFunc returns a path to the FromValue field (func) of the external ValueScanner.
+func (f Field) FromValueFunc() (string, error) {
+	if !f.HasValueScanner() {
+		return "", fmt.Errorf("%q does not have an external ValueScanner", f.Name)
+	}
+	return fmt.Sprintf("%s.ValueScanner.%s.FromValue", f.typ.Package(), f.StructField()), nil
+}
+
+// NewScanType returns an expression for creating a new object
+// to be used by the `rows.Scan` method. A sql.Scanner or a
 // nillable-type supported by the SQL driver (e.g. []byte).
 func (f Field) NewScanType() string {
 	if f.Type.ValueScanner() {
@@ -1385,7 +1542,7 @@ func (f Field) ScanTypeField(rec string) string {
 	return expr
 }
 
-// standardSQLType reports if the field is one of the standard SQL types.
+// standardNullType reports if the field is one of the standard SQL types.
 func (f Field) standardNullType() bool {
 	for _, t := range []reflect.Type{
 		nullBoolType,
@@ -1676,6 +1833,8 @@ func (f Field) BasicType(ident string) (expr string) {
 		case rt.TypeEqual(nullStringType) || rt.TypeEqual(nullStringPType):
 			expr = fmt.Sprintf("%s.String", ident)
 		}
+	case field.TypeJSON:
+		expr = ident
 	default:
 		if t.Numeric() && rt.Kind >= reflect.Int && rt.Kind <= reflect.Float64 {
 			expr = fmt.Sprintf("%s(%s)", rt.Kind, ident)
@@ -1920,6 +2079,30 @@ func (e Edge) MutationCleared() string {
 	return name
 }
 
+// OrderCountName returns the function/option name for ordering by the edge count.
+func (e Edge) OrderCountName() (string, error) {
+	if e.Unique {
+		return "", fmt.Errorf("edge %q is unique", e.Name)
+	}
+	return fmt.Sprintf("By%sCount", pascal(e.Name)), nil
+}
+
+// OrderTermsName returns the function/option name for ordering by any term.
+func (e Edge) OrderTermsName() (string, error) {
+	if e.Unique {
+		return "", fmt.Errorf("edge %q is unique", e.Name)
+	}
+	return fmt.Sprintf("By%s", pascal(e.Name)), nil
+}
+
+// OrderFieldName returns the function/option name for ordering by edge field.
+func (e Edge) OrderFieldName() (string, error) {
+	if !e.Unique {
+		return "", fmt.Errorf("edge %q is not-unique", e.Name)
+	}
+	return fmt.Sprintf("By%sField", pascal(e.Name)), nil
+}
+
 // setStorageKey sets the storage-key option in the schema or fail.
 func (e *Edge) setStorageKey() error {
 	key, err := e.StorageKey()
@@ -1966,6 +2149,22 @@ func (e Edge) StorageKey() (*edge.StorageKey, error) {
 // EntSQL returns the EntSQL annotation if exists.
 func (e Edge) EntSQL() *entsql.Annotation {
 	return sqlAnnotate(e.Annotations)
+}
+
+// Index returns the index of the edge in the schema.
+// Used mainly to extract its position in the "loadedTypes" array.
+func (e Edge) Index() (int, error) {
+	// "owner" is the type that holds the edge.
+	owner := e.Owner
+	if e.IsInverse() {
+		owner = e.Ref.Type
+	}
+	for i, e1 := range owner.Edges {
+		if e1.Name == e.Name {
+			return i, nil
+		}
+	}
+	return 0, fmt.Errorf("edge %q was not found in its owner schema %q", e.Name, e.Owner.Name)
 }
 
 // Column returns the first element from the columns slice.
